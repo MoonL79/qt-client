@@ -14,6 +14,7 @@ int main(int argc, char *argv[])
     // 登录成功后显示主窗口
     QObject::connect(&loginWindow, &LoginWindow::loginSuccess, [&](const QString &username) {
         loginWindow.close();
+        mainWidget.setUserInfo(username); // 设置用户信息
         mainWidget.setWindowTitle("IM聊天 - " + username);
         mainWidget.show();
     });
