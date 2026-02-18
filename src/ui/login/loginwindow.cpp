@@ -47,24 +47,13 @@ void LoginWindow::paintEvent(QPaintEvent *event) {
 
 void LoginWindow::onLoginClicked() {
   QString username = ui->usernameEdit->text().trimmed();
-  QString password = ui->passwordEdit->text();
-
-  // 验证输入
+  
+  // 1. 取消用户名与密码的限制，点击登录即可进入主界面
   if (username.isEmpty()) {
-    QMessageBox::warning(this, "提示", "请输入用户名");
-    ui->usernameEdit->setFocus();
-    return;
+      username = "User"; // 默认用户名
   }
 
-  if (password.isEmpty()) {
-    QMessageBox::warning(this, "提示", "请输入密码");
-    ui->passwordEdit->setFocus();
-    return;
-  }
-
-  // TODO: 这里后续会连接服务器验证
-  // 暂时模拟登录成功
-  QMessageBox::information(this, "提示", "登录成功！\n用户名：" + username);
+  // 直接发射登录成功信号
   emit loginSuccess(username);
 }
 
