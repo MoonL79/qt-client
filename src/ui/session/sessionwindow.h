@@ -1,7 +1,6 @@
 #ifndef SESSIONWINDOW_H
 #define SESSIONWINDOW_H
 
-#include "networkclient.h"
 #include <QByteArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -57,18 +56,8 @@ private:
   QTextEdit *m_receiveBox;
   QLineEdit *m_inputLine;
   QPushButton *m_sendBtn;
-  NetworkClient *m_network;
   QString m_pendingMessage;
   void sendPendingMessage();
-
-private slots:
-  void onSendClicked();
-  void onNetworkConnected();
-  void onNetworkDataReceived(const QByteArray &data);
-  void onNetworkErrorOccurred(const QString &error);
-  void onSocketConnected();
-  void onSocketReadyRead();
-  void onSocketErrorOccurred(QAbstractSocket::SocketError error);
 };
 
 #endif // SESSIONWINDOW_H

@@ -7,16 +7,10 @@
 SessionWindow::SessionWindow(const QString &sessionName, QWidget *parent)
     : QWidget(parent), m_sessionName(sessionName), m_isDragging(false),
       m_resizeDir(None), m_receiveBox(nullptr), m_inputLine(nullptr),
-      m_sendBtn(nullptr), m_network(new NetworkClient(this)) {
+      m_sendBtn(nullptr) {
   setAttribute(Qt::WA_DeleteOnClose);
   setMouseTracking(true); // Enable mouse tracking for resize cursor feedback
   initUI();
-  connect(m_socket, &QTcpSocket::connected, this,
-          &SessionWindow::onSocketConnected);
-  connect(m_socket, &QTcpSocket::readyRead, this,
-          &SessionWindow::onSocketReadyRead);
-  connect(m_socket, &QTcpSocket::errorOccurred, this,
-          &SessionWindow::onSocketErrorOccurred);
 }
 
 void SessionWindow::initUI() {
@@ -126,8 +120,6 @@ void SessionWindow::initUI() {
       "QPushButton:hover { background-color: #3a78d6; }");
   inputLayout->addWidget(m_sendBtn);
 
-  connect(m_sendBtn, &QPushButton::clicked, this,
-          &SessionWindow::onSendClicked);
   connect(m_inputLine, &QLineEdit::returnPressed, m_sendBtn,
           &QPushButton::click);
 
@@ -270,71 +262,4 @@ void SessionWindow::mouseMoveEvent(QMouseEvent *event) {
 void SessionWindow::mouseReleaseEvent(QMouseEvent *event) {
   handleMouseRelease(event);
   event->accept();
-}
-
-void SessionWindow::onSendClicked() {
-  qDebug() << "[SessionWindow] onSendClicked";
-  if (!m_inputLine || !m_socket) {
-    qDebug() << "[SessionWindow] Missing UI components or socket";
-    return;
-  }
-
-  QString message = m_inputLine->text().trimmed();
-  if (message.isEmpty()) {
-    qDebug() << "[SessionWindow] Message empty";
-    return;
-  }
-
-  m_pendingMessage = message;
-  if (m_socket->state() != QTcpSocket::ConnectedState) {
-    qDebug() << "[SessionWindow] Socket not connected, connecting...";
-    m_socket->connectToHost("192.168.14.133", 12345);
-    return;
-  }
-  sendPendingMessage();
-}
-
-void SessionWindow::onSocketConnected() {
-  qDebug() << "[SessionWindow] Socket connected";
-  sendPendingMessage();
-}
-
-void SessionWindow::sendPendingMessage() {
-  if (m_pendingMessage.isEmpty()) {
-    qDebug() << "[SessionWindow] No pending message to send";
-    return;
-  }
-
-  QByteArray payload = m_pendingMessage.toUtf8();
-  qDebug() << "[SessionWindow] sendPendingMessage payload:" << payload;
-  m_socket->write(payload);
-  m_inputLine->clear();
-}
-
-void SessionWindow::onSocketReadyRead() {
-  if (!m_receiveBox || !m_socket) {
-    qDebug() << "[SessionWindow] readyRead triggered but UI/socket missing";
-    return;
-  }
-
-  qDebug() << "[SessionWindow] readyRead:" << m_socket->bytesAvailable();
-  while (m_socket->bytesAvailable() > 0) {
-    QByteArray chunk = m_socket->readAll();
-    qDebug() << "[SessionWindow] Received chunk:" << chunk;
-    QString text = QString::fromUtf8(chunk);
-    m_receiveBox->moveCursor(QTextCursor::End);
-    m_receiveBox->insertPlainText(text);
-    m_receiveBox->insertPlainText("\n");
-    m_receiveBox->moveCursor(QTextCursor::End);
-    m_receiveBox->ensureCursorVisible();
-    qDebug() << "[SessionWindow] Display content now:"
-             << m_receiveBox->toPlainText();
-  }
-}
-
-void SessionWindow::onSocketErrorOccurred(QAbstractSocket::SocketError error) {
-  qDebug() << "[SessionWindow] Socket error occurred:" << error;
-  if (m_receiveBox && m_socket) {
-    m_receiveBox->append(QString("[错误] %1").arg(m_socket->errorString()));
-  }
 }

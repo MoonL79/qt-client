@@ -6,8 +6,6 @@
 #include <QPoint>
 #include <QWidget>
 
-#include "networkclient.h"
-
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class LoginWindow;
