@@ -160,13 +160,11 @@ void Widget::initUI() {
       "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { "
       "background: none; }");
 
-  // 添加一些测试数据
-  for (int i = 1; i <= 10; ++i) {
-    QListWidgetItem *item = new QListWidgetItem(QString("Session %1").arg(i));
-    item->setIcon(
-        QIcon(":/resources/chat_icon.png")); // 尝试加载图标，没有也不影响
-    m_sessionList->addItem(item);
-  }
+  // 添加一些测试数据（单聊与群聊共享 Session 类）
+  addSessionItem(Session::create("Alice", Session::Type::Direct));
+  addSessionItem(Session::create("Bob", Session::Type::Direct));
+  addSessionItem(Session::create("项目群", Session::Type::Group));
+  addSessionItem(Session::create("研发群", Session::Type::Group));
 
   // 添加到容器布局
   containerLayout->addWidget(m_topPanel);
@@ -212,6 +210,24 @@ void Widget::mouseReleaseEvent(QMouseEvent *event) {
 void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   if (!item)
     return;
-  SessionWindow *sessionWindow = new SessionWindow(item->text());
+  const QString sessionId = item->data(Qt::UserRole).toString();
+  const Session session = m_sessionsById.value(sessionId);
+  if (!session.isValid())
+    return;
+
+  SessionWindow *sessionWindow = new SessionWindow(session);
   sessionWindow->show();
+}
+
+void Widget::addSessionItem(const Session &session) {
+  if (!session.isValid() || !m_sessionList)
+    return;
+
+  m_sessionsById.insert(session.id(), session);
+  QListWidgetItem *item = new QListWidgetItem(session.displayName());
+  item->setData(Qt::UserRole, session.id());
+  item->setData(Qt::UserRole + 1,
+                session.type() == Session::Type::Group ? "group" : "direct");
+  item->setIcon(QIcon(":/resources/chat_icon.png"));
+  m_sessionList->addItem(item);
 }
