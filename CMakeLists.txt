@@ -20,12 +20,16 @@ qt_add_executable(qt-client
     resources/resources.qrc
     src/network/websocketclient.h
     src/network/websocketclient.cpp
+    src/session/session.h
+    src/session/session.cpp
 )
 
 target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/login
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/main
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/session
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/network
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/session
 )
 
 target_link_libraries(qt-client

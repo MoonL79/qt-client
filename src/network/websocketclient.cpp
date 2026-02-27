@@ -1,7 +1,15 @@
 #include "websocketclient.h"
+#include <QNetworkProxy>
+
+websocketclient *websocketclient::instance() {
+  static websocketclient instance;
+  return &instance;
+}
 
 websocketclient::websocketclient(QObject *parent)
-    : QObject(parent), m_socket(QString(), QWebSocketProtocol::VersionLatest, this) {
+    : QObject(parent),
+      m_socket(QString(), QWebSocketProtocol::VersionLatest, this) {
+  m_socket.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
   connect(&m_socket, &QWebSocket::connected, this, &websocketclient::onConnected);
   connect(&m_socket, &QWebSocket::disconnected, this,
           &websocketclient::onDisconnected);

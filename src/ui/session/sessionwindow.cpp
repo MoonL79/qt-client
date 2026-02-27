@@ -1,20 +1,22 @@
 #include "sessionwindow.h"
 #include <QAbstractSocket>
+#include <QDateTime>
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QTextCursor>
 
-SessionWindow::SessionWindow(const QString &sessionName, QWidget *parent)
-    : QWidget(parent), m_sessionName(sessionName), m_isDragging(false),
+SessionWindow::SessionWindow(const Session &session, QWidget *parent)
+    : QWidget(parent), m_session(session), m_isDragging(false),
       m_resizeDir(None), m_receiveBox(nullptr), m_inputLine(nullptr),
-      m_sendBtn(nullptr) {
+      m_sendBtn(nullptr), m_statusLabel(nullptr), m_testBtn(nullptr),
+      m_websocket(websocketclient::instance()) {
   setAttribute(Qt::WA_DeleteOnClose);
   setMouseTracking(true); // Enable mouse tracking for resize cursor feedback
   initUI();
 }
 
 void SessionWindow::initUI() {
-  setWindowTitle(m_sessionName);
+  setWindowTitle(m_session.displayName());
   resize(600, 400);
 
   // 1. 去除系统标题栏
@@ -51,7 +53,7 @@ void SessionWindow::initUI() {
   headerLayout->setContentsMargins(15, 0, 10, 0);
 
   // 标题文本 (居中)
-  QLabel *titleLabel = new QLabel(m_sessionName, header);
+  QLabel *titleLabel = new QLabel(m_session.displayName(), header);
   titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; color: #333;");
   titleLabel->setAlignment(Qt::AlignCenter);
 
@@ -99,9 +101,28 @@ void SessionWindow::initUI() {
   m_receiveBox = new QTextEdit(contentArea);
   m_receiveBox->setPlaceholderText("接收服务器响应");
   m_receiveBox->setReadOnly(true);
-  m_receiveBox->setStyleSheet("background-color: #ffffff; border: 1px solid "
+  m_receiveBox->setStyleSheet("background-color: #000000; border: 1px solid "
                               "#dcdcdc; border-radius: 4px;");
   contentLayout->addWidget(m_receiveBox);
+
+  QHBoxLayout *statusLayout = new QHBoxLayout();
+  statusLayout->setContentsMargins(0, 0, 0, 0);
+  statusLayout->setSpacing(8);
+
+  m_statusLabel = new QLabel("连接状态: 未连接", contentArea);
+  m_statusLabel->setStyleSheet("color: #666;");
+  statusLayout->addWidget(m_statusLabel);
+  statusLayout->addStretch();
+
+  m_testBtn = new QPushButton("测试连接", contentArea);
+  m_testBtn->setCursor(Qt::PointingHandCursor);
+  m_testBtn->setStyleSheet(
+      "QPushButton { background-color: #5c6bc0; color: white; border: none; "
+      "border-radius: 4px; padding: 4px 12px; }"
+      "QPushButton:hover { background-color: #4c5bb0; }");
+  statusLayout->addWidget(m_testBtn);
+
+  contentLayout->addLayout(statusLayout);
 
   QHBoxLayout *inputLayout = new QHBoxLayout();
   inputLayout->setSpacing(8);
@@ -120,12 +141,131 @@ void SessionWindow::initUI() {
       "QPushButton:hover { background-color: #3a78d6; }");
   inputLayout->addWidget(m_sendBtn);
 
+  connect(m_sendBtn, &QPushButton::clicked, this,
+          &SessionWindow::onSendClicked);
+
   connect(m_inputLine, &QLineEdit::returnPressed, m_sendBtn,
           &QPushButton::click);
+  connect(m_sendBtn, &QPushButton::clicked, this,
+          &SessionWindow::sendPendingMessage);
+  connect(m_testBtn, &QPushButton::clicked, this,
+          &SessionWindow::onTestConnection);
+  connect(m_websocket, &websocketclient::textMessageReceived, this,
+          [this](const QString &message) {
+            if (!m_receiveBox)
+              return;
+            const QString line =
+                QDateTime::currentDateTime().toString("HH:mm:ss ") +
+                "回显: " + message;
+            m_receiveBox->append(line);
+            qDebug() << "Received message: " << message << Qt::endl;
+          });
+  connect(m_websocket, &websocketclient::binaryMessageReceived, this,
+          [this](const QByteArray &data) {
+            if (!m_receiveBox)
+              return;
+            const QString payload = QString::fromUtf8(data);
+            const QString line =
+                QDateTime::currentDateTime().toString("HH:mm:ss ") +
+                "数据: " + payload;
+            m_receiveBox->append(line);
+            qDebug() << "Received message: " << data << Qt::endl;
+          });
+  connect(m_websocket, &websocketclient::connected, this, [this]() {
+    updateConnectionStatus(QAbstractSocket::ConnectedState);
+    appendStatusLine("已连接");
+  });
+  connect(m_websocket, &websocketclient::disconnected, this, [this]() {
+    updateConnectionStatus(QAbstractSocket::UnconnectedState);
+    appendStatusLine("已断开");
+  });
+  connect(m_websocket, &websocketclient::stateChanged, this,
+          [this](QAbstractSocket::SocketState state) {
+            updateConnectionStatus(state);
+          });
+  connect(m_websocket, &websocketclient::errorOccurred, this,
+          [this](QAbstractSocket::SocketError, const QString &message) {
+            appendStatusLine("连接错误: " + message);
+            updateConnectionStatus(m_websocket->state());
+          });
 
   contentLayout->addLayout(inputLayout);
 
   containerLayout->addWidget(contentArea);
+}
+
+void SessionWindow::sendPendingMessage() {
+  if (!m_inputLine || !m_receiveBox)
+    return;
+
+  QString message = m_pendingMessage;
+  if (message.isEmpty())
+    message = m_inputLine->text().trimmed();
+  if (message.isEmpty())
+    return;
+
+  m_pendingMessage.clear();
+  const QString line =
+      QDateTime::currentDateTime().toString("HH:mm:ss ") + "发送: " + message;
+  m_receiveBox->append(line);
+  m_websocket->sendTextMessage(message);
+  m_inputLine->clear();
+}
+
+void SessionWindow::onSendClicked() {
+  if (!m_inputLine)
+    return;
+  m_pendingMessage = m_inputLine->text().trimmed();
+}
+
+void SessionWindow::appendStatusLine(const QString &message) {
+  if (!m_receiveBox)
+    return;
+  const QString line =
+      QDateTime::currentDateTime().toString("HH:mm:ss ") + message;
+  m_receiveBox->append(line);
+}
+
+void SessionWindow::updateConnectionStatus(QAbstractSocket::SocketState state) {
+  if (!m_statusLabel)
+    return;
+  QString stateText = "未知";
+  switch (state) {
+  case QAbstractSocket::UnconnectedState:
+    stateText = "未连接";
+    break;
+  case QAbstractSocket::HostLookupState:
+    stateText = "解析地址中";
+    break;
+  case QAbstractSocket::ConnectingState:
+    stateText = "连接中";
+    break;
+  case QAbstractSocket::ConnectedState:
+    stateText = "已连接";
+    break;
+  case QAbstractSocket::BoundState:
+    stateText = "已绑定";
+    break;
+  case QAbstractSocket::ListeningState:
+    stateText = "监听中";
+    break;
+  case QAbstractSocket::ClosingState:
+    stateText = "关闭中";
+    break;
+  }
+  m_statusLabel->setText("连接状态: " + stateText);
+}
+
+void SessionWindow::onTestConnection() {
+  if (!m_websocket)
+    return;
+  const auto state = m_websocket->state();
+  updateConnectionStatus(state);
+  if (state == QAbstractSocket::ConnectedState) {
+    appendStatusLine("连通性测试: 已连接");
+  } else {
+    appendStatusLine("连通性测试: 未连接");
+  }
 }
 
 bool SessionWindow::eventFilter(QObject *obj, QEvent *event) {

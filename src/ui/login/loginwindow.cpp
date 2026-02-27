@@ -4,6 +4,10 @@
 #include <QPainter>
 #include <QPainterPath>
 
+namespace {
+constexpr const char *kWebSocketUrl = "ws://192.168.14.133:12345";
+}
+
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent), ui(new Ui::LoginWindow), m_isDragging(false) {
   ui->setupUi(this);
@@ -23,6 +27,12 @@ LoginWindow::LoginWindow(QWidget *parent)
           &LoginWindow::onRegisterClicked);
   connect(ui->closeButton, &QPushButton::clicked, this,
           &LoginWindow::onCloseClicked);
+
+  auto ws = websocketclient::instance();
+  connect(ws, &websocketclient::connected, this,
+          &LoginWindow::onWebSocketConnected);
+  connect(ws, &websocketclient::errorOccurred, this,
+          &LoginWindow::onWebSocketError);
 
   // 设置密码框为密码模式
   ui->passwordEdit->setEchoMode(QLineEdit::Password);
@@ -53,8 +63,16 @@ void LoginWindow::onLoginClicked() {
       username = "User"; // 默认用户名
   }
 
-  // 直接发射登录成功信号
-  emit loginSuccess(username);
+  m_pendingUsername = username;
+  ui->loginButton->setEnabled(false);
+  ui->loginButton->setText("连接中...");
+
+  auto ws = websocketclient::instance();
+  if (!ws->isConnected()) {
+    ws->open(QUrl(QString::fromLatin1(kWebSocketUrl)));
+  } else {
+    onWebSocketConnected();
+  }
 }
 
 void LoginWindow::onRegisterClicked() {
@@ -63,6 +81,19 @@ void LoginWindow::onRegisterClicked() {
 }
 
 void LoginWindow::onCloseClicked() { close(); }
+
+void LoginWindow::onWebSocketConnected() {
+  ui->loginButton->setEnabled(true);
+  ui->loginButton->setText("登录");
+  emit loginSuccess(m_pendingUsername);
+}
+
+void LoginWindow::onWebSocketError(QAbstractSocket::SocketError,
+                                   const QString &message) {
+  ui->loginButton->setEnabled(true);
+  ui->loginButton->setText("登录");
+  QMessageBox::warning(this, "连接失败", message);
+}
 
 void LoginWindow::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {

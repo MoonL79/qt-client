@@ -1,6 +1,9 @@
 #ifndef SESSIONWINDOW_H
 #define SESSIONWINDOW_H
 
+#include "session.h"
+#include "websocketclient.h"
+#include <QAbstractSocket>
 #include <QByteArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -16,7 +19,7 @@
 class SessionWindow : public QWidget {
   Q_OBJECT
 public:
-  explicit SessionWindow(const QString &sessionName, QWidget *parent = nullptr);
+  explicit SessionWindow(const Session &session, QWidget *parent = nullptr);
 
 protected:
   bool eventFilter(QObject *obj, QEvent *event) override;
@@ -26,7 +29,9 @@ protected:
 
 private:
   void initUI();
-  QString m_sessionName;
+  void appendStatusLine(const QString &message);
+  void updateConnectionStatus(QAbstractSocket::SocketState state);
+  Session m_session;
 
   // Dragging support
   bool m_isDragging;
@@ -56,8 +61,14 @@ private:
   QTextEdit *m_receiveBox;
   QLineEdit *m_inputLine;
   QPushButton *m_sendBtn;
+  QLabel *m_statusLabel;
+  QPushButton *m_testBtn;
   QString m_pendingMessage;
+  void onSendClicked();
   void sendPendingMessage();
+  void onTestConnection();
+
+  websocketclient *m_websocket;
 };
 
 #endif // SESSIONWINDOW_H

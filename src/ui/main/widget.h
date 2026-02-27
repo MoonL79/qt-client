@@ -1,14 +1,17 @@
 #ifndef WIDGET_H
 #define WIDGET_H
 
-#include <QWidget>
+#include "session.h"
+
+#include <QHash>
 #include <QListWidget>
-#include <QLabel>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QPushButton>
-#include <QMouseEvent>
 #include <QPoint>
+#include <QMouseEvent>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QWidget>
+#include <QVBoxLayout>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -34,6 +37,7 @@ protected:
 
 private:
     void initUI();
+    void addSessionItem(const Session &session);
 
     Ui::Widget *ui;
     
@@ -43,6 +47,7 @@ private:
     QLabel* m_nameLabel;
     
     QListWidget* m_sessionList;
+    QHash<QString, Session> m_sessionsById;
     
     // Dragging support
     bool m_isDragging;

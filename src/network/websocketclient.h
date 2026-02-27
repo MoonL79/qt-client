@@ -10,7 +10,7 @@ class websocketclient : public QObject
 {
     Q_OBJECT
 public:
-    explicit websocketclient(QObject *parent = nullptr);
+    static websocketclient *instance();
     ~websocketclient() override = default;
 
 public:
@@ -42,6 +42,9 @@ private slots:
     void onPong(quint64 elapsedTime, const QByteArray &payload);
 
 private:
+    explicit websocketclient(QObject *parent = nullptr);
+    Q_DISABLE_COPY_MOVE(websocketclient)
+
     QWebSocket m_socket;
     QUrl m_url;
 };
