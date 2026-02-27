@@ -1,8 +1,11 @@
 #include "sessionwindow.h"
+#include "protocol.h"
 #include <QAbstractSocket>
 #include <QDateTime>
 #include <QDebug>
 #include <QHBoxLayout>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTextCursor>
 
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
@@ -152,24 +155,14 @@ void SessionWindow::initUI() {
           &SessionWindow::onTestConnection);
   connect(m_websocket, &websocketclient::textMessageReceived, this,
           [this](const QString &message) {
-            if (!m_receiveBox)
-              return;
-            const QString line =
-                QDateTime::currentDateTime().toString("HH:mm:ss ") +
-                "回显: " + message;
-            m_receiveBox->append(line);
-            qDebug() << "Received message: " << message << Qt::endl;
+            handleIncomingPayload(message, QStringLiteral("文本"));
+            qDebug() << "Received text payload: " << message << Qt::endl;
           });
   connect(m_websocket, &websocketclient::binaryMessageReceived, this,
           [this](const QByteArray &data) {
-            if (!m_receiveBox)
-              return;
             const QString payload = QString::fromUtf8(data);
-            const QString line =
-                QDateTime::currentDateTime().toString("HH:mm:ss ") +
-                "数据: " + payload;
-            m_receiveBox->append(line);
-            qDebug() << "Received message: " << data << Qt::endl;
+            handleIncomingPayload(payload, QStringLiteral("二进制"));
+            qDebug() << "Received binary payload: " << data << Qt::endl;
           });
   connect(m_websocket, &websocketclient::connected, this, [this]() {
     updateConnectionStatus(QAbstractSocket::ConnectedState);
@@ -208,7 +201,15 @@ void SessionWindow::sendPendingMessage() {
   const QString line =
       QDateTime::currentDateTime().toString("HH:mm:ss ") + "发送: " + message;
   m_receiveBox->append(line);
-  m_websocket->sendTextMessage(message);
+
+  QJsonObject data;
+  data.insert("conversation_id", m_session.id());
+  data.insert("content", message);
+
+  const QString payload =
+      protocol::createRequest("MESSAGE", "SEND", data);
+  qInfo() << "MESSAGE SEND, conversation_id:" << m_session.id();
+  m_websocket->sendTextMessage(payload);
   m_inputLine->clear();
 }
 
@@ -224,6 +225,7 @@ void SessionWindow::appendStatusLine(const QString &message) {
   const QString line =
       QDateTime::currentDateTime().toString("HH:mm:ss ") + message;
   m_receiveBox->append(line);
+  qInfo() << "Session status:" << message;
 }
 
 void SessionWindow::updateConnectionStatus(QAbstractSocket::SocketState state) {
@@ -266,6 +268,55 @@ void SessionWindow::onTestConnection() {
   } else {
     appendStatusLine("连通性测试: 未连接");
   }
+}
+
+void SessionWindow::handleIncomingPayload(const QString &payload,
+                                          const QString &sourceTag) {
+  if (!m_receiveBox)
+    return;
+
+  protocol::Envelope envelope;
+  QString parseError;
+  if (protocol::parseEnvelope(payload, &envelope, &parseError)) {
+    QString content;
+    if (envelope.data.value("echo").isObject()) {
+      const QJsonObject echo = envelope.data.value("echo").toObject();
+      if (echo.value("content").isString()) {
+        content = echo.value("content").toString();
+      } else {
+        content =
+            QString::fromUtf8(QJsonDocument(echo).toJson(QJsonDocument::Compact));
+      }
+    } else if (envelope.data.value("content").isString()) {
+      content = envelope.data.value("content").toString();
+    } else {
+      content = QString::fromUtf8(
+          QJsonDocument(envelope.data).toJson(QJsonDocument::Compact));
+    }
+
+    QString statusText;
+    if (envelope.data.value("ok").isBool()) {
+      statusText = envelope.data.value("ok").toBool() ? "ok=true" : "ok=false";
+    }
+    if (envelope.data.value("message").isString()) {
+      const QString msg = envelope.data.value("message").toString();
+      statusText = statusText.isEmpty() ? msg : statusText + " " + msg;
+    }
+
+    const QString display = statusText.isEmpty() ? content : statusText + " " + content;
+    const QString line = QDateTime::currentDateTime().toString("HH:mm:ss ") +
+                         QString("[%1/%2] %3")
+                             .arg(envelope.type, envelope.action, display.trimmed());
+    m_receiveBox->append(line);
+    return;
+  }
+
+  const QString line = QDateTime::currentDateTime().toString("HH:mm:ss ") +
+                       QString("%1原始数据: %2")
+                           .arg(sourceTag, payload);
+  m_receiveBox->append(line);
+  qWarning() << "Protocol parse failed, source:" << sourceTag << "error:"
+             << parseError << "payload:" << payload;
 }
 
 bool SessionWindow::eventFilter(QObject *obj, QEvent *event) {

@@ -31,6 +31,7 @@ private:
   void initUI();
   void appendStatusLine(const QString &message);
   void updateConnectionStatus(QAbstractSocket::SocketState state);
+  void handleIncomingPayload(const QString &payload, const QString &sourceTag);
   Session m_session;
 
   // Dragging support

@@ -31,6 +31,7 @@ signals:
   void onWebSocketConnected();
   void onWebSocketError(QAbstractSocket::SocketError error,
                         const QString &message);
+  void onWebSocketTextMessage(const QString &message);
 
 protected:
   void mousePressEvent(QMouseEvent *event) override;
@@ -43,6 +44,9 @@ protected:
   QPoint m_dragPosition;
   bool m_isDragging;
   QString m_pendingUsername;
+  QString m_pendingPassword;
+  QString m_pendingLoginRequestId;
+  bool m_isLoginPending = false;
 };
 
 #endif // LOGINWINDOW_H
