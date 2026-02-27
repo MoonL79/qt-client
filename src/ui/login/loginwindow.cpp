@@ -1,8 +1,12 @@
 #include "loginwindow.h"
+#include "protocol.h"
 #include "ui_loginwindow.h"
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QUuid>
+#include <QDebug>
 
 namespace {
 constexpr const char *kWebSocketUrl = "ws://192.168.14.133:12345";
@@ -31,6 +35,8 @@ LoginWindow::LoginWindow(QWidget *parent)
   auto ws = websocketclient::instance();
   connect(ws, &websocketclient::connected, this,
           &LoginWindow::onWebSocketConnected);
+  connect(ws, &websocketclient::textMessageReceived, this,
+          &LoginWindow::onWebSocketTextMessage);
   connect(ws, &websocketclient::errorOccurred, this,
           &LoginWindow::onWebSocketError);
 
@@ -57,17 +63,20 @@ void LoginWindow::paintEvent(QPaintEvent *event) {
 
 void LoginWindow::onLoginClicked() {
   QString username = ui->usernameEdit->text().trimmed();
-  
-  // 1. 取消用户名与密码的限制，点击登录即可进入主界面
+
   if (username.isEmpty()) {
-      username = "User"; // 默认用户名
+    username = "User"; // 默认用户名
   }
 
   m_pendingUsername = username;
+  m_pendingPassword = ui->passwordEdit->text();
+  m_pendingLoginRequestId.clear();
+  m_isLoginPending = true;
   ui->loginButton->setEnabled(false);
   ui->loginButton->setText("连接中...");
 
   auto ws = websocketclient::instance();
+  qInfo() << "Start login request for user:" << m_pendingUsername;
   if (!ws->isConnected()) {
     ws->open(QUrl(QString::fromLatin1(kWebSocketUrl)));
   } else {
@@ -83,13 +92,69 @@ void LoginWindow::onRegisterClicked() {
 void LoginWindow::onCloseClicked() { close(); }
 
 void LoginWindow::onWebSocketConnected() {
+  if (!m_isLoginPending)
+    return;
+
+  QJsonObject data;
+  data.insert("username", m_pendingUsername);
+  data.insert("password", m_pendingPassword);
+  m_pendingLoginRequestId =
+      QUuid::createUuid().toString(QUuid::WithoutBraces);
+  const QString payload =
+      protocol::createRequest("AUTH", "LOGIN", data, m_pendingLoginRequestId);
+  websocketclient::instance()->sendTextMessage(payload);
+  qInfo() << "AUTH LOGIN sent, request_id:" << m_pendingLoginRequestId;
+  ui->loginButton->setText("登录中...");
+}
+
+void LoginWindow::onWebSocketTextMessage(const QString &message) {
+  if (!m_isLoginPending || m_pendingLoginRequestId.isEmpty())
+    return;
+
+  protocol::Envelope envelope;
+  if (!protocol::parseEnvelope(message, &envelope))
+    return;
+
+  if (envelope.requestId != m_pendingLoginRequestId)
+    return;
+
+  const QString responseMessage =
+      envelope.data.value("message").toString("登录失败");
+  if (envelope.type != "AUTH" || envelope.action != "LOGIN") {
+    m_isLoginPending = false;
+    m_pendingLoginRequestId.clear();
+    m_pendingPassword.clear();
+    ui->loginButton->setEnabled(true);
+    ui->loginButton->setText("登录");
+    QMessageBox::warning(this, "登录失败", responseMessage);
+    return;
+  }
+
+  m_isLoginPending = false;
+  m_pendingLoginRequestId.clear();
   ui->loginButton->setEnabled(true);
   ui->loginButton->setText("登录");
-  emit loginSuccess(m_pendingUsername);
+
+  const bool ok = envelope.data.value("ok").toBool(false);
+
+  if (ok) {
+    qInfo() << "Login success for user:" << m_pendingUsername;
+    m_pendingPassword.clear();
+    emit loginSuccess(m_pendingUsername);
+    return;
+  }
+
+  qWarning() << "Login failed, reason:" << responseMessage;
+  m_pendingPassword.clear();
+  QMessageBox::warning(this, "登录失败", responseMessage);
 }
 
 void LoginWindow::onWebSocketError(QAbstractSocket::SocketError,
                                    const QString &message) {
+  qWarning() << "WebSocket error during login:" << message;
+  m_isLoginPending = false;
+  m_pendingLoginRequestId.clear();
+  m_pendingPassword.clear();
   ui->loginButton->setEnabled(true);
   ui->loginButton->setText("登录");
   QMessageBox::warning(this, "连接失败", message);

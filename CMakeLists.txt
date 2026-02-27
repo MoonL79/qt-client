@@ -17,9 +17,13 @@ qt_add_executable(qt-client
     src/ui/login/loginwindow.ui
     src/ui/session/sessionwindow.h
     src/ui/session/sessionwindow.cpp
+    src/ui/test/logwindow.h
+    src/ui/test/logwindow.cpp
     resources/resources.qrc
     src/network/websocketclient.h
     src/network/websocketclient.cpp
+    src/network/protocol.h
+    src/network/protocol.cpp
     src/session/session.h
     src/session/session.cpp
 )
@@ -28,6 +32,7 @@ target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/login
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/main
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/session
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/network
     ${CMAKE_CURRENT_SOURCE_DIR}/src/session
 )
