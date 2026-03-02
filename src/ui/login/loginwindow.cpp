@@ -1,6 +1,7 @@
 #include "loginwindow.h"
 #include "protocol.h"
 #include "ui_loginwindow.h"
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QPainter>
@@ -10,6 +11,87 @@
 
 namespace {
 constexpr const char *kWebSocketUrl = "ws://192.168.14.133:12345";
+
+QString extractLoginErrorMessage(const protocol::Envelope &envelope) {
+  const QJsonObject &data = envelope.data;
+
+  if (data.value("message").isString()) {
+    return data.value("message").toString().trimmed();
+  }
+  if (data.value("error").isString()) {
+    return data.value("error").toString().trimmed();
+  }
+  if (data.value("reason").isString()) {
+    return data.value("reason").toString().trimmed();
+  }
+  if (data.value("detail").isString()) {
+    return data.value("detail").toString().trimmed();
+  }
+
+  if (data.value("error").isObject()) {
+    const QJsonObject errObj = data.value("error").toObject();
+    if (errObj.value("message").isString()) {
+      return errObj.value("message").toString().trimmed();
+    }
+    if (errObj.value("detail").isString()) {
+      return errObj.value("detail").toString().trimmed();
+    }
+    return QString::fromUtf8(
+               QJsonDocument(errObj).toJson(QJsonDocument::Compact))
+        .trimmed();
+  }
+
+  if (envelope.hasCode && envelope.code != 0) {
+    return QStringLiteral("登录失败，错误码: %1").arg(envelope.code);
+  }
+
+  if (data.value("code").isString()) {
+    return QStringLiteral("登录失败，错误码: %1").arg(data.value("code").toString());
+  }
+  if (data.value("code").isDouble()) {
+    return QStringLiteral("登录失败，错误码: %1").arg(data.value("code").toInt());
+  }
+
+  return QStringLiteral("登录失败，未返回错误详情");
+}
+
+bool isCurrentLoginResponse(const protocol::Envelope &envelope,
+                            const QString &pendingRequestId) {
+  if (pendingRequestId.isEmpty()) {
+    return false;
+  }
+
+  // Normal case: server echoes current request_id.
+  if (envelope.requestId == pendingRequestId) {
+    return true;
+  }
+
+  // Some error packets may not carry request_id and only include received_payload.
+  if (!envelope.requestId.isEmpty()) {
+    return false;
+  }
+
+  const QJsonValue receivedPayload = envelope.data.value("received_payload");
+  if (!receivedPayload.isString()) {
+    return false;
+  }
+
+  protocol::Envelope originalRequest;
+  if (!protocol::parseEnvelope(receivedPayload.toString(), &originalRequest)) {
+    return false;
+  }
+
+  return originalRequest.requestId == pendingRequestId &&
+         originalRequest.type == "AUTH" && originalRequest.action == "LOGIN";
+}
+
+bool isLoginSuccess(const protocol::Envelope &envelope) {
+  if (envelope.hasCode) {
+    return envelope.code == 0;
+  }
+  // Backward compatibility for old server responses.
+  return envelope.data.value("ok").toBool(false);
+}
 }
 
 LoginWindow::LoginWindow(QWidget *parent)
@@ -63,13 +145,22 @@ void LoginWindow::paintEvent(QPaintEvent *event) {
 
 void LoginWindow::onLoginClicked() {
   QString username = ui->usernameEdit->text().trimmed();
+  const QString password = ui->passwordEdit->text();
 
   if (username.isEmpty()) {
-    username = "User"; // 默认用户名
+    QMessageBox::warning(this, "输入错误", "用户名不能为空");
+    ui->usernameEdit->setFocus();
+    return;
+  }
+
+  if (password.isEmpty()) {
+    QMessageBox::warning(this, "输入错误", "密码不能为空");
+    ui->passwordEdit->setFocus();
+    return;
   }
 
   m_pendingUsername = username;
-  m_pendingPassword = ui->passwordEdit->text();
+  m_pendingPassword = password;
   m_pendingLoginRequestId.clear();
   m_isLoginPending = true;
   ui->loginButton->setEnabled(false);
@@ -112,14 +203,25 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
     return;
 
   protocol::Envelope envelope;
-  if (!protocol::parseEnvelope(message, &envelope))
+  QString parseError;
+  if (!protocol::parseEnvelope(message, &envelope, &parseError)) {
+    m_isLoginPending = false;
+    m_pendingLoginRequestId.clear();
+    m_pendingPassword.clear();
+    ui->loginButton->setEnabled(true);
+    ui->loginButton->setText("登录");
+    QMessageBox::warning(this, "登录失败",
+                         QStringLiteral("响应解析失败: %1")
+                             .arg(parseError.isEmpty()
+                                      ? QStringLiteral("未知协议错误")
+                                      : parseError));
+    return;
+  }
+
+  if (!isCurrentLoginResponse(envelope, m_pendingLoginRequestId))
     return;
 
-  if (envelope.requestId != m_pendingLoginRequestId)
-    return;
-
-  const QString responseMessage =
-      envelope.data.value("message").toString("登录失败");
+  const QString responseMessage = extractLoginErrorMessage(envelope);
   if (envelope.type != "AUTH" || envelope.action != "LOGIN") {
     m_isLoginPending = false;
     m_pendingLoginRequestId.clear();
@@ -135,9 +237,7 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
   ui->loginButton->setEnabled(true);
   ui->loginButton->setText("登录");
 
-  const bool ok = envelope.data.value("ok").toBool(false);
-
-  if (ok) {
+  if (isLoginSuccess(envelope)) {
     qInfo() << "Login success for user:" << m_pendingUsername;
     m_pendingPassword.clear();
     emit loginSuccess(m_pendingUsername);
