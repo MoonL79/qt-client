@@ -3,6 +3,7 @@
 
 #include <QMouseEvent>
 #include <QPaintEvent>
+#include <QPointer>
 #include <QPoint>
 #include <QWidget>
 
@@ -13,6 +14,8 @@ namespace Ui {
 class LoginWindow;
 }
 QT_END_NAMESPACE
+
+class RegisterWindow;
 
 class LoginWindow : public QWidget {
   Q_OBJECT
@@ -41,6 +44,7 @@ protected:
 
  private:
   Ui::LoginWindow *ui;
+  QPointer<RegisterWindow> m_registerWindow;
   QPoint m_dragPosition;
   bool m_isDragging;
   QString m_pendingUsername;
