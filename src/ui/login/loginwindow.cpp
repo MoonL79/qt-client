@@ -1,5 +1,6 @@
 #include "loginwindow.h"
 #include "protocol.h"
+#include "registerwindow.h"
 #include "ui_loginwindow.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -176,8 +177,28 @@ void LoginWindow::onLoginClicked() {
 }
 
 void LoginWindow::onRegisterClicked() {
-  // TODO: 后续实现注册功能
-  QMessageBox::information(this, "提示", "注册功能正在开发中...");
+  if (!m_registerWindow) {
+    m_registerWindow = new RegisterWindow(nullptr);
+    connect(m_registerWindow, &RegisterWindow::registerSuccess, this,
+            [this](const QString &username) {
+              ui->usernameEdit->setText(username.trimmed());
+              ui->passwordEdit->clear();
+              this->show();
+              this->raise();
+              this->activateWindow();
+            });
+    connect(m_registerWindow, &QObject::destroyed, this, [this]() {
+      m_registerWindow = nullptr;
+      this->show();
+      this->raise();
+      this->activateWindow();
+    });
+  }
+
+  this->hide();
+  m_registerWindow->show();
+  m_registerWindow->raise();
+  m_registerWindow->activateWindow();
 }
 
 void LoginWindow::onCloseClicked() { close(); }
