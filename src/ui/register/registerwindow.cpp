@@ -9,6 +9,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QStyle>
 #include <QUrl>
 
 namespace {
@@ -81,6 +82,7 @@ RegisterWindow::RegisterWindow(QWidget *parent)
   setFixedSize(kRegisterWindowBaseWidth, 620);
   setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
   setAttribute(Qt::WA_TranslucentBackground);
+  setAttribute(Qt::WA_DeleteOnClose, true);
 
   ui->passwordEdit->setEchoMode(QLineEdit::Password);
   ui->confirmPasswordEdit->setEchoMode(QLineEdit::Password);
@@ -114,6 +116,25 @@ RegisterWindow::RegisterWindow(QWidget *parent)
 
 RegisterWindow::~RegisterWindow() { delete ui; }
 
+void RegisterWindow::setLineEditError(QLineEdit *lineEdit, bool hasError) {
+  if (!lineEdit) {
+    return;
+  }
+  lineEdit->setProperty("error", hasError);
+  lineEdit->style()->unpolish(lineEdit);
+  lineEdit->style()->polish(lineEdit);
+  lineEdit->update();
+}
+
+void RegisterWindow::clearFieldErrors() {
+  setLineEditError(ui->usernameEdit, false);
+  setLineEditError(ui->emailEdit, false);
+  setLineEditError(ui->passwordEdit, false);
+  setLineEditError(ui->confirmPasswordEdit, false);
+  setLineEditError(ui->nicknameEdit, false);
+  setLineEditError(ui->phoneEdit, false);
+}
+
 void RegisterWindow::setRegisterLoading(bool loading, const QString &text) {
   ui->registerButton->setEnabled(!loading);
   ui->registerButton->setText(text);
@@ -145,6 +166,8 @@ void RegisterWindow::sendRegisterRequest() {
 }
 
 void RegisterWindow::onRegisterClicked() {
+  clearFieldErrors();
+
   if (!m_hasExpandedOnRegisterClick) {
     setFixedSize(width() + kRegisterWindowExpandDelta, height());
     m_hasExpandedOnRegisterClick = true;
@@ -168,10 +191,27 @@ void RegisterWindow::onRegisterClicked() {
       auth::validateRegisterInput(rawInput);
   applyNormalizedInput(validation.normalized);
   if (!validation.ok) {
+    if (validation.errorMessage.contains("用户名")) {
+      setLineEditError(ui->usernameEdit, true);
+      ui->usernameEdit->setFocus();
+    } else if (validation.errorMessage.contains("邮箱")) {
+      setLineEditError(ui->emailEdit, true);
+      ui->emailEdit->setFocus();
+    } else if (validation.errorMessage.contains("密码")) {
+      setLineEditError(ui->passwordEdit, true);
+      ui->passwordEdit->setFocus();
+    } else if (validation.errorMessage.contains("昵称")) {
+      setLineEditError(ui->nicknameEdit, true);
+      ui->nicknameEdit->setFocus();
+    } else if (validation.errorMessage.contains("手机号")) {
+      setLineEditError(ui->phoneEdit, true);
+      ui->phoneEdit->setFocus();
+    }
     QMessageBox::warning(this, "输入错误", validation.errorMessage);
     return;
   }
   if (validation.normalized.password != confirmPassword) {
+    setLineEditError(ui->confirmPasswordEdit, true);
     QMessageBox::warning(this, "输入错误", "两次输入的密码不一致");
     ui->confirmPasswordEdit->setFocus();
     return;

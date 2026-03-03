@@ -2,6 +2,7 @@
 #define REGISTERWINDOW_H
 
 #include <QAbstractSocket>
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPoint>
@@ -44,6 +45,8 @@ protected:
   void paintEvent(QPaintEvent *event) override;
 
 private:
+  void setLineEditError(QLineEdit *lineEdit, bool hasError);
+  void clearFieldErrors();
   void setRegisterLoading(bool loading, const QString &text);
   void resetPendingState();
   void applyNormalizedInput(const auth::RegisterInput &normalized);

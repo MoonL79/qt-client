@@ -1,10 +1,12 @@
 #include "loginwindow.h"
 #include "logwindow.h"
+#include "profileapiclient.h"
 #include "widget.h"
 
 #include <QApplication>
 #include <QDateTime>
 #include <QMetaObject>
+#include <QRegularExpression>
 #include <QtGlobal>
 #include <cstdlib>
 #include <cstdio>
@@ -75,13 +77,49 @@ int main(int argc, char *argv[])
     // 创建登录窗口
     LoginWindow loginWindow;
     Widget mainWidget;
+    ProfileApiClient profileApiClient;
+    QString currentUserId;
+
+    QObject::connect(&profileApiClient, &ProfileApiClient::profileInfoReceived,
+                     [&](const QString &requestId, const ProfileInfo &info) {
+      Q_UNUSED(requestId);
+      const QString displayName =
+          info.nickname.trimmed().isEmpty() ? currentUserId : info.nickname.trimmed();
+      mainWidget.setUserInfo(displayName);
+      qInfo() << "Profile GET_INFO success for user:" << currentUserId;
+    });
+
+    QObject::connect(&profileApiClient, &ProfileApiClient::profileInfoSetSuccess,
+                     [&](const QString &requestId, const ProfileInfo &info) {
+      Q_UNUSED(info);
+      qInfo() << "Profile SET_INFO success request_id:" << requestId;
+    });
+
+    QObject::connect(&profileApiClient, &ProfileApiClient::requestFailed,
+                     [&](const QString &requestId, const QString &action,
+                         const QString &error) {
+      qWarning() << "Profile request failed, action:" << action
+                 << "request_id:" << requestId << "error:" << error;
+    });
     
     // 登录成功后显示主窗口
-    QObject::connect(&loginWindow, &LoginWindow::loginSuccess, [&](const QString &username) {
+    QObject::connect(&loginWindow, &LoginWindow::loginSuccess,
+                     [&](const QString &username, const QString &userId) {
+        static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+        currentUserId.clear();
         loginWindow.close();
         mainWidget.setUserInfo(username); // 设置用户信息
         mainWidget.setWindowTitle("IM聊天 - " + username);
         mainWidget.show();
+        const QString normalizedUserId = userId.trimmed();
+        if (kUnsignedIntRe.match(normalizedUserId).hasMatch()) {
+          currentUserId = normalizedUserId;
+        }
+        if (!currentUserId.isEmpty()) {
+          profileApiClient.requestProfileInfo(currentUserId);
+        } else {
+          qWarning() << "Skip PROFILE GET_INFO: missing numeric user_id from login response";
+        }
     });
     
     loginWindow.show();
