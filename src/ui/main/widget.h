@@ -55,5 +55,6 @@ private:
 
 private slots:
     void onSessionDoubleClicked(QListWidgetItem *item);
+    void onOpenSettings();
 };
 #endif // WIDGET_H

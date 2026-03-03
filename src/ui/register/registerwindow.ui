@@ -33,6 +33,10 @@ QLineEdit {
 QLineEdit:focus {
     border: 2px solid #1890ff;
 }
+QLineEdit[error="true"] {
+    border: 2px solid #ff4d4f;
+    background-color: #fff1f0;
+}
 QLabel {
     color: #000000;
     font-size: 15px;

@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRegularExpression>
 #include <QUuid>
 #include <QDebug>
 
@@ -92,6 +93,85 @@ bool isLoginSuccess(const protocol::Envelope &envelope) {
   }
   // Backward compatibility for old server responses.
   return envelope.data.value("ok").toBool(false);
+}
+
+QString toUnsignedString(const QJsonValue &value) {
+  if (value.isString()) {
+    const QString s = value.toString().trimmed();
+    static const QRegularExpression re(QStringLiteral("^\\d+$"));
+    if (re.match(s).hasMatch()) {
+      return s;
+    }
+  }
+  if (value.isDouble()) {
+    const qint64 v = value.toInteger(-1);
+    if (v >= 0) {
+      return QString::number(v);
+    }
+  }
+  return QString();
+}
+
+QString extractLoginUserId(const protocol::Envelope &envelope) {
+  const QJsonObject &data = envelope.data;
+
+  QString userId = toUnsignedString(data.value("user_id"));
+  if (!userId.isEmpty()) {
+    return userId;
+  }
+  userId = toUnsignedString(data.value("uid"));
+  if (!userId.isEmpty()) {
+    return userId;
+  }
+  userId = toUnsignedString(data.value("id"));
+  if (!userId.isEmpty()) {
+    return userId;
+  }
+
+  if (data.value("user").isObject()) {
+    const QJsonObject userObj = data.value("user").toObject();
+    userId = toUnsignedString(userObj.value("user_id"));
+    if (!userId.isEmpty()) {
+      return userId;
+    }
+    userId = toUnsignedString(userObj.value("uid"));
+    if (!userId.isEmpty()) {
+      return userId;
+    }
+    userId = toUnsignedString(userObj.value("id"));
+    if (!userId.isEmpty()) {
+      return userId;
+    }
+  }
+
+  return QString();
+}
+
+QString extractLoginUsername(const protocol::Envelope &envelope,
+                             const QString &fallback) {
+  const QJsonObject &data = envelope.data;
+  if (data.value("username").isString()) {
+    const QString username = data.value("username").toString().trimmed();
+    if (!username.isEmpty()) {
+      return username;
+    }
+  }
+  if (data.value("user").isObject()) {
+    const QJsonObject userObj = data.value("user").toObject();
+    if (userObj.value("username").isString()) {
+      const QString username = userObj.value("username").toString().trimmed();
+      if (!username.isEmpty()) {
+        return username;
+      }
+    }
+    if (userObj.value("nickname").isString()) {
+      const QString nickname = userObj.value("nickname").toString().trimmed();
+      if (!nickname.isEmpty()) {
+        return nickname;
+      }
+    }
+  }
+  return fallback;
 }
 }
 
@@ -259,9 +339,15 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
   ui->loginButton->setText("登录");
 
   if (isLoginSuccess(envelope)) {
-    qInfo() << "Login success for user:" << m_pendingUsername;
+    const QString loginUsername =
+        extractLoginUsername(envelope, m_pendingUsername);
+    const QString userId = extractLoginUserId(envelope);
+    qInfo() << "Login success for user:" << loginUsername << "user_id:" << userId;
+    if (userId.isEmpty()) {
+      qWarning() << "Login response does not include valid numeric user_id";
+    }
     m_pendingPassword.clear();
-    emit loginSuccess(m_pendingUsername);
+    emit loginSuccess(loginUsername, userId);
     return;
   }
 

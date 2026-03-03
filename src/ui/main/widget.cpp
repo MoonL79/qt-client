@@ -1,4 +1,6 @@
 #include "widget.h"
+
+#include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
 
@@ -64,13 +66,15 @@ void Widget::initUI() {
   m_nameLabel = new QLabel("Username", m_topPanel);
   m_nameLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #333; "
                              "margin-left: 10px; border: none;");
+  m_nameLabel->setWordWrap(true);
+  m_nameLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+  m_nameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  m_nameLabel->setMinimumWidth(140);
 
   leftContentLayout->addWidget(m_avatarLabel);
-  leftContentLayout->addWidget(m_nameLabel);
+  leftContentLayout->addWidget(m_nameLabel, 1);
 
   mainTopLayout->addLayout(leftContentLayout);
-
-  mainTopLayout->addStretch();
 
   QVBoxLayout *rightBtnLayout = new QVBoxLayout();
   rightBtnLayout->setContentsMargins(0, 0, 0, 0);
@@ -80,22 +84,29 @@ void Widget::initUI() {
   btnRowLayout->setContentsMargins(0, 0, 0, 0);
   btnRowLayout->setSpacing(0);
 
-  // 关闭和最小化按钮
-  QPushButton *closeBtn = new QPushButton("×", m_topPanel);
-  QPushButton *minBtn = new QPushButton("−", m_topPanel);
+  // 设置、最小化和关闭按钮
+  QPushButton *settingsBtn = new QPushButton("设", m_topPanel);
+  QPushButton *minBtn = new QPushButton("-", m_topPanel);
+  QPushButton *closeBtn = new QPushButton("x", m_topPanel);
 
+  btnRowLayout->addWidget(settingsBtn);
   btnRowLayout->addWidget(minBtn);
   btnRowLayout->addWidget(closeBtn);
 
   rightBtnLayout->addLayout(btnRowLayout);
   rightBtnLayout->addStretch();
-
   mainTopLayout->addLayout(rightBtnLayout);
 
   // 样式：悬浮时背景变灰/红
   QString baseBtnStyle =
       "QPushButton { border: none; font-weight: bold; color: #555; font-size: "
       "16px; background: transparent; }";
+
+  settingsBtn->setFixedSize(40, 30);
+  settingsBtn->setStyleSheet(
+      baseBtnStyle +
+      "QPushButton:hover { background-color: #e0e0e0; color: #000; }");
+  settingsBtn->setCursor(Qt::ArrowCursor);
 
   minBtn->setFixedSize(40, 30); // 稍微宽一点
   minBtn->setStyleSheet(
@@ -109,16 +120,9 @@ void Widget::initUI() {
                           "color: white; }"); // 关闭按钮悬浮通常变红
   closeBtn->setCursor(Qt::ArrowCursor);
 
+  connect(settingsBtn, &QPushButton::clicked, this, &Widget::onOpenSettings);
   connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
   connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
-
-  btnRowLayout->addWidget(minBtn);
-  btnRowLayout->addWidget(closeBtn);
-
-  rightBtnLayout->addLayout(btnRowLayout);
-  rightBtnLayout->addStretch(); // 顶上去
-
-  mainTopLayout->addLayout(rightBtnLayout);
 
   // --- 中下部：会话列表 ---
   m_sessionList = new QListWidget(container);
@@ -127,28 +131,19 @@ void Widget::initUI() {
   m_sessionList->setVerticalScrollBarPolicy(
       Qt::ScrollBarAlwaysOn); // 滚动条常驻
   m_sessionList->setStyleSheet(
-      // 修改背景色为浅灰 (#f5f5f5)
-
-      // 方案：让 container 稍微灰一点，或者让 ListWidget
-
-      // 1. Container 背景设为白色 (保持)
-      // 2. ListWidget 背景设为浅灰 (#f7f7f7)
-      // 3. 这样 ListWidget 的圆角边界就能看出来了
-
       "QListWidget { background-color: #ffffff; color: #000000; border: "
       "none; "
       "margin: 10px; border-radius: 1px; outline: none; }"
-      "QListWidget::item { height: 70px; border-bottom: 1px solid #e0e0e0; " // 分割线也稍微深一点
+      "QListWidget::item { height: 70px; border-bottom: 1px solid #e0e0e0; "
       "padding: 10px; color: #000000; outline: none; }"
       "QListWidget::item:selected { background-color: #d0d0d0; color: "
       "#000000; "
       "}"
       "QListWidget::item:hover { background-color: #f0f0f0; color: "
-      "#000000; " // 悬浮变成纯白高亮
+      "#000000; "
       "}"
-      // 滚动条样式定制
       "QScrollBar:vertical { border: none; background: #f7f7f7; width: "
-      "12px; " // 滚动条背景也跟随变浅灰
+      "12px; "
       "margin: 0px; border-radius: 6px; }"
       "QScrollBar::handle:vertical { background: #c1c1c1; border-radius: "
       "6px; "
@@ -176,6 +171,7 @@ void Widget::initUI() {
 
 void Widget::setUserInfo(const QString &username, const QString &avatarPath) {
   m_nameLabel->setText(username);
+  Q_UNUSED(avatarPath);
   // 简单取首字母作为头像占位符
   if (!username.isEmpty()) {
     m_avatarLabel->setText(username.left(1).toUpper());
@@ -230,4 +226,9 @@ void Widget::addSessionItem(const Session &session) {
                 session.type() == Session::Type::Group ? "group" : "direct");
   item->setIcon(QIcon(":/resources/chat_icon.png"));
   m_sessionList->addItem(item);
+}
+
+void Widget::onOpenSettings() {
+  SettingsWindow *settingsWindow = new SettingsWindow();
+  settingsWindow->show();
 }
