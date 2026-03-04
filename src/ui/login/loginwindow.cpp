@@ -236,6 +236,10 @@ LoginWindow::LoginWindow(QWidget *parent)
   // 连接信号槽
   connect(ui->loginButton, &QPushButton::clicked, this,
           &LoginWindow::onLoginClicked);
+  connect(ui->usernameEdit, &QLineEdit::returnPressed, ui->loginButton,
+          &QPushButton::click);
+  connect(ui->passwordEdit, &QLineEdit::returnPressed, ui->loginButton,
+          &QPushButton::click);
   connect(ui->registerButton, &QPushButton::clicked, this,
           &LoginWindow::onRegisterClicked);
   connect(ui->closeButton, &QPushButton::clicked, this,
