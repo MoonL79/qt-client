@@ -1,6 +1,7 @@
 #include "loginwindow.h"
 #include "protocol.h"
 #include "registerwindow.h"
+#include "usersession.h"
 #include "ui_loginwindow.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -10,9 +11,42 @@
 #include <QRegularExpression>
 #include <QUuid>
 #include <QDebug>
+#include <QtGlobal>
 
 namespace {
-constexpr const char *kWebSocketUrl = "ws://192.168.14.133:12345";
+constexpr const char *kWebSocketUrlEnv = "QT_SERVER_WS_URL";
+constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
+constexpr const char *kWebSocketPortEnv = "QT_SERVER_WS_PORT";
+constexpr const char *kDefaultWebSocketHost = "192.168.14.133";
+constexpr int kDefaultWebSocketPort = 12345;
+
+QUrl resolveWebSocketUrl() {
+  const QString urlFromEnv = qEnvironmentVariable(kWebSocketUrlEnv).trimmed();
+  if (!urlFromEnv.isEmpty()) {
+    const QUrl envUrl(urlFromEnv);
+    if (envUrl.isValid() && !envUrl.scheme().isEmpty() &&
+        !envUrl.host().trimmed().isEmpty()) {
+      return envUrl;
+    }
+  }
+
+  QString host = qEnvironmentVariable(kWebSocketHostEnv).trimmed();
+  if (host.isEmpty()) {
+    host = QString::fromLatin1(kDefaultWebSocketHost);
+  }
+
+  bool ok = false;
+  int port = qEnvironmentVariableIntValue(kWebSocketPortEnv, &ok);
+  if (!ok || port <= 0 || port > 65535) {
+    port = kDefaultWebSocketPort;
+  }
+
+  QUrl url;
+  url.setScheme("ws");
+  url.setHost(host);
+  url.setPort(port);
+  return url;
+}
 
 QString extractLoginErrorMessage(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
@@ -173,6 +207,18 @@ QString extractLoginUsername(const protocol::Envelope &envelope,
   }
   return fallback;
 }
+
+QString extractUploadToken(const protocol::Envelope &envelope) {
+  return envelope.data.value("upload_token").toString().trimmed();
+}
+
+QString extractUploadTokenType(const protocol::Envelope &envelope) {
+  return envelope.data.value("upload_token_type").toString().trimmed();
+}
+
+QString extractUploadTokenExpiresAt(const protocol::Envelope &envelope) {
+  return envelope.data.value("upload_token_expires_at").toString().trimmed();
+}
 }
 
 LoginWindow::LoginWindow(QWidget *parent)
@@ -248,9 +294,12 @@ void LoginWindow::onLoginClicked() {
   ui->loginButton->setText("连接中...");
 
   auto ws = websocketclient::instance();
+  UserSession::instance().clear();
   qInfo() << "Start login request for user:" << m_pendingUsername;
   if (!ws->isConnected()) {
-    ws->open(QUrl(QString::fromLatin1(kWebSocketUrl)));
+    const QUrl wsUrl = resolveWebSocketUrl();
+    qInfo() << "Open websocket for login, url=" << wsUrl.toString();
+    ws->open(wsUrl);
   } else {
     onWebSocketConnected();
   }
@@ -342,9 +391,34 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
     const QString loginUsername =
         extractLoginUsername(envelope, m_pendingUsername);
     const QString userId = extractLoginUserId(envelope);
+    const QString uploadToken = extractUploadToken(envelope);
+    const QString uploadTokenType = extractUploadTokenType(envelope);
+    const QString uploadTokenExpiresAt = extractUploadTokenExpiresAt(envelope);
+
+    UserSession::instance().setLoginContext(userId, loginUsername, uploadToken,
+                                            uploadTokenType,
+                                            uploadTokenExpiresAt);
+
     qInfo() << "Login success for user:" << loginUsername << "user_id:" << userId;
     if (userId.isEmpty()) {
       qWarning() << "Login response does not include valid numeric user_id";
+    }
+    if (uploadToken.isEmpty() || uploadTokenType.isEmpty() ||
+        uploadTokenExpiresAt.isEmpty()) {
+      qWarning() << "Login response missing upload token fields, user_id:" << userId
+                 << "token_type:" << uploadTokenType
+                 << "expires_at:" << uploadTokenExpiresAt;
+      QMessageBox::warning(this, "登录提示",
+                           "登录成功，但上传凭证缺失或不完整，头像上传将不可用。");
+    } else if (UserSession::instance().isUploadTokenExpired()) {
+      qWarning() << "Upload token already expired or invalid timestamp, user_id:"
+                 << userId << "expires_at:" << uploadTokenExpiresAt;
+      QMessageBox::warning(this, "登录提示",
+                           "登录成功，但上传凭证已过期或时间格式无效，请重新登录。");
+    } else {
+      qInfo() << "Upload token received for user_id:" << userId
+              << "token_type:" << uploadTokenType
+              << "expires_at:" << uploadTokenExpiresAt;
     }
     m_pendingPassword.clear();
     emit loginSuccess(loginUsername, userId);

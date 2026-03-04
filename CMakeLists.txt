@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(qt-client LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets Test)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets Test Network)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
@@ -35,6 +35,8 @@ qt_add_executable(qt-client
     src/auth/registerutils.cpp
     src/session/session.h
     src/session/session.cpp
+    src/session/usersession.h
+    src/session/usersession.cpp
 )
 
 target_include_directories(qt-client PRIVATE
@@ -53,6 +55,7 @@ target_link_libraries(qt-client
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt6::Network
         Qt6::WebSockets
 )
 target_link_libraries(qt-client PRIVATE Qt6::Core)

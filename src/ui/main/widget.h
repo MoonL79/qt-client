@@ -1,15 +1,21 @@
 #ifndef WIDGET_H
 #define WIDGET_H
 
+#include "profileapiclient.h"
 #include "session.h"
 
+#include <QNetworkAccessManager>
+#include <QNetworkDiskCache>
+#include <QNetworkReply>
 #include <QHash>
 #include <QListWidget>
+#include <QPointer>
 #include <QPoint>
 #include <QMouseEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QUrl>
 #include <QWidget>
 #include <QVBoxLayout>
 
@@ -18,6 +24,8 @@ namespace Ui {
 class Widget;
 }
 QT_END_NAMESPACE
+class QPixmap;
+class SettingsWindow;
 
 class Widget : public QWidget
 {
@@ -29,6 +37,8 @@ public:
     
     // 设置当前登录用户信息的接口
     void setUserInfo(const QString& username, const QString& avatarPath = ":/resources/avatar.png");
+    void setCurrentUserId(const QString& userId);
+    void setProfileApiClient(ProfileApiClient* profileApiClient);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -37,7 +47,12 @@ protected:
 
 private:
     void initUI();
+    void initAvatarHttpClient();
     void addSessionItem(const Session &session);
+    QUrl resolveAvatarUrl(const QString &avatarUrl) const;
+    void requestAvatarImage(const QString &avatarUrl);
+    void applyAvatarPixmap(const QPixmap &pixmap);
+    void applyDefaultAvatar();
 
     Ui::Widget *ui;
     
@@ -45,6 +60,13 @@ private:
     QWidget* m_topPanel;
     QLabel* m_avatarLabel;
     QLabel* m_nameLabel;
+    QNetworkAccessManager* m_avatarNetworkManager = nullptr;
+    QNetworkDiskCache* m_avatarDiskCache = nullptr;
+    QString m_currentUserId;
+    QString m_currentDisplayName;
+    QString m_currentAvatarUrl;
+    ProfileApiClient* m_profileApiClient = nullptr;
+    QPointer<SettingsWindow> m_settingsWindow;
     
     QListWidget* m_sessionList;
     QHash<QString, Session> m_sessionsById;
@@ -56,5 +78,6 @@ private:
 private slots:
     void onSessionDoubleClicked(QListWidgetItem *item);
     void onOpenSettings();
+    void onAvatarReplyFinished(QNetworkReply *reply);
 };
 #endif // WIDGET_H

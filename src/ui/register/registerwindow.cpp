@@ -11,12 +11,45 @@
 #include <QPainterPath>
 #include <QStyle>
 #include <QUrl>
+#include <QtGlobal>
 
 namespace {
-constexpr const char *kWebSocketUrl = "ws://192.168.14.133:12345";
+constexpr const char *kWebSocketUrlEnv = "QT_SERVER_WS_URL";
+constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
+constexpr const char *kWebSocketPortEnv = "QT_SERVER_WS_PORT";
+constexpr const char *kDefaultWebSocketHost = "192.168.14.133";
+constexpr int kDefaultWebSocketPort = 12345;
 constexpr int kRegisterTimeoutMs = 10000;
 constexpr int kRegisterWindowBaseWidth = 560;
 constexpr int kRegisterWindowExpandDelta = 100;
+
+QUrl resolveWebSocketUrl() {
+  const QString urlFromEnv = qEnvironmentVariable(kWebSocketUrlEnv).trimmed();
+  if (!urlFromEnv.isEmpty()) {
+    const QUrl envUrl(urlFromEnv);
+    if (envUrl.isValid() && !envUrl.scheme().isEmpty() &&
+        !envUrl.host().trimmed().isEmpty()) {
+      return envUrl;
+    }
+  }
+
+  QString host = qEnvironmentVariable(kWebSocketHostEnv).trimmed();
+  if (host.isEmpty()) {
+    host = QString::fromLatin1(kDefaultWebSocketHost);
+  }
+
+  bool ok = false;
+  int port = qEnvironmentVariableIntValue(kWebSocketPortEnv, &ok);
+  if (!ok || port <= 0 || port > 65535) {
+    port = kDefaultWebSocketPort;
+  }
+
+  QUrl url;
+  url.setScheme("ws");
+  url.setHost(host);
+  url.setPort(port);
+  return url;
+}
 
 bool isCurrentRegisterResponse(const protocol::Envelope &envelope,
                                const QString &pendingRequestId) {
@@ -223,7 +256,9 @@ void RegisterWindow::onRegisterClicked() {
 
   auto ws = websocketclient::instance();
   if (!ws->isConnected()) {
-    ws->open(QUrl(QString::fromLatin1(kWebSocketUrl)));
+    const QUrl wsUrl = resolveWebSocketUrl();
+    qInfo() << "Open websocket for register, url=" << wsUrl.toString();
+    ws->open(wsUrl);
   } else {
     onWebSocketConnected();
   }
