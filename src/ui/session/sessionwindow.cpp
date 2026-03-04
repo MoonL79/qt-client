@@ -6,12 +6,14 @@
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTextCursor>
+#include <QScrollBar>
+#include <QTimer>
 
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
     : QWidget(parent), m_session(session), m_isDragging(false),
-      m_resizeDir(None), m_receiveBox(nullptr), m_inputLine(nullptr),
-      m_sendBtn(nullptr), m_statusLabel(nullptr), m_testBtn(nullptr),
+      m_resizeDir(None), m_chatScroll(nullptr), m_chatContainer(nullptr),
+      m_chatLayout(nullptr), m_inputLine(nullptr), m_sendBtn(nullptr),
+      m_statusLabel(nullptr), m_testBtn(nullptr),
       m_websocket(websocketclient::instance()) {
   setAttribute(Qt::WA_DeleteOnClose);
   setMouseTracking(true); // Enable mouse tracking for resize cursor feedback
@@ -101,12 +103,20 @@ void SessionWindow::initUI() {
   contentLayout->setContentsMargins(12, 12, 12, 12);
   contentLayout->setSpacing(12);
 
-  m_receiveBox = new QTextEdit(contentArea);
-  m_receiveBox->setPlaceholderText("接收服务器响应");
-  m_receiveBox->setReadOnly(true);
-  m_receiveBox->setStyleSheet("background-color: #000000; border: 1px solid "
-                              "#dcdcdc; border-radius: 4px;");
-  contentLayout->addWidget(m_receiveBox);
+  m_chatScroll = new QScrollArea(contentArea);
+  m_chatScroll->setWidgetResizable(true);
+  m_chatScroll->setFrameShape(QFrame::NoFrame);
+  m_chatScroll->setStyleSheet("QScrollArea { background-color: #ffffff; border: "
+                              "1px solid #dcdcdc; border-radius: 8px; }");
+
+  m_chatContainer = new QWidget(m_chatScroll);
+  m_chatLayout = new QVBoxLayout(m_chatContainer);
+  m_chatLayout->setContentsMargins(0, 10, 10, 10);
+  m_chatLayout->setSpacing(8);
+  m_chatLayout->setAlignment(Qt::AlignTop);
+
+  m_chatScroll->setWidget(m_chatContainer);
+  contentLayout->addWidget(m_chatScroll);
 
   QHBoxLayout *statusLayout = new QHBoxLayout();
   statusLayout->setContentsMargins(0, 0, 0, 0);
@@ -188,7 +198,7 @@ void SessionWindow::initUI() {
 }
 
 void SessionWindow::sendPendingMessage() {
-  if (!m_inputLine || !m_receiveBox)
+  if (!m_inputLine || !m_chatLayout)
     return;
 
   QString message = m_pendingMessage;
@@ -200,7 +210,7 @@ void SessionWindow::sendPendingMessage() {
   m_pendingMessage.clear();
   const QString line =
       QDateTime::currentDateTime().toString("HH:mm:ss ") + "发送: " + message;
-  m_receiveBox->append(line);
+  appendChatBubble(line, true, false);
 
   QJsonObject data;
   data.insert("conversation_id", m_session.id());
@@ -220,12 +230,48 @@ void SessionWindow::onSendClicked() {
 }
 
 void SessionWindow::appendStatusLine(const QString &message) {
-  if (!m_receiveBox)
-    return;
   const QString line =
       QDateTime::currentDateTime().toString("HH:mm:ss ") + message;
-  m_receiveBox->append(line);
+  appendChatBubble(line, false, true);
   qInfo() << "Session status:" << message;
+}
+
+void SessionWindow::appendChatBubble(const QString &message, bool outgoing,
+                                     bool status) {
+  if (!m_chatLayout || !m_chatContainer || !m_chatScroll)
+    return;
+
+  QWidget *row = new QWidget(m_chatContainer);
+  QHBoxLayout *rowLayout = new QHBoxLayout(row);
+  rowLayout->setContentsMargins(0, 0, 0, 0);
+
+  QLabel *bubble = new QLabel(message, row);
+  bubble->setWordWrap(true);
+  bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  bubble->setMaximumWidth(420);
+
+  if (status) {
+    bubble->setStyleSheet("QLabel { background: #f1f3f5; color: #4f5b66; "
+                          "border-radius: 10px; padding: 8px 12px; }");
+    rowLayout->addWidget(bubble);
+  } else if (outgoing) {
+    bubble->setStyleSheet("QLabel { background: #e2f0ff; color: #1f3552; "
+                          "border-radius: 12px; padding: 8px 12px; }");
+    rowLayout->addWidget(bubble);
+  } else {
+    bubble->setStyleSheet("QLabel { background: #f7f7f8; color: #2f2f2f; "
+                          "border-radius: 12px; padding: 8px 12px; }");
+    rowLayout->addWidget(bubble);
+  }
+  rowLayout->addStretch();
+
+  m_chatLayout->addWidget(row);
+  QTimer::singleShot(0, this, [this]() {
+    if (m_chatScroll && m_chatScroll->verticalScrollBar()) {
+      m_chatScroll->verticalScrollBar()->setValue(
+          m_chatScroll->verticalScrollBar()->maximum());
+    }
+  });
 }
 
 void SessionWindow::updateConnectionStatus(QAbstractSocket::SocketState state) {
@@ -272,7 +318,7 @@ void SessionWindow::onTestConnection() {
 
 void SessionWindow::handleIncomingPayload(const QString &payload,
                                           const QString &sourceTag) {
-  if (!m_receiveBox)
+  if (!m_chatLayout)
     return;
 
   protocol::Envelope envelope;
@@ -307,14 +353,14 @@ void SessionWindow::handleIncomingPayload(const QString &payload,
     const QString line = QDateTime::currentDateTime().toString("HH:mm:ss ") +
                          QString("[%1/%2] %3")
                              .arg(envelope.type, envelope.action, display.trimmed());
-    m_receiveBox->append(line);
+    appendChatBubble(line, false, false);
     return;
   }
 
   const QString line = QDateTime::currentDateTime().toString("HH:mm:ss ") +
                        QString("%1原始数据: %2")
                            .arg(sourceTag, payload);
-  m_receiveBox->append(line);
+  appendChatBubble(line, false, false);
   qWarning() << "Protocol parse failed, source:" << sourceTag << "error:"
              << parseError << "payload:" << payload;
 }

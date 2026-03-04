@@ -10,9 +10,8 @@
 #include <QMouseEvent>
 #include <QPoint>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QString>
-#include <QTextCursor>
-#include <QTextEdit>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -30,6 +29,8 @@ protected:
 private:
   void initUI();
   void appendStatusLine(const QString &message);
+  void appendChatBubble(const QString &message, bool outgoing = false,
+                        bool status = false);
   void updateConnectionStatus(QAbstractSocket::SocketState state);
   void handleIncomingPayload(const QString &payload, const QString &sourceTag);
   Session m_session;
@@ -59,7 +60,9 @@ private:
   void handleMouseRelease(QMouseEvent *event);
 
   // Network & UI helpers
-  QTextEdit *m_receiveBox;
+  QScrollArea *m_chatScroll;
+  QWidget *m_chatContainer;
+  QVBoxLayout *m_chatLayout;
   QLineEdit *m_inputLine;
   QPushButton *m_sendBtn;
   QLabel *m_statusLabel;
