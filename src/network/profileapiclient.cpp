@@ -34,33 +34,34 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
           &ProfileApiClient::onDisconnected);
 }
 
-void ProfileApiClient::requestProfileInfo(const QString &userId) {
+QString ProfileApiClient::requestProfileInfo(const QString &userId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionGetInfo);
 
   QString error;
   if (!validateGetInfo(userId, &error)) {
     failRequest(requestId, action, error);
-    return;
+    return requestId;
   }
 
   QJsonObject data;
   data.insert("user_id", userId.trimmed());
   sendProfileRequest(action, requestId, data);
+  return requestId;
 }
 
-void ProfileApiClient::setProfileInfo(const QString &userId,
-                                      const QString &avatarUrl,
-                                      const QString &nickname,
-                                      const QString &signature,
-                                      const QString &theme) {
+QString ProfileApiClient::setProfileInfo(const QString &userId,
+                                         const QString &avatarUrl,
+                                         const QString &nickname,
+                                         const QString &signature,
+                                         const QString &theme) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionSetInfo);
 
   QString error;
   if (!validateSetInfo(userId, avatarUrl, nickname, signature, theme, &error)) {
     failRequest(requestId, action, error);
-    return;
+    return requestId;
   }
 
   QJsonObject data;
@@ -70,6 +71,7 @@ void ProfileApiClient::setProfileInfo(const QString &userId,
   data.insert("signature", signature.trimmed());
   data.insert("theme", normalizeTheme(theme));
   sendProfileRequest(action, requestId, data);
+  return requestId;
 }
 
 void ProfileApiClient::onTextMessageReceived(const QString &message) {
@@ -191,12 +193,6 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
   if (name.isEmpty()) {
     if (error) {
       *error = QStringLiteral("nickname is required");
-    }
-    return false;
-  }
-  if (sign.isEmpty()) {
-    if (error) {
-      *error = QStringLiteral("signature is required");
     }
     return false;
   }

@@ -24,10 +24,10 @@ public:
   explicit ProfileApiClient(websocketclient *client = websocketclient::instance(),
                             QObject *parent = nullptr);
 
-  void requestProfileInfo(const QString &userId);
-  void setProfileInfo(const QString &userId, const QString &avatarUrl,
-                      const QString &nickname, const QString &signature,
-                      const QString &theme = QString());
+  QString requestProfileInfo(const QString &userId);
+  QString setProfileInfo(const QString &userId, const QString &avatarUrl,
+                         const QString &nickname, const QString &signature,
+                         const QString &theme = QString());
 
 signals:
   void profileInfoReceived(const QString &requestId, const ProfileInfo &info);

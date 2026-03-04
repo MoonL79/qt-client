@@ -3,10 +3,52 @@
 #include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
+#include "websocketclient.h"
+
+#include <QDir>
+#include <QMessageBox>
+#include <QNetworkRequest>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QRegularExpression>
+#include <QStandardPaths>
+#include <QtGlobal>
+
+namespace {
+constexpr int kDefaultStaticPort = 18080;
+constexpr const char *kStaticPortEnv = "QT_SERVER_STATIC_PORT";
+constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
+constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
+constexpr const char *kDefaultServerHost = "192.168.14.133";
+
+bool isLoopbackHost(const QString &host) {
+  const QString lower = host.trimmed().toLower();
+  return lower == "127.0.0.1" || lower == "localhost" || lower == "::1";
+}
+
+QString resolveServerHost() {
+  QString host = qEnvironmentVariable(kStaticHostEnv).trimmed();
+  if (host.isEmpty()) {
+    const QUrl wsUrl = websocketclient::instance()->url();
+    if (wsUrl.isValid() && !wsUrl.host().trimmed().isEmpty()) {
+      host = wsUrl.host().trimmed();
+    }
+  }
+  if (host.isEmpty()) {
+    host = qEnvironmentVariable(kWebSocketHostEnv).trimmed();
+  }
+  if (host.isEmpty()) {
+    host = QString::fromLatin1(kDefaultServerHost);
+  }
+  return host;
+}
+}
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), ui(new Ui::Widget), m_isDragging(false) {
   initUI();
+  initAvatarHttpClient();
 }
 
 Widget::~Widget() { delete ui; }
@@ -169,14 +211,145 @@ void Widget::initUI() {
           &Widget::onSessionDoubleClicked);
 }
 
-void Widget::setUserInfo(const QString &username, const QString &avatarPath) {
-  m_nameLabel->setText(username);
-  Q_UNUSED(avatarPath);
-  // 简单取首字母作为头像占位符
-  if (!username.isEmpty()) {
-    m_avatarLabel->setText(username.left(1).toUpper());
+void Widget::initAvatarHttpClient() {
+  if (m_avatarNetworkManager) {
+    return;
   }
-  // TODO: 如果有真实图片路径，这里可以用 QPixmap 加载
+
+  m_avatarNetworkManager = new QNetworkAccessManager(this);
+  m_avatarDiskCache = new QNetworkDiskCache(this);
+  const QString appDataPath =
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  const QString cachePath = appDataPath + "/http_cache/avatar";
+  QDir().mkpath(cachePath);
+  m_avatarDiskCache->setCacheDirectory(cachePath);
+  m_avatarDiskCache->setMaximumCacheSize(50 * 1024 * 1024); // 50MB
+  m_avatarNetworkManager->setCache(m_avatarDiskCache);
+
+  connect(m_avatarNetworkManager, &QNetworkAccessManager::finished, this,
+          &Widget::onAvatarReplyFinished);
+}
+
+QUrl Widget::resolveAvatarUrl(const QString &avatarUrl) const {
+  const QString trimmed = avatarUrl.trimmed();
+  if (trimmed.isEmpty()) {
+    return QUrl();
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    QUrl absolute(trimmed);
+    if (!absolute.isValid()) {
+      return QUrl();
+    }
+    if (isLoopbackHost(absolute.host())) {
+      absolute.setHost(resolveServerHost());
+    }
+    return absolute;
+  }
+
+  QString staticPath = trimmed;
+  if (staticPath.startsWith("/static/")) {
+    // Use as-is.
+  } else if (staticPath.startsWith("static/")) {
+    staticPath.prepend('/');
+  } else {
+    return QUrl();
+  }
+
+  bool ok = false;
+  int staticPort = qEnvironmentVariableIntValue(kStaticPortEnv, &ok);
+  if (!ok || staticPort <= 0 || staticPort > 65535) {
+    staticPort = kDefaultStaticPort;
+  }
+
+  const QString host = resolveServerHost();
+
+  QUrl url;
+  url.setScheme("http");
+  url.setHost(host);
+  url.setPort(staticPort);
+  url.setPath(staticPath);
+  return url;
+}
+
+void Widget::requestAvatarImage(const QString &avatarUrl) {
+  if (!m_avatarNetworkManager) {
+    applyDefaultAvatar();
+    return;
+  }
+
+  const QUrl url = resolveAvatarUrl(avatarUrl);
+  if (!url.isValid()) {
+    qWarning() << "Avatar URL invalid, fallback to default avatar:" << avatarUrl;
+    applyDefaultAvatar();
+    return;
+  }
+
+  QNetworkRequest request(url);
+  request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
+                       QNetworkRequest::AlwaysNetwork);
+  request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+  request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                       QNetworkRequest::NoLessSafeRedirectPolicy);
+  request.setTransferTimeout(8000);
+
+  QNetworkReply *reply = m_avatarNetworkManager->get(request);
+  reply->setProperty("requested_avatar_url", avatarUrl.trimmed());
+}
+
+void Widget::applyAvatarPixmap(const QPixmap &pixmap) {
+  if (pixmap.isNull() || !m_avatarLabel) {
+    applyDefaultAvatar();
+    return;
+  }
+
+  const QSize targetSize = m_avatarLabel->size();
+  const int side = qMin(targetSize.width(), targetSize.height());
+  const QPixmap scaled =
+      pixmap.scaled(side, side, Qt::KeepAspectRatioByExpanding,
+                    Qt::SmoothTransformation);
+
+  QPixmap circular(side, side);
+  circular.fill(Qt::transparent);
+  QPainter painter(&circular);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  QPainterPath clipPath;
+  clipPath.addEllipse(0, 0, side, side);
+  painter.setClipPath(clipPath);
+  painter.drawPixmap(0, 0, scaled);
+  painter.end();
+
+  m_avatarLabel->setPixmap(circular);
+  m_avatarLabel->setText(QString());
+}
+
+void Widget::applyDefaultAvatar() {
+  if (!m_avatarLabel) {
+    return;
+  }
+  m_avatarLabel->setPixmap(QPixmap());
+  if (!m_currentDisplayName.isEmpty()) {
+    m_avatarLabel->setText(m_currentDisplayName.left(1).toUpper());
+  } else {
+    m_avatarLabel->setText("U");
+  }
+}
+
+void Widget::setUserInfo(const QString &username, const QString &avatarPath) {
+  m_currentDisplayName = username;
+  m_currentAvatarUrl = avatarPath.trimmed();
+  m_nameLabel->setText(username);
+  if (m_currentAvatarUrl.isEmpty()) {
+    applyDefaultAvatar();
+    return;
+  }
+  requestAvatarImage(m_currentAvatarUrl);
+}
+
+void Widget::setCurrentUserId(const QString &userId) { m_currentUserId = userId; }
+
+void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
+  m_profileApiClient = profileApiClient;
 }
 
 // --- 拖拽窗口支持 ---
@@ -229,6 +402,76 @@ void Widget::addSessionItem(const Session &session) {
 }
 
 void Widget::onOpenSettings() {
-  SettingsWindow *settingsWindow = new SettingsWindow();
-  settingsWindow->show();
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  if (!kUnsignedIntRe.match(m_currentUserId.trimmed()).hasMatch()) {
+    QMessageBox::warning(this, "无法打开设置",
+                         "当前用户ID无效，无法加载个人资料设置。");
+    return;
+  }
+  if (!m_profileApiClient) {
+    QMessageBox::warning(this, "无法打开设置", "Profile 服务未初始化。");
+    return;
+  }
+
+  if (m_settingsWindow) {
+    if (m_settingsWindow->isMinimized()) {
+      m_settingsWindow->showNormal();
+    } else {
+      m_settingsWindow->show();
+    }
+    m_settingsWindow->raise();
+    m_settingsWindow->activateWindow();
+    return;
+  }
+
+  m_settingsWindow =
+      new SettingsWindow(m_currentUserId.trimmed(), m_profileApiClient, nullptr);
+  connect(m_settingsWindow, &SettingsWindow::profileApplied, this,
+          [this](const QString &displayName, const QString &avatarUrl) {
+            qInfo() << "[MainWidget] apply profile from settings, display_name="
+                    << displayName << "avatar_url=" << avatarUrl;
+            setUserInfo(displayName, avatarUrl);
+          });
+  connect(m_settingsWindow, &QObject::destroyed, this,
+          [this]() { m_settingsWindow = nullptr; });
+  m_settingsWindow->show();
+  m_settingsWindow->raise();
+  m_settingsWindow->activateWindow();
+}
+
+void Widget::onAvatarReplyFinished(QNetworkReply *reply) {
+  if (!reply) {
+    return;
+  }
+
+  const QString requestedAvatarUrl =
+      reply->property("requested_avatar_url").toString().trimmed();
+  const bool isLatestRequest = (requestedAvatarUrl == m_currentAvatarUrl);
+  if (!isLatestRequest) {
+    reply->deleteLater();
+    return;
+  }
+
+  const QVariant statusCode =
+      reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+  const int httpCode = statusCode.isValid() ? statusCode.toInt() : 0;
+
+  if (reply->error() != QNetworkReply::NoError || httpCode != 200) {
+    qWarning() << "Avatar download failed, url=" << reply->url().toString()
+               << "http_code=" << httpCode << "error=" << reply->errorString();
+    applyDefaultAvatar();
+    reply->deleteLater();
+    return;
+  }
+
+  QPixmap pixmap;
+  if (!pixmap.loadFromData(reply->readAll())) {
+    qWarning() << "Avatar decode failed, url=" << reply->url().toString();
+    applyDefaultAvatar();
+    reply->deleteLater();
+    return;
+  }
+
+  applyAvatarPixmap(pixmap);
+  reply->deleteLater();
 }

@@ -1,6 +1,7 @@
 #include "loginwindow.h"
 #include "logwindow.h"
 #include "profileapiclient.h"
+#include "usersession.h"
 #include "widget.h"
 
 #include <QApplication>
@@ -68,6 +69,7 @@ void appMessageHandler(QtMsgType type, const QMessageLogContext &context,
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    UserSession::instance().clear();
 
     LogWindow logWindow;
     g_logWindow = &logWindow;
@@ -79,19 +81,26 @@ int main(int argc, char *argv[])
     Widget mainWidget;
     ProfileApiClient profileApiClient;
     QString currentUserId;
+    mainWidget.setProfileApiClient(&profileApiClient);
+
+    const auto applyProfileToMainWidget =
+        [&](const ProfileInfo &info) {
+          const QString displayName = info.nickname.trimmed().isEmpty()
+                                          ? currentUserId
+                                          : info.nickname.trimmed();
+          mainWidget.setUserInfo(displayName, info.avatarUrl);
+        };
 
     QObject::connect(&profileApiClient, &ProfileApiClient::profileInfoReceived,
                      [&](const QString &requestId, const ProfileInfo &info) {
       Q_UNUSED(requestId);
-      const QString displayName =
-          info.nickname.trimmed().isEmpty() ? currentUserId : info.nickname.trimmed();
-      mainWidget.setUserInfo(displayName);
+      applyProfileToMainWidget(info);
       qInfo() << "Profile GET_INFO success for user:" << currentUserId;
     });
 
     QObject::connect(&profileApiClient, &ProfileApiClient::profileInfoSetSuccess,
                      [&](const QString &requestId, const ProfileInfo &info) {
-      Q_UNUSED(info);
+      applyProfileToMainWidget(info);
       qInfo() << "Profile SET_INFO success request_id:" << requestId;
     });
 
@@ -115,6 +124,7 @@ int main(int argc, char *argv[])
         if (kUnsignedIntRe.match(normalizedUserId).hasMatch()) {
           currentUserId = normalizedUserId;
         }
+        mainWidget.setCurrentUserId(currentUserId);
         if (!currentUserId.isEmpty()) {
           profileApiClient.requestProfileInfo(currentUserId);
         } else {
