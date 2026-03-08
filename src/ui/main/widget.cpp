@@ -1,5 +1,6 @@
 #include "widget.h"
 
+#include "addfrienddialog.h"
 #include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
@@ -137,6 +138,30 @@ void Widget::initUI() {
 
   rightBtnLayout->addLayout(btnRowLayout);
   rightBtnLayout->addStretch();
+
+  QHBoxLayout *friendBtnLayout = new QHBoxLayout();
+  friendBtnLayout->setContentsMargins(0, 0, 0, 0);
+  friendBtnLayout->setSpacing(8);
+  friendBtnLayout->addStretch();
+
+  QPushButton *addFriendBtn = new QPushButton("添加好友", m_topPanel);
+  QPushButton *removeFriendBtn = new QPushButton("删除好友", m_topPanel);
+  addFriendBtn->setFixedHeight(28);
+  removeFriendBtn->setFixedHeight(28);
+  addFriendBtn->setCursor(Qt::ArrowCursor);
+  removeFriendBtn->setCursor(Qt::ArrowCursor);
+  addFriendBtn->setStyleSheet(
+      "QPushButton { border: 1px solid #d0d0d0; border-radius: 4px; "
+      "background-color: #ffffff; color: #333333; padding: 0 10px; }"
+      "QPushButton:hover { background-color: #f5f5f5; }");
+  removeFriendBtn->setStyleSheet(
+      "QPushButton { border: 1px solid #d0d0d0; border-radius: 4px; "
+      "background-color: #ffffff; color: #333333; padding: 0 10px; }"
+      "QPushButton:hover { background-color: #f5f5f5; }");
+  friendBtnLayout->addWidget(addFriendBtn);
+  friendBtnLayout->addWidget(removeFriendBtn);
+  m_addFriendBtn = addFriendBtn;
+  rightBtnLayout->addLayout(friendBtnLayout);
   mainTopLayout->addLayout(rightBtnLayout);
 
   // 样式：悬浮时背景变灰/红
@@ -163,6 +188,7 @@ void Widget::initUI() {
   closeBtn->setCursor(Qt::ArrowCursor);
 
   connect(settingsBtn, &QPushButton::clicked, this, &Widget::onOpenSettings);
+  connect(addFriendBtn, &QPushButton::clicked, this, &Widget::onOpenAddFriend);
   connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
   connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
 
@@ -474,4 +500,30 @@ void Widget::onAvatarReplyFinished(QNetworkReply *reply) {
 
   applyAvatarPixmap(pixmap);
   reply->deleteLater();
+}
+
+void Widget::onOpenAddFriend() {
+  if (!m_profileApiClient) {
+    QMessageBox::warning(this, "无法添加好友", "Profile 服务未初始化。");
+    return;
+  }
+
+  if (m_addFriendDialog) {
+    if (m_addFriendDialog->isMinimized()) {
+      m_addFriendDialog->showNormal();
+    } else {
+      m_addFriendDialog->show();
+    }
+    m_addFriendDialog->raise();
+    m_addFriendDialog->activateWindow();
+    return;
+  }
+
+  m_addFriendDialog =
+      new AddFriendDialog(m_currentUserId.trimmed(), m_profileApiClient, this);
+  connect(m_addFriendDialog, &QObject::destroyed, this,
+          [this]() { m_addFriendDialog = nullptr; });
+  m_addFriendDialog->show();
+  m_addFriendDialog->raise();
+  m_addFriendDialog->activateWindow();
 }

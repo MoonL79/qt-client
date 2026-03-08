@@ -26,6 +26,7 @@ class Widget;
 QT_END_NAMESPACE
 class QPixmap;
 class SettingsWindow;
+class AddFriendDialog;
 
 class Widget : public QWidget
 {
@@ -67,6 +68,8 @@ private:
     QString m_currentAvatarUrl;
     ProfileApiClient* m_profileApiClient = nullptr;
     QPointer<SettingsWindow> m_settingsWindow;
+    QPointer<AddFriendDialog> m_addFriendDialog;
+    QPushButton* m_addFriendBtn = nullptr;
     
     QListWidget* m_sessionList;
     QHash<QString, Session> m_sessionsById;
@@ -78,6 +81,7 @@ private:
 private slots:
     void onSessionDoubleClicked(QListWidgetItem *item);
     void onOpenSettings();
+    void onOpenAddFriend();
     void onAvatarReplyFinished(QNetworkReply *reply);
 };
 #endif // WIDGET_H

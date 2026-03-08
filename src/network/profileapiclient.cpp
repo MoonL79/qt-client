@@ -2,17 +2,79 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QThread>
 #include <QUuid>
+#include <QtGlobal>
 
 namespace {
 constexpr const char *kTypeProfile = "PROFILE";
 constexpr const char *kActionGetInfo = "GET_INFO";
 constexpr const char *kActionSetInfo = "SET_INFO";
+constexpr const char *kActionGet = "GET";
+constexpr const char *kActionAddFriend = "ADD_FRIEND";
 
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
   return trimmed.isEmpty() ? QStringLiteral("default") : trimmed;
+}
+
+QString jsonValueToString(const QJsonValue &value) {
+  if (value.isString()) {
+    return value.toString();
+  }
+  if (value.isDouble()) {
+    const qint64 num = static_cast<qint64>(value.toDouble());
+    return QString::number(num);
+  }
+  return QString();
+}
+
+bool readRequiredString(const QJsonObject &obj, const char *key, QString *out,
+                        bool allowNumber = false) {
+  if (!obj.contains(QLatin1String(key))) {
+    return false;
+  }
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (value.isString()) {
+    if (out) {
+      *out = value.toString();
+    }
+    return true;
+  }
+  if (allowNumber && value.isDouble()) {
+    if (out) {
+      const qint64 num = static_cast<qint64>(value.toDouble());
+      *out = QString::number(num);
+    }
+    return true;
+  }
+  return false;
+}
+
+bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
+  if (!obj.contains(QLatin1String(key))) {
+    return false;
+  }
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (value.isDouble()) {
+    if (out) {
+      *out = value.toInt();
+    }
+    return true;
+  }
+  if (value.isString()) {
+    bool ok = false;
+    const int parsed = value.toString().toInt(&ok);
+    if (!ok) {
+      return false;
+    }
+    if (out) {
+      *out = parsed;
+    }
+    return true;
+  }
+  return false;
 }
 }
 
@@ -46,7 +108,7 @@ QString ProfileApiClient::requestProfileInfo(const QString &userId) {
 
   QJsonObject data;
   data.insert("user_id", userId.trimmed());
-  sendProfileRequest(action, requestId, data);
+  sendProfileRequest(action, requestId, data, 0, false);
   return requestId;
 }
 
@@ -70,7 +132,39 @@ QString ProfileApiClient::setProfileInfo(const QString &userId,
   data.insert("nickname", nickname.trimmed());
   data.insert("signature", signature.trimmed());
   data.insert("theme", normalizeTheme(theme));
-  sendProfileRequest(action, requestId, data);
+  sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
+QString ProfileApiClient::queryUserProfile(const QString &numericId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionGet);
+
+  QString error;
+  if (!validateQueryUserProfile(numericId, &error)) {
+    failRequest(requestId, action, error);
+    return requestId;
+  }
+
+  QJsonObject data;
+  data.insert("numeric_id", numericId.trimmed());
+  sendProfileRequest(action, requestId, data, kMaxRetryCount, true);
+  return requestId;
+}
+
+QString ProfileApiClient::addFriend(const QString &friendUserId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionAddFriend);
+
+  QString error;
+  if (!validateAddFriend(friendUserId, &error)) {
+    failRequest(requestId, action, error);
+    return requestId;
+  }
+
+  QJsonObject data;
+  data.insert("friend_user_id", friendUserId.trimmed());
+  sendProfileRequest(action, requestId, data, 0, false);
   return requestId;
 }
 
@@ -118,24 +212,47 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
   if (!(code == 0 && ok)) {
     const QString error =
         msg.isEmpty() ? QStringLiteral("request failed, code=%1").arg(code) : msg;
-    failRequest(requestId, expectedAction, error);
-    return;
-  }
-
-  ProfileInfo info;
-  QString error;
-  if (!parseProfileInfo(envelope.data, &info, &error)) {
-    failRequest(requestId, expectedAction, error);
+    failRequest(requestId, expectedAction, error, code);
     return;
   }
 
   if (expectedAction == QLatin1String(kActionGetInfo)) {
+    ProfileInfo info;
+    QString error;
+    if (!parseProfileInfo(envelope.data, &info, false, &error)) {
+      failRequest(requestId, expectedAction, error);
+      return;
+    }
     emit profileInfoReceived(requestId, info);
     return;
   }
 
   if (expectedAction == QLatin1String(kActionSetInfo)) {
+    ProfileInfo info;
+    QString error;
+    if (!parseProfileInfo(envelope.data, &info, false, &error)) {
+      failRequest(requestId, expectedAction, error);
+      return;
+    }
     emit profileInfoSetSuccess(requestId, info);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionGet)) {
+    ProfileInfo info;
+    QString error;
+    if (!parseProfileInfo(envelope.data, &info, true, &error)) {
+      failRequest(requestId, expectedAction, error);
+      return;
+    }
+    emit userProfileQueried(requestId, info);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionAddFriend)) {
+    const QString friendUserId =
+        envelope.data.value("friend_user_id").toString().trimmed();
+    emit addFriendSuccess(requestId, friendUserId);
     return;
   }
 
@@ -145,10 +262,11 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
 void ProfileApiClient::onDisconnected() {
   const auto requestIds = m_pendingRequests.keys();
   for (const QString &requestId : requestIds) {
-    const QString action = m_pendingRequests.value(requestId).action;
-    clearPendingRequest(requestId);
-    emit requestFailed(requestId, action,
-                       QStringLiteral("websocket disconnected"));
+    if (!retryPendingRequest(requestId, QStringLiteral("websocket disconnected"))) {
+      const QString action = m_pendingRequests.value(requestId).action;
+      clearPendingRequest(requestId);
+      failRequest(requestId, action, QStringLiteral("websocket disconnected"));
+    }
   }
 }
 
@@ -224,29 +342,63 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
   return true;
 }
 
+bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
+                                                QString *error) const {
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  const QString id = numericId.trimmed();
+  if (id.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("numeric_id is required");
+    }
+    return false;
+  }
+  if (!kUnsignedIntRe.match(id).hasMatch()) {
+    if (error) {
+      *error = QStringLiteral("numeric_id must be unsigned integer string");
+    }
+    return false;
+  }
+  return true;
+}
+
+bool ProfileApiClient::validateAddFriend(const QString &friendUserId,
+                                         QString *error) const {
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  const QString uid = friendUserId.trimmed();
+  if (uid.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("friend_user_id is required");
+    }
+    return false;
+  }
+  if (!kUnsignedIntRe.match(uid).hasMatch()) {
+    if (error) {
+      *error = QStringLiteral("friend_user_id must be unsigned integer string");
+    }
+    return false;
+  }
+  return true;
+}
+
 void ProfileApiClient::sendProfileRequest(const QString &action,
                                           const QString &requestId,
-                                          const QJsonObject &data) {
+                                          const QJsonObject &data, int retries,
+                                          bool retryOnTransient) {
   if (!m_client) {
     failRequest(requestId, action, QStringLiteral("websocket client is null"));
     return;
   }
-  if (!m_client->isConnected()) {
+  addPendingRequest(requestId, action, data, retries, retryOnTransient);
+  if (!sendProfilePayload(action, requestId, data)) {
+    clearPendingRequest(requestId);
     failRequest(requestId, action, QStringLiteral("websocket is not connected"));
-    return;
   }
-
-  addPendingRequest(requestId, action);
-  const QString payload = protocol::createRequest(QString::fromLatin1(kTypeProfile),
-                                                  action, data, requestId);
-  m_client->sendTextMessage(payload);
-
-  qInfo().noquote() << "[PROFILE] send action=" << action
-                    << "request_id=" << requestId;
 }
 
 void ProfileApiClient::addPendingRequest(const QString &requestId,
-                                         const QString &action) {
+                                         const QString &action,
+                                         const QJsonObject &data, int retries,
+                                         bool retryOnTransient) {
   clearPendingRequest(requestId);
 
   auto *timer = new QTimer(this);
@@ -255,17 +407,36 @@ void ProfileApiClient::addPendingRequest(const QString &requestId,
     if (!m_pendingRequests.contains(requestId)) {
       return;
     }
-    m_pendingRequests.remove(requestId);
-    qWarning().noquote() << "[PROFILE] timeout action=" << action
-                         << "request_id=" << requestId;
-    emit requestFailed(requestId, action, QStringLiteral("request timeout"));
+    if (!retryPendingRequest(requestId, QStringLiteral("request timeout"))) {
+      m_pendingRequests.remove(requestId);
+      qWarning().noquote() << "[PROFILE] timeout action=" << action
+                           << "request_id=" << requestId;
+      failRequest(requestId, action, QStringLiteral("request timeout"));
+    }
   });
   timer->start(kRequestTimeoutMs);
 
   PendingRequest pending;
   pending.action = action;
+  pending.data = data;
+  pending.remainingRetries = qMax(0, retries);
+  pending.retryOnTransient = retryOnTransient;
   pending.timer = timer;
   m_pendingRequests.insert(requestId, pending);
+}
+
+bool ProfileApiClient::sendProfilePayload(const QString &action,
+                                          const QString &requestId,
+                                          const QJsonObject &data) {
+  if (!m_client || !m_client->isConnected()) {
+    return false;
+  }
+  const QString payload = protocol::createRequest(QString::fromLatin1(kTypeProfile),
+                                                  action, data, requestId);
+  m_client->sendTextMessage(payload);
+  qInfo().noquote() << "[PROFILE] send action=" << action
+                    << "request_id=" << requestId;
+  return true;
 }
 
 void ProfileApiClient::clearPendingRequest(const QString &requestId) {
@@ -281,16 +452,53 @@ void ProfileApiClient::clearPendingRequest(const QString &requestId) {
   m_pendingRequests.erase(it);
 }
 
+bool ProfileApiClient::retryPendingRequest(const QString &requestId,
+                                           const QString &reason) {
+  auto it = m_pendingRequests.find(requestId);
+  if (it == m_pendingRequests.end()) {
+    return false;
+  }
+  if (!it->retryOnTransient || it->remainingRetries <= 0) {
+    return false;
+  }
+
+  PendingRequest pending = it.value();
+  pending.remainingRetries -= 1;
+  m_pendingRequests.insert(requestId, pending);
+
+  qWarning().noquote() << "[PROFILE] retry action=" << pending.action
+                       << "request_id=" << requestId << "reason=" << reason
+                       << "remaining_retries=" << pending.remainingRetries;
+  QTimer::singleShot(kRetryDelayMs, this, [this, requestId]() {
+    auto it = m_pendingRequests.find(requestId);
+    if (it == m_pendingRequests.end()) {
+      return;
+    }
+    if (!sendProfilePayload(it->action, requestId, it->data)) {
+      const QString action = it->action;
+      clearPendingRequest(requestId);
+      failRequest(requestId, action, QStringLiteral("request timeout, please retry manually"));
+      return;
+    }
+    if (it->timer) {
+      it->timer->start(kRequestTimeoutMs);
+    }
+  });
+  return true;
+}
+
 void ProfileApiClient::failRequest(const QString &requestId, const QString &action,
-                                   const QString &errorMessage) {
+                                   const QString &errorMessage, int code) {
   qWarning().noquote() << "[PROFILE] action=" << action
                        << "request_id=" << requestId
+                       << "code=" << code
                        << "message=" << errorMessage;
+  emit requestFailedDetailed(requestId, action, code, errorMessage);
   emit requestFailed(requestId, action, errorMessage);
 }
 
 bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *outInfo,
-                                        QString *error) const {
+                                        bool strict, QString *error) const {
   if (!outInfo) {
     if (error) {
       *error = QStringLiteral("internal error: out profile is null");
@@ -307,23 +515,69 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
   }
 
   const QJsonObject profileObj = profileVal.toObject();
-  const QJsonValue avatar = profileObj.value("avatar_url");
-  const QJsonValue nickname = profileObj.value("nickname");
-  const QJsonValue signature = profileObj.value("signature");
-  const QJsonValue theme = profileObj.value("theme");
-
-  if (!avatar.isString() || !nickname.isString() || !signature.isString()) {
-    if (error) {
-      *error = QStringLiteral(
-          "invalid profile fields, avatar_url/nickname/signature must be string");
+  QString userId;
+  QString numericId;
+  QString username;
+  QString email;
+  QString phone;
+  int statusValue = 0;
+  QString userUuid;
+  QString avatarUrl;
+  QString nickname;
+  QString bio;
+  QString signature;
+  QString theme;
+  if (strict) {
+    if (!readRequiredString(profileObj, "user_id", &userId, true) ||
+        !readRequiredString(profileObj, "numeric_id", &numericId, true) ||
+        !readRequiredString(profileObj, "username", &username) ||
+        !readRequiredString(profileObj, "email", &email) ||
+        !readRequiredString(profileObj, "phone", &phone) ||
+        !readRequiredInt(profileObj, "status", &statusValue) ||
+        !readRequiredString(profileObj, "user_uuid", &userUuid) ||
+        !readRequiredString(profileObj, "nickname", &nickname) ||
+        !readRequiredString(profileObj, "avatar_url", &avatarUrl) ||
+        !readRequiredString(profileObj, "bio", &bio) ||
+        !readRequiredString(profileObj, "signature", &signature) ||
+        !readRequiredString(profileObj, "theme", &theme)) {
+      if (error) {
+        *error = QStringLiteral("invalid profile fields for PROFILE/GET");
+      }
+      return false;
     }
-    return false;
+  } else {
+    if (!readRequiredString(profileObj, "avatar_url", &avatarUrl) ||
+        !readRequiredString(profileObj, "nickname", &nickname) ||
+        !readRequiredString(profileObj, "signature", &signature)) {
+      if (error) {
+        *error = QStringLiteral(
+            "invalid profile fields, avatar_url/nickname/signature must be string");
+      }
+      return false;
+    }
+    userId = jsonValueToString(profileObj.value("user_id"));
+    numericId = jsonValueToString(profileObj.value("numeric_id"));
+    username = profileObj.value("username").toString();
+    email = profileObj.value("email").toString();
+    phone = profileObj.value("phone").toString();
+    userUuid = profileObj.value("user_uuid").toString();
+    bio = profileObj.value("bio").toString();
+    readRequiredInt(profileObj, "status", &statusValue);
+    theme = profileObj.value("theme").toString();
   }
 
-  outInfo->avatarUrl = avatar.toString();
-  outInfo->nickname = nickname.toString();
-  outInfo->signature = signature.toString();
-  outInfo->theme = theme.isString() ? normalizeTheme(theme.toString())
-                                    : QStringLiteral("default");
+  outInfo->userId = userId;
+  outInfo->numericId = numericId;
+  outInfo->username = username;
+  outInfo->email = email;
+  outInfo->phone = phone;
+  outInfo->status = statusValue;
+  outInfo->userUuid = userUuid;
+  outInfo->avatarUrl = avatarUrl;
+  outInfo->nickname = nickname;
+  outInfo->bio = bio;
+  outInfo->signature = signature;
+  outInfo->theme =
+      theme.trimmed().isEmpty() ? QStringLiteral("default") : normalizeTheme(theme);
   return true;
 }

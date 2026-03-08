@@ -24,6 +24,8 @@ qt_add_executable(qt-client
     src/ui/test/logwindow.cpp
     src/ui/settings/settingswindow.h
     src/ui/settings/settingswindow.cpp
+    src/ui/friend/addfrienddialog.h
+    src/ui/friend/addfrienddialog.cpp
     resources/resources.qrc
     src/network/websocketclient.h
     src/network/websocketclient.cpp
@@ -46,6 +48,7 @@ target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/register
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/test
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/settings
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/friend
     ${CMAKE_CURRENT_SOURCE_DIR}/src/network
     ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
     ${CMAKE_CURRENT_SOURCE_DIR}/src/session
