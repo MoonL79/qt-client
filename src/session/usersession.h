@@ -10,6 +10,7 @@ public:
 
   void clear();
   void setLoginContext(const QString &userId, const QString &username,
+                       const QString &numericId,
                        const QString &uploadToken,
                        const QString &uploadTokenType,
                        const QString &uploadTokenExpiresAtUtc);
@@ -20,6 +21,7 @@ public:
 
   const QString &userId() const;
   const QString &username() const;
+  const QString &numericId() const;
   const QString &uploadToken() const;
   const QString &uploadTokenType() const;
   const QString &uploadTokenExpiresAtUtc() const;
@@ -30,6 +32,7 @@ private:
 
   QString m_userId;
   QString m_username;
+  QString m_numericId;
   QString m_uploadToken;
   QString m_uploadTokenType;
   QString m_uploadTokenExpiresAtUtc;

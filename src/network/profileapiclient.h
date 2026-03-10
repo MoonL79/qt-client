@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QTimer>
+#include <QVector>
 
 #include "protocol.h"
 #include "websocketclient.h"
@@ -25,6 +26,27 @@ struct ProfileInfo {
 };
 Q_DECLARE_METATYPE(ProfileInfo)
 
+struct AddFriendResult {
+  QString userNumericId;
+  QString friendNumericId;
+  QString userId;
+  QString friendUserId;
+  int status = 0;
+};
+Q_DECLARE_METATYPE(AddFriendResult)
+
+struct FriendItem {
+  QString userId;
+  QString numericId;
+  QString username;
+  int status = 0;
+  QString nickname;
+  QString avatarUrl;
+  QString bio;
+};
+Q_DECLARE_METATYPE(FriendItem)
+Q_DECLARE_METATYPE(QVector<FriendItem>)
+
 class ProfileApiClient : public QObject {
   Q_OBJECT
 
@@ -37,13 +59,19 @@ public:
                          const QString &nickname, const QString &signature,
                          const QString &theme = QString());
   QString queryUserProfile(const QString &numericId);
-  QString addFriend(const QString &friendUserId);
+  QString addFriend(const QString &userNumericId, const QString &friendNumericId,
+                    const QString &remark = QString());
+  QString fetchFriendList(const QString &myNumericId);
 
 signals:
   void profileInfoReceived(const QString &requestId, const ProfileInfo &info);
   void profileInfoSetSuccess(const QString &requestId, const ProfileInfo &info);
   void userProfileQueried(const QString &requestId, const ProfileInfo &info);
-  void addFriendSuccess(const QString &requestId, const QString &friendUserId);
+  void addFriendSuccess(const QString &requestId, const AddFriendResult &result);
+  void friendListFetched(const QString &requestId,
+                         const QVector<FriendItem> &friends);
+  void friendListFailed(const QString &requestId, int code,
+                        const QString &message);
   void requestFailed(const QString &requestId, const QString &action,
                      const QString &error);
   void requestFailedDetailed(const QString &requestId, const QString &action,
@@ -68,7 +96,10 @@ private:
                        const QString &nickname, const QString &signature,
                        const QString &theme, QString *error) const;
   bool validateQueryUserProfile(const QString &numericId, QString *error) const;
-  bool validateAddFriend(const QString &friendUserId, QString *error) const;
+  bool validateAddFriend(const QString &userNumericId,
+                         const QString &friendNumericId, const QString &remark,
+                         QString *error) const;
+  bool validateFetchFriendList(const QString &myNumericId, QString *error) const;
 
   void sendProfileRequest(const QString &action, const QString &requestId,
                           const QJsonObject &data, int retries,
@@ -85,6 +116,10 @@ private:
 
   bool parseProfileInfo(const QJsonObject &data, ProfileInfo *outInfo, bool strict,
                         QString *error) const;
+  bool parseAddFriendResult(const QJsonObject &data, AddFriendResult *outResult,
+                            QString *error) const;
+  bool parseFriendList(const QJsonObject &data, QVector<FriendItem> *outFriends,
+                       QString *error) const;
 
 private:
   websocketclient *m_client = nullptr;

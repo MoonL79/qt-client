@@ -27,6 +27,7 @@ UserSession &UserSession::instance() {
 void UserSession::clear() {
   m_userId.clear();
   m_username.clear();
+  m_numericId.clear();
   m_uploadToken.clear();
   m_uploadTokenType.clear();
   m_uploadTokenExpiresAtUtc.clear();
@@ -34,11 +35,13 @@ void UserSession::clear() {
 }
 
 void UserSession::setLoginContext(const QString &userId, const QString &username,
+                                  const QString &numericId,
                                   const QString &uploadToken,
                                   const QString &uploadTokenType,
                                   const QString &uploadTokenExpiresAtUtc) {
   m_userId = userId.trimmed();
   m_username = username.trimmed();
+  m_numericId = numericId.trimmed();
   m_uploadToken = uploadToken.trimmed();
   m_uploadTokenType = uploadTokenType.trimmed();
   m_uploadTokenExpiresAtUtc = uploadTokenExpiresAtUtc.trimmed();
@@ -67,6 +70,8 @@ bool UserSession::isUploadTokenExpired() const {
 const QString &UserSession::userId() const { return m_userId; }
 
 const QString &UserSession::username() const { return m_username; }
+
+const QString &UserSession::numericId() const { return m_numericId; }
 
 const QString &UserSession::uploadToken() const { return m_uploadToken; }
 

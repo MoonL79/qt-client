@@ -181,6 +181,23 @@ QString extractLoginUserId(const protocol::Envelope &envelope) {
   return QString();
 }
 
+QString extractLoginNumericId(const protocol::Envelope &envelope) {
+  const QJsonObject &data = envelope.data;
+
+  QString numericId = toUnsignedString(data.value("numeric_id"));
+  if (!numericId.isEmpty()) {
+    return numericId;
+  }
+  if (data.value("user").isObject()) {
+    const QJsonObject userObj = data.value("user").toObject();
+    numericId = toUnsignedString(userObj.value("numeric_id"));
+    if (!numericId.isEmpty()) {
+      return numericId;
+    }
+  }
+  return QString();
+}
+
 QString extractLoginUsername(const protocol::Envelope &envelope,
                              const QString &fallback) {
   const QJsonObject &data = envelope.data;
@@ -395,11 +412,13 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
     const QString loginUsername =
         extractLoginUsername(envelope, m_pendingUsername);
     const QString userId = extractLoginUserId(envelope);
+    const QString numericId = extractLoginNumericId(envelope);
     const QString uploadToken = extractUploadToken(envelope);
     const QString uploadTokenType = extractUploadTokenType(envelope);
     const QString uploadTokenExpiresAt = extractUploadTokenExpiresAt(envelope);
 
-    UserSession::instance().setLoginContext(userId, loginUsername, uploadToken,
+    UserSession::instance().setLoginContext(userId, loginUsername, numericId,
+                                            uploadToken,
                                             uploadTokenType,
                                             uploadTokenExpiresAt);
 
