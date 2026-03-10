@@ -17,6 +17,7 @@ class AddFriendDialog : public QDialog {
 
 public:
   explicit AddFriendDialog(const QString &currentUserId,
+                           const QString &currentUserNumericId,
                            ProfileApiClient *profileApiClient,
                            QWidget *parent = nullptr);
   ~AddFriendDialog() override;
@@ -25,7 +26,7 @@ private slots:
   void onQueryClicked();
   void onAddFriendClicked();
   void onUserProfileQueried(const QString &requestId, const ProfileInfo &info);
-  void onAddFriendSuccess(const QString &requestId, const QString &friendUserId);
+  void onAddFriendSuccess(const QString &requestId, const AddFriendResult &result);
   void onRequestFailedDetailed(const QString &requestId, const QString &action,
                                int code, const QString &error);
   void onAvatarReplyFinished();
@@ -38,14 +39,17 @@ private:
   void applyQueryResult(const ProfileInfo &info);
   bool isValidNumericId(const QString &numericId) const;
   QString resolveQueryErrorMessage(int code) const;
+  QString resolveAddFriendErrorMessage(int code) const;
   void requestAvatar(const QString &avatarUrl);
   void applyDefaultAvatar();
+  bool isQueriedSelf() const;
 
   ProfileApiClient *m_profileApiClient = nullptr;
   QString m_currentUserId;
+  QString m_currentUserNumericId;
   QString m_pendingQueryRequestId;
   QString m_pendingAddRequestId;
-  QString m_lastQueriedUserId;
+  QString m_lastQueriedNumericId;
   QString m_lastQueriedAvatarUrl;
   bool m_queryLoading = false;
   bool m_addLoading = false;
@@ -54,6 +58,7 @@ private:
   QPointer<QNetworkReply> m_avatarReply;
 
   QLineEdit *m_numericIdEdit = nullptr;
+  QLineEdit *m_remarkEdit = nullptr;
   QPushButton *m_queryButton = nullptr;
   QPushButton *m_addButton = nullptr;
   QLabel *m_statusLabel = nullptr;

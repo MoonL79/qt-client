@@ -768,7 +768,7 @@ void SettingsWindow::onProfileSetSuccess(const QString &requestId,
   applyProfileToUi(info);
   emit profileApplied(info.nickname.trimmed().isEmpty() ? m_userId.trimmed()
                                                         : info.nickname.trimmed(),
-                    info.avatarUrl);
+                    info.avatarUrl, info.signature);
   QMessageBox::information(this, "成功", "个人资料保存成功");
 }
 

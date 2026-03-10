@@ -37,8 +37,11 @@ public:
     ~Widget();
     
     // 设置当前登录用户信息的接口
-    void setUserInfo(const QString& username, const QString& avatarPath = ":/resources/avatar.png");
+    void setUserInfo(const QString& username,
+                     const QString& avatarPath = ":/resources/avatar.png",
+                     const QString& signature = QString());
     void setCurrentUserId(const QString& userId);
+    void setCurrentUserNumericId(const QString& numericId);
     void setProfileApiClient(ProfileApiClient* profileApiClient);
 
 protected:
@@ -61,10 +64,13 @@ private:
     QWidget* m_topPanel;
     QLabel* m_avatarLabel;
     QLabel* m_nameLabel;
+    QLabel* m_signatureLabel;
     QNetworkAccessManager* m_avatarNetworkManager = nullptr;
     QNetworkDiskCache* m_avatarDiskCache = nullptr;
     QString m_currentUserId;
+    QString m_currentUserNumericId;
     QString m_currentDisplayName;
+    QString m_currentSignature;
     QString m_currentAvatarUrl;
     ProfileApiClient* m_profileApiClient = nullptr;
     QPointer<SettingsWindow> m_settingsWindow;

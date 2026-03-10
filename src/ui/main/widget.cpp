@@ -4,6 +4,7 @@
 #include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
+#include "usersession.h"
 #include "websocketclient.h"
 
 #include <QDir>
@@ -107,15 +108,29 @@ void Widget::initUI() {
 
   // 用户名
   m_nameLabel = new QLabel("Username", m_topPanel);
-  m_nameLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #333; "
-                             "margin-left: 10px; border: none;");
+  m_nameLabel->setStyleSheet(
+      "font-size: 18px; font-weight: bold; color: #333; border: none;");
   m_nameLabel->setWordWrap(true);
   m_nameLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
   m_nameLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   m_nameLabel->setMinimumWidth(140);
 
+  m_signatureLabel = new QLabel("暂无签名", m_topPanel);
+  m_signatureLabel->setStyleSheet(
+      "font-size: 12px; color: #8a8a8a; border: none;");
+  m_signatureLabel->setWordWrap(true);
+  m_signatureLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+  m_signatureLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  m_signatureLabel->setMinimumWidth(140);
+
+  QVBoxLayout *nameLayout = new QVBoxLayout();
+  nameLayout->setContentsMargins(10, 0, 0, 0);
+  nameLayout->setSpacing(4);
+  nameLayout->addWidget(m_nameLabel);
+  nameLayout->addWidget(m_signatureLabel);
+
   leftContentLayout->addWidget(m_avatarLabel);
-  leftContentLayout->addWidget(m_nameLabel, 1);
+  leftContentLayout->addLayout(nameLayout, 1);
 
   mainTopLayout->addLayout(leftContentLayout);
 
@@ -361,10 +376,14 @@ void Widget::applyDefaultAvatar() {
   }
 }
 
-void Widget::setUserInfo(const QString &username, const QString &avatarPath) {
+void Widget::setUserInfo(const QString &username, const QString &avatarPath,
+                         const QString &signature) {
   m_currentDisplayName = username;
+  m_currentSignature = signature.trimmed();
   m_currentAvatarUrl = avatarPath.trimmed();
   m_nameLabel->setText(username);
+  m_signatureLabel->setText(m_currentSignature.isEmpty() ? "暂无签名"
+                                                        : m_currentSignature);
   if (m_currentAvatarUrl.isEmpty()) {
     applyDefaultAvatar();
     return;
@@ -373,6 +392,10 @@ void Widget::setUserInfo(const QString &username, const QString &avatarPath) {
 }
 
 void Widget::setCurrentUserId(const QString &userId) { m_currentUserId = userId; }
+
+void Widget::setCurrentUserNumericId(const QString &numericId) {
+  m_currentUserNumericId = numericId.trimmed();
+}
 
 void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
   m_profileApiClient = profileApiClient;
@@ -453,10 +476,11 @@ void Widget::onOpenSettings() {
   m_settingsWindow =
       new SettingsWindow(m_currentUserId.trimmed(), m_profileApiClient, nullptr);
   connect(m_settingsWindow, &SettingsWindow::profileApplied, this,
-          [this](const QString &displayName, const QString &avatarUrl) {
+          [this](const QString &displayName, const QString &avatarUrl,
+                 const QString &signature) {
             qInfo() << "[MainWidget] apply profile from settings, display_name="
                     << displayName << "avatar_url=" << avatarUrl;
-            setUserInfo(displayName, avatarUrl);
+            setUserInfo(displayName, avatarUrl, signature);
           });
   connect(m_settingsWindow, &QObject::destroyed, this,
           [this]() { m_settingsWindow = nullptr; });
@@ -519,8 +543,12 @@ void Widget::onOpenAddFriend() {
     return;
   }
 
-  m_addFriendDialog =
-      new AddFriendDialog(m_currentUserId.trimmed(), m_profileApiClient, this);
+  QString currentNumericId = m_currentUserNumericId.trimmed();
+  if (currentNumericId.isEmpty()) {
+    currentNumericId = UserSession::instance().numericId().trimmed();
+  }
+  m_addFriendDialog = new AddFriendDialog(m_currentUserId.trimmed(), currentNumericId,
+                                          m_profileApiClient, this);
   connect(m_addFriendDialog, &QObject::destroyed, this,
           [this]() { m_addFriendDialog = nullptr; });
   m_addFriendDialog->show();

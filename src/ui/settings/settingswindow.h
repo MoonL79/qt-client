@@ -23,7 +23,8 @@ public:
   ~SettingsWindow() override;
 
 signals:
-  void profileApplied(const QString &displayName, const QString &avatarUrl);
+  void profileApplied(const QString &displayName, const QString &avatarUrl,
+                      const QString &signature);
 
 private slots:
   void onRefreshClicked();

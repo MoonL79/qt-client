@@ -1,6 +1,7 @@
 #include "profileapiclient.h"
 
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QThread>
@@ -13,6 +14,7 @@ constexpr const char *kActionGetInfo = "GET_INFO";
 constexpr const char *kActionSetInfo = "SET_INFO";
 constexpr const char *kActionGet = "GET";
 constexpr const char *kActionAddFriend = "ADD_FRIEND";
+constexpr const char *kActionListFriends = "LIST_FRIENDS";
 
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
@@ -81,6 +83,9 @@ bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
 ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<ProfileInfo>("ProfileInfo");
+  qRegisterMetaType<AddFriendResult>("AddFriendResult");
+  qRegisterMetaType<FriendItem>("FriendItem");
+  qRegisterMetaType<QVector<FriendItem>>("QVector<FriendItem>");
 
   Q_ASSERT_X(thread() == QThread::currentThread(), "ProfileApiClient",
              "ProfileApiClient should run in the main event thread");
@@ -152,19 +157,41 @@ QString ProfileApiClient::queryUserProfile(const QString &numericId) {
   return requestId;
 }
 
-QString ProfileApiClient::addFriend(const QString &friendUserId) {
+QString ProfileApiClient::addFriend(const QString &userNumericId,
+                                    const QString &friendNumericId,
+                                    const QString &remark) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionAddFriend);
 
   QString error;
-  if (!validateAddFriend(friendUserId, &error)) {
+  if (!validateAddFriend(userNumericId, friendNumericId, remark, &error)) {
     failRequest(requestId, action, error);
     return requestId;
   }
 
   QJsonObject data;
-  data.insert("friend_user_id", friendUserId.trimmed());
+  data.insert("user_numeric_id", userNumericId.trimmed());
+  data.insert("friend_numeric_id", friendNumericId.trimmed());
+  if (!remark.trimmed().isEmpty()) {
+    data.insert("remark", remark.trimmed());
+  }
   sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
+QString ProfileApiClient::fetchFriendList(const QString &myNumericId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionListFriends);
+
+  QString error;
+  if (!validateFetchFriendList(myNumericId, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonObject data;
+  data.insert("numeric_id", myNumericId.trimmed());
+  sendProfileRequest(action, requestId, data, kMaxRetryCount, true);
   return requestId;
 }
 
@@ -250,9 +277,24 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
   }
 
   if (expectedAction == QLatin1String(kActionAddFriend)) {
-    const QString friendUserId =
-        envelope.data.value("friend_user_id").toString().trimmed();
-    emit addFriendSuccess(requestId, friendUserId);
+    AddFriendResult result;
+    QString error;
+    if (!parseAddFriendResult(envelope.data, &result, &error)) {
+      failRequest(requestId, expectedAction, error);
+      return;
+    }
+    emit addFriendSuccess(requestId, result);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionListFriends)) {
+    QVector<FriendItem> friends;
+    QString error;
+    if (!parseFriendList(envelope.data, &friends, &error)) {
+      failRequest(requestId, expectedAction, error, 3003);
+      return;
+    }
+    emit friendListFetched(requestId, friends);
     return;
   }
 
@@ -361,19 +403,66 @@ bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
   return true;
 }
 
-bool ProfileApiClient::validateAddFriend(const QString &friendUserId,
+bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
+                                         const QString &friendNumericId,
+                                         const QString &remark,
                                          QString *error) const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
-  const QString uid = friendUserId.trimmed();
-  if (uid.isEmpty()) {
+  const QString userId = userNumericId.trimmed();
+  const QString friendId = friendNumericId.trimmed();
+  const QString note = remark.trimmed();
+  if (userId.isEmpty()) {
     if (error) {
-      *error = QStringLiteral("friend_user_id is required");
+      *error = QStringLiteral("user_numeric_id is required");
     }
     return false;
   }
-  if (!kUnsignedIntRe.match(uid).hasMatch()) {
+  if (!kUnsignedIntRe.match(userId).hasMatch()) {
     if (error) {
-      *error = QStringLiteral("friend_user_id must be unsigned integer string");
+      *error = QStringLiteral("user_numeric_id must be unsigned integer string");
+    }
+    return false;
+  }
+  if (friendId.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("friend_numeric_id is required");
+    }
+    return false;
+  }
+  if (!kUnsignedIntRe.match(friendId).hasMatch()) {
+    if (error) {
+      *error = QStringLiteral("friend_numeric_id must be unsigned integer string");
+    }
+    return false;
+  }
+  if (userId == friendId) {
+    if (error) {
+      *error = QStringLiteral("cannot add self");
+    }
+    return false;
+  }
+  if (note.size() > 255) {
+    if (error) {
+      *error = QStringLiteral("remark length must be <= 255");
+    }
+    return false;
+  }
+  return true;
+}
+
+bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
+                                               QString *error) const {
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  const QString id = myNumericId.trimmed();
+  if (id.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("numeric_id is required");
+    }
+    return false;
+  }
+  if (!kUnsignedIntRe.match(id).hasMatch()) {
+    if (error) {
+      *error = QStringLiteral("numeric_id must be unsigned integer string");
     }
     return false;
   }
@@ -493,6 +582,9 @@ void ProfileApiClient::failRequest(const QString &requestId, const QString &acti
                        << "request_id=" << requestId
                        << "code=" << code
                        << "message=" << errorMessage;
+  if (action == QLatin1String(kActionListFriends)) {
+    emit friendListFailed(requestId, code, errorMessage);
+  }
   emit requestFailedDetailed(requestId, action, code, errorMessage);
   emit requestFailed(requestId, action, errorMessage);
 }
@@ -579,5 +671,90 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
   outInfo->signature = signature;
   outInfo->theme =
       theme.trimmed().isEmpty() ? QStringLiteral("default") : normalizeTheme(theme);
+  return true;
+}
+
+bool ProfileApiClient::parseAddFriendResult(const QJsonObject &data,
+                                            AddFriendResult *outResult,
+                                            QString *error) const {
+  if (!outResult) {
+    if (error) {
+      *error = QStringLiteral("internal error: out result is null");
+    }
+    return false;
+  }
+
+  QString userNumericId;
+  QString friendNumericId;
+  QString userId;
+  QString friendUserId;
+  int status = 0;
+  if (!readRequiredString(data, "user_numeric_id", &userNumericId, true) ||
+      !readRequiredString(data, "friend_numeric_id", &friendNumericId, true) ||
+      !readRequiredString(data, "user_id", &userId, true) ||
+      !readRequiredString(data, "friend_user_id", &friendUserId, true) ||
+      !readRequiredInt(data, "status", &status)) {
+    if (error) {
+      *error = QStringLiteral("invalid ADD_FRIEND response fields");
+    }
+    return false;
+  }
+
+  outResult->userNumericId = userNumericId;
+  outResult->friendNumericId = friendNumericId;
+  outResult->userId = userId;
+  outResult->friendUserId = friendUserId;
+  outResult->status = status;
+  return true;
+}
+
+bool ProfileApiClient::parseFriendList(const QJsonObject &data,
+                                       QVector<FriendItem> *outFriends,
+                                       QString *error) const {
+  if (!outFriends) {
+    if (error) {
+      *error = QStringLiteral("internal error: out friends is null");
+    }
+    return false;
+  }
+  QString ignored;
+  if (!readRequiredString(data, "numeric_id", &ignored, true) ||
+      !readRequiredString(data, "user_id", &ignored, true)) {
+    if (error) {
+      *error = QStringLiteral("invalid LIST_FRIENDS response owner fields");
+    }
+    return false;
+  }
+
+  const QJsonValue friendsVal = data.value("friends");
+  if (friendsVal.isUndefined() || friendsVal.isNull()) {
+    outFriends->clear();
+    return true;
+  }
+  if (!friendsVal.isArray()) {
+    if (error) {
+      *error = QStringLiteral("invalid LIST_FRIENDS response: friends is not array");
+    }
+    return false;
+  }
+
+  const QJsonArray arr = friendsVal.toArray();
+  outFriends->clear();
+  outFriends->reserve(arr.size());
+  for (const QJsonValue &itemVal : arr) {
+    if (!itemVal.isObject()) {
+      continue;
+    }
+    const QJsonObject obj = itemVal.toObject();
+    FriendItem item;
+    item.userId = jsonValueToString(obj.value("user_id"));
+    item.numericId = jsonValueToString(obj.value("numeric_id"));
+    item.username = obj.value("username").toString();
+    item.status = obj.value("status").toInt(0);
+    item.nickname = obj.value("nickname").toString();
+    item.avatarUrl = obj.value("avatar_url").toString();
+    item.bio = obj.value("bio").toString();
+    outFriends->push_back(item);
+  }
   return true;
 }

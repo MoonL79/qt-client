@@ -88,7 +88,8 @@ int main(int argc, char *argv[])
           const QString displayName = info.nickname.trimmed().isEmpty()
                                           ? currentUserId
                                           : info.nickname.trimmed();
-          mainWidget.setUserInfo(displayName, info.avatarUrl);
+          mainWidget.setCurrentUserNumericId(info.numericId);
+          mainWidget.setUserInfo(displayName, info.avatarUrl, info.signature);
         };
 
     QObject::connect(&profileApiClient, &ProfileApiClient::profileInfoReceived,
@@ -120,6 +121,7 @@ int main(int argc, char *argv[])
         mainWidget.setUserInfo(username); // 设置用户信息
         mainWidget.setWindowTitle("IM聊天 - " + username);
         mainWidget.show();
+        mainWidget.setCurrentUserNumericId(UserSession::instance().numericId());
         const QString normalizedUserId = userId.trimmed();
         if (kUnsignedIntRe.match(normalizedUserId).hasMatch()) {
           currentUserId = normalizedUserId;
