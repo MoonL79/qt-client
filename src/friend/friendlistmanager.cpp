@@ -6,6 +6,7 @@
 #include <QJsonValue>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QTimeZone>
 #include <QtGlobal>
 
 namespace {
@@ -29,6 +30,29 @@ int valueToInt(const QJsonValue &value, int defaultValue = 0) {
     return ok ? parsed : defaultValue;
   }
   return defaultValue;
+}
+
+bool valueToBool(const QJsonValue &value, bool defaultValue = false) {
+  if (value.isBool()) {
+    return value.toBool();
+  }
+  return defaultValue;
+}
+
+QDateTime parseUtcIsoTime(const QString &value) {
+  const QString trimmed = value.trimmed();
+  if (trimmed.isEmpty()) {
+    return QDateTime();
+  }
+
+  QDateTime dt = QDateTime::fromString(trimmed, Qt::ISODate);
+  if (!dt.isValid()) {
+    return QDateTime();
+  }
+  if (dt.timeSpec() == Qt::LocalTime) {
+    dt.setTimeZone(QTimeZone::UTC);
+  }
+  return dt.toUTC();
 }
 } // namespace
 
@@ -72,6 +96,10 @@ bool FriendListManager::updateFromResponse(const QJsonObject &data) {
     item.avatarUrl = valueToString(obj.value("avatar_url"));
     item.bio = valueToString(obj.value("bio"));
     item.status = valueToInt(obj.value("status"), 0);
+    item.userStatus = valueToInt(obj.value("user_status"), item.status);
+    item.isOnline = valueToBool(obj.value("is_online"), false);
+    item.lastSeenAtUtc = valueToString(obj.value("last_seen_at"));
+    item.lastSeenAt = parseUtcIsoTime(item.lastSeenAtUtc);
 
     if (item.userId.isEmpty() || item.numericId.isEmpty() ||
         item.username.isEmpty()) {
@@ -84,7 +112,6 @@ bool FriendListManager::updateFromResponse(const QJsonObject &data) {
     parsed.push_back(item);
   }
 
-  // 覆盖式同步，避免重复与脏数据累积
   m_friends = parsed;
   qInfo() << "[FriendList] sync completed, size=" << m_friends.size();
   return true;

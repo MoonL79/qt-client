@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QThread>
+#include <QTimeZone>
 #include <QUuid>
 #include <QtGlobal>
 
@@ -92,6 +93,39 @@ bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
     *out = value.toBool();
   }
   return true;
+}
+
+int readOptionalInt(const QJsonObject &obj, const char *key, int defaultValue = 0) {
+  int out = defaultValue;
+  if (readRequiredInt(obj, key, &out)) {
+    return out;
+  }
+  return defaultValue;
+}
+
+bool readOptionalBool(const QJsonObject &obj, const char *key,
+                      bool defaultValue = false) {
+  bool out = defaultValue;
+  if (readRequiredBool(obj, key, &out)) {
+    return out;
+  }
+  return defaultValue;
+}
+
+QDateTime parseUtcIsoTime(const QString &value) {
+  const QString trimmed = value.trimmed();
+  if (trimmed.isEmpty()) {
+    return QDateTime();
+  }
+
+  QDateTime dt = QDateTime::fromString(trimmed, Qt::ISODate);
+  if (!dt.isValid()) {
+    return QDateTime();
+  }
+  if (dt.timeSpec() == Qt::LocalTime) {
+    dt.setTimeZone(QTimeZone::UTC);
+  }
+  return dt.toUTC();
 }
 
 bool isUnsignedIntegerString(const QString &value) {
@@ -884,7 +918,11 @@ bool ProfileApiClient::parseFriendList(const QJsonObject &data,
     item.userId = jsonValueToString(obj.value("user_id"));
     item.numericId = jsonValueToString(obj.value("numeric_id"));
     item.username = obj.value("username").toString();
-    item.status = obj.value("status").toInt(0);
+    item.status = readOptionalInt(obj, "status", 0);
+    item.userStatus = readOptionalInt(obj, "user_status", item.status);
+    item.isOnline = readOptionalBool(obj, "is_online", false);
+    item.lastSeenAtUtc = obj.value("last_seen_at").toString().trimmed();
+    item.lastSeenAt = parseUtcIsoTime(item.lastSeenAtUtc);
     item.nickname = obj.value("nickname").toString();
     item.avatarUrl = obj.value("avatar_url").toString();
     item.bio = obj.value("bio").toString();

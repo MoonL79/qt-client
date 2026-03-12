@@ -1,6 +1,7 @@
 #ifndef SETTINGSWINDOW_H
 #define SETTINGSWINDOW_H
 
+#include "authapiclient.h"
 #include "profileapiclient.h"
 
 #include <QJsonObject>
@@ -39,6 +40,9 @@ private slots:
   void onUploadReplyFinished();
   void onAvatarPreviewReplyFinished();
   void onLogoutClicked();
+  void onLogoutSucceeded(const QString &requestId, const LogoutResult &result);
+  void onAuthRequestFailed(const QString &requestId, const QString &action,
+                           const QString &error);
 
 private:
   void buildUi();
@@ -63,11 +67,14 @@ private:
   QString m_pendingGetRequestId;
   QString m_pendingSetRequestId;
   QString m_pendingUploadRequestId;
+  QString m_pendingLogoutRequestId;
   QString m_avatarUrl;
   QString m_selectedAvatarFilePath;
   bool m_loading = false;
   bool m_saving = false;
   bool m_uploading = false;
+  bool m_loggingOut = false;
+  AuthApiClient m_authApiClient;
   QNetworkAccessManager m_uploadNetworkManager;
   QPointer<QNetworkReply> m_uploadReply;
   QPointer<QNetworkReply> m_avatarPreviewReply;

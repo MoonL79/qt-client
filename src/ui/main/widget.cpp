@@ -51,12 +51,16 @@ QString resolveServerHost() {
 QString friendStatusText(int status) {
   switch (status) {
   case 1:
-    return QStringLiteral("在线");
+    return QStringLiteral("账号正常");
   case 0:
-    return QStringLiteral("离线");
+    return QStringLiteral("账号停用");
   default:
-    return QStringLiteral("状态:%1").arg(status);
+    return QStringLiteral("账号状态:%1").arg(status);
   }
+}
+
+QString friendOnlineText(bool isOnline) {
+  return isOnline ? QStringLiteral("在线") : QStringLiteral("离线");
 }
 }
 
@@ -697,15 +701,18 @@ void Widget::refreshFriendListUi() {
     m_sessionsById.insert(session.id(), session);
 
     const QString itemText =
-        QStringLiteral("%1 (%2) [%3]")
+        QStringLiteral("%1 (%2) [%3|%4]")
             .arg(friendItem.displayName, friendItem.numericId,
-                 friendStatusText(friendItem.status));
+                 friendOnlineText(friendItem.isOnline),
+                 friendStatusText(friendItem.userStatus));
     auto *item = new QListWidgetItem(itemText);
     item->setData(Qt::UserRole, session.id());
     item->setData(Qt::UserRole + 1, QStringLiteral("direct"));
     item->setData(Qt::UserRole + 2, friendItem.userId);
     item->setData(Qt::UserRole + 3, friendItem.numericId);
-    item->setData(Qt::UserRole + 4, friendItem.status);
+    item->setData(Qt::UserRole + 4, friendItem.userStatus);
+    item->setData(Qt::UserRole + 5, friendItem.isOnline);
+    item->setData(Qt::UserRole + 6, friendItem.lastSeenAtUtc);
     item->setIcon(QIcon(":/resources/chat_icon.png"));
     m_sessionList->addItem(item);
   }

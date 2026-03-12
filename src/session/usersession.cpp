@@ -32,13 +32,18 @@ void UserSession::clear() {
   m_uploadTokenType.clear();
   m_uploadTokenExpiresAtUtc.clear();
   m_uploadTokenExpiresAt = QDateTime();
+  m_isOnline = false;
+  m_lastSeenAtUtc.clear();
+  m_lastSeenAt = QDateTime();
 }
 
 void UserSession::setLoginContext(const QString &userId, const QString &username,
                                   const QString &numericId,
                                   const QString &uploadToken,
                                   const QString &uploadTokenType,
-                                  const QString &uploadTokenExpiresAtUtc) {
+                                  const QString &uploadTokenExpiresAtUtc,
+                                  bool isOnline,
+                                  const QString &lastSeenAtUtc) {
   m_userId = userId.trimmed();
   m_username = username.trimmed();
   m_numericId = numericId.trimmed();
@@ -46,6 +51,13 @@ void UserSession::setLoginContext(const QString &userId, const QString &username
   m_uploadTokenType = uploadTokenType.trimmed();
   m_uploadTokenExpiresAtUtc = uploadTokenExpiresAtUtc.trimmed();
   m_uploadTokenExpiresAt = parseUtcIsoTime(m_uploadTokenExpiresAtUtc);
+  setPresence(isOnline, lastSeenAtUtc);
+}
+
+void UserSession::setPresence(bool isOnline, const QString &lastSeenAtUtc) {
+  m_isOnline = isOnline;
+  m_lastSeenAtUtc = lastSeenAtUtc.trimmed();
+  m_lastSeenAt = parseUtcIsoTime(m_lastSeenAtUtc);
 }
 
 bool UserSession::isLoggedIn() const { return !m_userId.isEmpty(); }
@@ -80,6 +92,12 @@ const QString &UserSession::uploadTokenType() const { return m_uploadTokenType; 
 const QString &UserSession::uploadTokenExpiresAtUtc() const {
   return m_uploadTokenExpiresAtUtc;
 }
+
+bool UserSession::isOnline() const { return m_isOnline; }
+
+const QString &UserSession::lastSeenAtUtc() const { return m_lastSeenAtUtc; }
+
+const QDateTime &UserSession::lastSeenAt() const { return m_lastSeenAt; }
 
 QString UserSession::authorizationHeaderValue() const {
   if (m_uploadTokenType.isEmpty() || m_uploadToken.isEmpty()) {

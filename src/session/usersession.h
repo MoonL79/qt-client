@@ -13,7 +13,9 @@ public:
                        const QString &numericId,
                        const QString &uploadToken,
                        const QString &uploadTokenType,
-                       const QString &uploadTokenExpiresAtUtc);
+                       const QString &uploadTokenExpiresAtUtc, bool isOnline,
+                       const QString &lastSeenAtUtc);
+  void setPresence(bool isOnline, const QString &lastSeenAtUtc);
 
   bool isLoggedIn() const;
   bool hasValidUploadToken() const;
@@ -25,6 +27,9 @@ public:
   const QString &uploadToken() const;
   const QString &uploadTokenType() const;
   const QString &uploadTokenExpiresAtUtc() const;
+  bool isOnline() const;
+  const QString &lastSeenAtUtc() const;
+  const QDateTime &lastSeenAt() const;
   QString authorizationHeaderValue() const;
 
 private:
@@ -37,6 +42,9 @@ private:
   QString m_uploadTokenType;
   QString m_uploadTokenExpiresAtUtc;
   QDateTime m_uploadTokenExpiresAt;
+  bool m_isOnline = false;
+  QString m_lastSeenAtUtc;
+  QDateTime m_lastSeenAt;
 };
 
 #endif // USERSESSION_H

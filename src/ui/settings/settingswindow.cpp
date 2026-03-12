@@ -87,7 +87,8 @@ QString contentTypeFromSuffix(const QString &suffixLower) {
 SettingsWindow::SettingsWindow(const QString &userId,
                                ProfileApiClient *profileApiClient,
                                QWidget *parent)
-    : QWidget(parent), m_profileApiClient(profileApiClient), m_userId(userId) {
+    : QWidget(parent), m_profileApiClient(profileApiClient), m_userId(userId),
+      m_authApiClient(websocketclient::instance(), this) {
   setAttribute(Qt::WA_DeleteOnClose);
   setWindowTitle("设置");
   resize(560, 420);
@@ -109,6 +110,10 @@ SettingsWindow::SettingsWindow(const QString &userId,
           &SettingsWindow::onProfileSetSuccess);
   connect(m_profileApiClient, &ProfileApiClient::requestFailed, this,
           &SettingsWindow::onProfileRequestFailed);
+  connect(&m_authApiClient, &AuthApiClient::logoutSucceeded, this,
+          &SettingsWindow::onLogoutSucceeded);
+  connect(&m_authApiClient, &AuthApiClient::authRequestFailed, this,
+          &SettingsWindow::onAuthRequestFailed);
 
   if (!hasValidUserId()) {
     m_statusLabel->setText("user_id 非法，必须为纯数字字符串");
@@ -227,14 +232,14 @@ bool SettingsWindow::hasValidUserId() const {
 }
 
 void SettingsWindow::updateActionButtons() {
-  const bool busy = m_loading || m_saving || m_uploading;
+  const bool busy = m_loading || m_saving || m_uploading || m_loggingOut;
   m_refreshButton->setEnabled(!busy);
   m_saveButton->setEnabled(!busy);
   m_chooseAvatarButton->setEnabled(!busy);
   m_uploadAvatarButton->setEnabled(!busy && !m_selectedAvatarFilePath.isEmpty());
   m_logoutButton->setEnabled(!busy);
-  m_nicknameEdit->setReadOnly(m_saving || m_uploading);
-  m_signatureEdit->setReadOnly(m_saving || m_uploading);
+  m_nicknameEdit->setReadOnly(m_saving || m_uploading || m_loggingOut);
+  m_signatureEdit->setReadOnly(m_saving || m_uploading || m_loggingOut);
 }
 
 void SettingsWindow::setLoading(bool loading, const QString &statusText) {
@@ -795,7 +800,7 @@ void SettingsWindow::onProfileRequestFailed(const QString &requestId,
 }
 
 void SettingsWindow::onLogoutClicked() {
-  if (m_loading || m_saving || m_uploading) {
+  if (m_loading || m_saving || m_uploading || m_loggingOut) {
     return;
   }
   const QMessageBox::StandardButton confirm = QMessageBox::question(
@@ -812,10 +817,45 @@ void SettingsWindow::onLogoutClicked() {
     m_uploadReply->abort();
   }
 
+  m_loggingOut = true;
+  updateActionButtons();
+  m_statusLabel->setText("退出登录中...");
+  m_pendingLogoutRequestId = m_authApiClient.logout();
+  if (m_pendingLogoutRequestId.isEmpty()) {
+    m_loggingOut = false;
+    updateActionButtons();
+    m_statusLabel->setText("退出登录失败");
+  }
+}
+
+void SettingsWindow::onLogoutSucceeded(const QString &requestId,
+                                       const LogoutResult &result) {
+  if (requestId != m_pendingLogoutRequestId) {
+    return;
+  }
+
+  m_loggingOut = false;
+  m_pendingLogoutRequestId.clear();
   m_pendingGetRequestId.clear();
   m_pendingSetRequestId.clear();
   m_pendingUploadRequestId.clear();
-  UserSession::instance().clear();
+  m_statusLabel->setText(result.message.trimmed().isEmpty() ? "已退出登录"
+                                                            : result.message.trimmed());
+  updateActionButtons();
   emit logoutRequested();
   close();
+}
+
+void SettingsWindow::onAuthRequestFailed(const QString &requestId,
+                                         const QString &action,
+                                         const QString &error) {
+  if (action != QStringLiteral("LOGOUT") || requestId != m_pendingLogoutRequestId) {
+    return;
+  }
+
+  m_loggingOut = false;
+  m_pendingLogoutRequestId.clear();
+  updateActionButtons();
+  m_statusLabel->setText("退出登录失败: " + error);
+  QMessageBox::warning(this, "退出登录失败", error);
 }
