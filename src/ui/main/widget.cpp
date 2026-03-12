@@ -1,6 +1,7 @@
 #include "widget.h"
 
 #include "addfrienddialog.h"
+#include "deletefrienddialog.h"
 #include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
@@ -19,6 +20,7 @@
 
 namespace {
 constexpr int kDefaultStaticPort = 18080;
+constexpr int kFriendListRefreshIntervalMs = 10 * 1000;
 constexpr const char *kStaticPortEnv = "QT_SERVER_STATIC_PORT";
 constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
 constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
@@ -45,12 +47,28 @@ QString resolveServerHost() {
   }
   return host;
 }
+
+QString friendStatusText(int status) {
+  switch (status) {
+  case 1:
+    return QStringLiteral("在线");
+  case 0:
+    return QStringLiteral("离线");
+  default:
+    return QStringLiteral("状态:%1").arg(status);
+  }
+}
 }
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), ui(new Ui::Widget), m_isDragging(false) {
   initUI();
   initAvatarHttpClient();
+
+  m_friendListRefreshTimer = new QTimer(this);
+  m_friendListRefreshTimer->setInterval(kFriendListRefreshIntervalMs);
+  connect(m_friendListRefreshTimer, &QTimer::timeout, this,
+          [this]() { requestFriendList(false); });
 }
 
 Widget::~Widget() { delete ui; }
@@ -204,6 +222,8 @@ void Widget::initUI() {
 
   connect(settingsBtn, &QPushButton::clicked, this, &Widget::onOpenSettings);
   connect(addFriendBtn, &QPushButton::clicked, this, &Widget::onOpenAddFriend);
+  connect(removeFriendBtn, &QPushButton::clicked, this,
+          &Widget::onOpenDeleteFriend);
   connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
   connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
 
@@ -237,12 +257,6 @@ void Widget::initUI() {
       "0px; }"
       "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { "
       "background: none; }");
-
-  // 添加一些测试数据（单聊与群聊共享 Session 类）
-  addSessionItem(Session::create("Alice", Session::Type::Direct));
-  addSessionItem(Session::create("Bob", Session::Type::Direct));
-  addSessionItem(Session::create("项目群", Session::Type::Group));
-  addSessionItem(Session::create("研发群", Session::Type::Group));
 
   // 添加到容器布局
   containerLayout->addWidget(m_topPanel);
@@ -395,10 +409,30 @@ void Widget::setCurrentUserId(const QString &userId) { m_currentUserId = userId;
 
 void Widget::setCurrentUserNumericId(const QString &numericId) {
   m_currentUserNumericId = numericId.trimmed();
+  if (m_friendListRefreshTimer) {
+    if (m_currentUserNumericId.isEmpty()) {
+      m_friendListRefreshTimer->stop();
+    } else if (!m_friendListRefreshTimer->isActive()) {
+      m_friendListRefreshTimer->start();
+    }
+  }
+  requestFriendList();
 }
 
 void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
   m_profileApiClient = profileApiClient;
+  if (!m_profileApiClient) {
+    return;
+  }
+  connect(m_profileApiClient, &ProfileApiClient::friendListPayloadReceived, this,
+          &Widget::onFriendListPayloadReceived, Qt::UniqueConnection);
+  connect(m_profileApiClient, &ProfileApiClient::friendListFailed, this,
+          &Widget::onFriendListFailed, Qt::UniqueConnection);
+  if (m_friendListRefreshTimer && !m_currentUserNumericId.trimmed().isEmpty() &&
+      !m_friendListRefreshTimer->isActive()) {
+    m_friendListRefreshTimer->start();
+  }
+  requestFriendList();
 }
 
 // --- 拖拽窗口支持 ---
@@ -482,6 +516,27 @@ void Widget::onOpenSettings() {
                     << displayName << "avatar_url=" << avatarUrl;
             setUserInfo(displayName, avatarUrl, signature);
           });
+  connect(m_settingsWindow, &SettingsWindow::logoutRequested, this, [this]() {
+    if (m_addFriendDialog) {
+      m_addFriendDialog->close();
+    }
+    if (m_deleteFriendDialog) {
+      m_deleteFriendDialog->close();
+    }
+    m_currentUserId.clear();
+    m_currentUserNumericId.clear();
+    m_currentDisplayName.clear();
+    m_currentSignature.clear();
+    m_currentAvatarUrl.clear();
+    m_pendingFriendListRequestId.clear();
+    if (m_friendListRefreshTimer) {
+      m_friendListRefreshTimer->stop();
+    }
+    m_friendListManager.clear();
+    refreshFriendListUi();
+    emit logoutRequested();
+    close();
+  });
   connect(m_settingsWindow, &QObject::destroyed, this,
           [this]() { m_settingsWindow = nullptr; });
   m_settingsWindow->show();
@@ -549,9 +604,144 @@ void Widget::onOpenAddFriend() {
   }
   m_addFriendDialog = new AddFriendDialog(m_currentUserId.trimmed(), currentNumericId,
                                           m_profileApiClient, this);
+  connect(m_addFriendDialog, &AddFriendDialog::friendAdded, this,
+          [this](const AddFriendResult &) { requestFriendList(true); });
   connect(m_addFriendDialog, &QObject::destroyed, this,
           [this]() { m_addFriendDialog = nullptr; });
   m_addFriendDialog->show();
   m_addFriendDialog->raise();
   m_addFriendDialog->activateWindow();
+}
+
+void Widget::onOpenDeleteFriend() {
+  if (!m_profileApiClient) {
+    QMessageBox::warning(this, "无法删除好友", "Profile 服务未初始化。");
+    return;
+  }
+
+  QString currentNumericId = m_currentUserNumericId.trimmed();
+  if (currentNumericId.isEmpty()) {
+    currentNumericId = UserSession::instance().numericId().trimmed();
+  }
+
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  if (!kUnsignedIntRe.match(currentNumericId).hasMatch()) {
+    QMessageBox::warning(this, "无法删除好友", "当前用户编号无效，请重新登录。");
+    return;
+  }
+
+  if (m_deleteFriendDialog) {
+    if (m_deleteFriendDialog->isMinimized()) {
+      m_deleteFriendDialog->showNormal();
+    } else {
+      m_deleteFriendDialog->show();
+    }
+    m_deleteFriendDialog->raise();
+    m_deleteFriendDialog->activateWindow();
+    return;
+  }
+
+  m_deleteFriendDialog = new DeleteFriendDialog(
+      currentNumericId, m_friendListManager.friends(), m_profileApiClient, this);
+  connect(m_deleteFriendDialog, &DeleteFriendDialog::friendDeleted, this,
+          [this](const DeleteFriendResult &) { requestFriendList(true); });
+  connect(m_deleteFriendDialog, &QObject::destroyed, this,
+          [this]() { m_deleteFriendDialog = nullptr; });
+  m_deleteFriendDialog->show();
+  m_deleteFriendDialog->raise();
+  m_deleteFriendDialog->activateWindow();
+}
+
+void Widget::requestFriendList(bool force) {
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  QString numericId = m_currentUserNumericId.trimmed();
+  if (!kUnsignedIntRe.match(numericId).hasMatch()) {
+    const QString sessionNumericId = UserSession::instance().numericId().trimmed();
+    if (kUnsignedIntRe.match(sessionNumericId).hasMatch()) {
+      m_currentUserNumericId = sessionNumericId;
+      numericId = sessionNumericId;
+    }
+  }
+
+  if (!force && !m_pendingFriendListRequestId.isEmpty()) {
+    return;
+  }
+  if (!m_profileApiClient || numericId.isEmpty() ||
+      !kUnsignedIntRe.match(numericId).hasMatch()) {
+    return;
+  }
+  m_pendingFriendListRequestId = m_profileApiClient->fetchFriendList(numericId);
+}
+
+void Widget::refreshFriendListUi() {
+  if (!m_sessionList) {
+    qWarning() << "[MainWidget] refresh friend list skipped: session list is null";
+    return;
+  }
+
+  m_sessionList->clear();
+  m_sessionsById.clear();
+
+  const QList<friendlist::FriendItem> &friends = m_friendListManager.friends();
+  if (friends.isEmpty()) {
+    auto *emptyItem = new QListWidgetItem(QStringLiteral("暂无好友"));
+    emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable &
+                        ~Qt::ItemIsEnabled);
+    m_sessionList->addItem(emptyItem);
+    return;
+  }
+
+  for (const friendlist::FriendItem &friendItem : friends) {
+    const Session session =
+        Session::create(friendItem.displayName, Session::Type::Direct);
+    m_sessionsById.insert(session.id(), session);
+
+    const QString itemText =
+        QStringLiteral("%1 (%2) [%3]")
+            .arg(friendItem.displayName, friendItem.numericId,
+                 friendStatusText(friendItem.status));
+    auto *item = new QListWidgetItem(itemText);
+    item->setData(Qt::UserRole, session.id());
+    item->setData(Qt::UserRole + 1, QStringLiteral("direct"));
+    item->setData(Qt::UserRole + 2, friendItem.userId);
+    item->setData(Qt::UserRole + 3, friendItem.numericId);
+    item->setData(Qt::UserRole + 4, friendItem.status);
+    item->setIcon(QIcon(":/resources/chat_icon.png"));
+    m_sessionList->addItem(item);
+  }
+}
+
+void Widget::syncFriendListToDeleteDialog() {
+  if (m_deleteFriendDialog) {
+    m_deleteFriendDialog->setFriends(m_friendListManager.friends());
+  }
+}
+
+void Widget::onFriendListPayloadReceived(const QString &requestId,
+                                         const QJsonObject &data) {
+  if (!m_pendingFriendListRequestId.isEmpty() &&
+      requestId != m_pendingFriendListRequestId) {
+    return;
+  }
+  m_pendingFriendListRequestId.clear();
+  if (!m_friendListManager.updateFromResponse(data)) {
+    qWarning() << "[MainWidget] failed to parse friend list payload";
+    return;
+  }
+  refreshFriendListUi();
+  syncFriendListToDeleteDialog();
+}
+
+void Widget::onFriendListFailed(const QString &requestId, int code,
+                                const QString &message) {
+  if (!m_pendingFriendListRequestId.isEmpty() &&
+      requestId != m_pendingFriendListRequestId) {
+    return;
+  }
+  m_pendingFriendListRequestId.clear();
+  qWarning() << "[MainWidget] friend list request failed, code=" << code
+             << "message=" << message;
+  m_friendListManager.clear();
+  refreshFriendListUi();
+  syncFriendListToDeleteDialog();
 }

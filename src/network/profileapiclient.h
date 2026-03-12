@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QJsonObject>
 #include <QPointer>
 #include <QTimer>
 #include <QVector>
@@ -35,6 +36,26 @@ struct AddFriendResult {
 };
 Q_DECLARE_METATYPE(AddFriendResult)
 
+struct DeleteFriendRequest {
+  QString userNumericId;
+  QString friendNumericId;
+};
+Q_DECLARE_METATYPE(DeleteFriendRequest)
+
+struct DeleteFriendResult {
+  bool ok = false;
+  QString message;
+  QString userNumericId;
+  QString friendNumericId;
+  QString userId;
+  QString friendUserId;
+  int deletedRows = 0;
+  bool removed = false;
+  QString requestId;
+  int code = -1;
+};
+Q_DECLARE_METATYPE(DeleteFriendResult)
+
 struct FriendItem {
   QString userId;
   QString numericId;
@@ -61,6 +82,8 @@ public:
   QString queryUserProfile(const QString &numericId);
   QString addFriend(const QString &userNumericId, const QString &friendNumericId,
                     const QString &remark = QString());
+  QString deleteFriend(const QString &userNumericId,
+                       const QString &friendNumericId);
   QString fetchFriendList(const QString &myNumericId);
 
 signals:
@@ -68,8 +91,12 @@ signals:
   void profileInfoSetSuccess(const QString &requestId, const ProfileInfo &info);
   void userProfileQueried(const QString &requestId, const ProfileInfo &info);
   void addFriendSuccess(const QString &requestId, const AddFriendResult &result);
+  void deleteFriendFinished(const QString &requestId,
+                            const DeleteFriendResult &result);
   void friendListFetched(const QString &requestId,
                          const QVector<FriendItem> &friends);
+  void friendListPayloadReceived(const QString &requestId,
+                                 const QJsonObject &data);
   void friendListFailed(const QString &requestId, int code,
                         const QString &message);
   void requestFailed(const QString &requestId, const QString &action,
@@ -99,6 +126,9 @@ private:
   bool validateAddFriend(const QString &userNumericId,
                          const QString &friendNumericId, const QString &remark,
                          QString *error) const;
+  bool validateDeleteFriend(const QString &userNumericId,
+                            const QString &friendNumericId,
+                            QString *error) const;
   bool validateFetchFriendList(const QString &myNumericId, QString *error) const;
 
   void sendProfileRequest(const QString &action, const QString &requestId,
@@ -118,6 +148,9 @@ private:
                         QString *error) const;
   bool parseAddFriendResult(const QJsonObject &data, AddFriendResult *outResult,
                             QString *error) const;
+  bool parseDeleteFriendResult(const QJsonObject &data, const QString &requestId,
+                               int code, DeleteFriendResult *outResult,
+                               QString *error) const;
   bool parseFriendList(const QJsonObject &data, QVector<FriendItem> *outFriends,
                        QString *error) const;
 

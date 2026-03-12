@@ -14,6 +14,7 @@ constexpr const char *kActionGetInfo = "GET_INFO";
 constexpr const char *kActionSetInfo = "SET_INFO";
 constexpr const char *kActionGet = "GET";
 constexpr const char *kActionAddFriend = "ADD_FRIEND";
+constexpr const char *kActionDeleteFriend = "DELETE_FRIEND";
 constexpr const char *kActionListFriends = "LIST_FRIENDS";
 
 QString normalizeTheme(const QString &theme) {
@@ -78,14 +79,36 @@ bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   }
   return false;
 }
+
+bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
+  if (!obj.contains(QLatin1String(key))) {
+    return false;
+  }
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (!value.isBool()) {
+    return false;
+  }
+  if (out) {
+    *out = value.toBool();
+  }
+  return true;
+}
+
+bool isUnsignedIntegerString(const QString &value) {
+  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
+  return kUnsignedIntRe.match(value).hasMatch();
+}
 }
 
 ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<ProfileInfo>("ProfileInfo");
   qRegisterMetaType<AddFriendResult>("AddFriendResult");
+  qRegisterMetaType<DeleteFriendRequest>("DeleteFriendRequest");
+  qRegisterMetaType<DeleteFriendResult>("DeleteFriendResult");
   qRegisterMetaType<FriendItem>("FriendItem");
   qRegisterMetaType<QVector<FriendItem>>("QVector<FriendItem>");
+  qRegisterMetaType<QJsonObject>("QJsonObject");
 
   Q_ASSERT_X(thread() == QThread::currentThread(), "ProfileApiClient",
              "ProfileApiClient should run in the main event thread");
@@ -175,6 +198,24 @@ QString ProfileApiClient::addFriend(const QString &userNumericId,
   if (!remark.trimmed().isEmpty()) {
     data.insert("remark", remark.trimmed());
   }
+  sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
+QString ProfileApiClient::deleteFriend(const QString &userNumericId,
+                                       const QString &friendNumericId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionDeleteFriend);
+
+  QString error;
+  if (!validateDeleteFriend(userNumericId, friendNumericId, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonObject data;
+  data.insert("user_numeric_id", userNumericId.trimmed());
+  data.insert("friend_numeric_id", friendNumericId.trimmed());
   sendProfileRequest(action, requestId, data, 0, false);
   return requestId;
 }
@@ -287,7 +328,19 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
     return;
   }
 
+  if (expectedAction == QLatin1String(kActionDeleteFriend)) {
+    DeleteFriendResult result;
+    QString error;
+    if (!parseDeleteFriendResult(envelope.data, requestId, code, &result, &error)) {
+      failRequest(requestId, expectedAction, error, code);
+      return;
+    }
+    emit deleteFriendFinished(requestId, result);
+    return;
+  }
+
   if (expectedAction == QLatin1String(kActionListFriends)) {
+    emit friendListPayloadReceived(requestId, envelope.data);
     QVector<FriendItem> friends;
     QString error;
     if (!parseFriendList(envelope.data, &friends, &error)) {
@@ -386,7 +439,6 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
 
 bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
                                                 QString *error) const {
-  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   const QString id = numericId.trimmed();
   if (id.isEmpty()) {
     if (error) {
@@ -394,7 +446,7 @@ bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
     }
     return false;
   }
-  if (!kUnsignedIntRe.match(id).hasMatch()) {
+  if (!isUnsignedIntegerString(id)) {
     if (error) {
       *error = QStringLiteral("numeric_id must be unsigned integer string");
     }
@@ -407,7 +459,6 @@ bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
                                          const QString &friendNumericId,
                                          const QString &remark,
                                          QString *error) const {
-  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   const QString userId = userNumericId.trimmed();
   const QString friendId = friendNumericId.trimmed();
   const QString note = remark.trimmed();
@@ -417,7 +468,7 @@ bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
     }
     return false;
   }
-  if (!kUnsignedIntRe.match(userId).hasMatch()) {
+  if (!isUnsignedIntegerString(userId)) {
     if (error) {
       *error = QStringLiteral("user_numeric_id must be unsigned integer string");
     }
@@ -429,7 +480,7 @@ bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
     }
     return false;
   }
-  if (!kUnsignedIntRe.match(friendId).hasMatch()) {
+  if (!isUnsignedIntegerString(friendId)) {
     if (error) {
       *error = QStringLiteral("friend_numeric_id must be unsigned integer string");
     }
@@ -450,9 +501,46 @@ bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
   return true;
 }
 
+bool ProfileApiClient::validateDeleteFriend(const QString &userNumericId,
+                                            const QString &friendNumericId,
+                                            QString *error) const {
+  const QString userId = userNumericId.trimmed();
+  const QString friendId = friendNumericId.trimmed();
+  if (userId.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("user_numeric_id is required");
+    }
+    return false;
+  }
+  if (!isUnsignedIntegerString(userId)) {
+    if (error) {
+      *error = QStringLiteral("user_numeric_id must be unsigned integer string");
+    }
+    return false;
+  }
+  if (friendId.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("friend_numeric_id is required");
+    }
+    return false;
+  }
+  if (!isUnsignedIntegerString(friendId)) {
+    if (error) {
+      *error = QStringLiteral("friend_numeric_id must be unsigned integer string");
+    }
+    return false;
+  }
+  if (userId == friendId) {
+    if (error) {
+      *error = QStringLiteral("cannot delete self");
+    }
+    return false;
+  }
+  return true;
+}
+
 bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
                                                QString *error) const {
-  static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   const QString id = myNumericId.trimmed();
   if (id.isEmpty()) {
     if (error) {
@@ -460,7 +548,7 @@ bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
     }
     return false;
   }
-  if (!kUnsignedIntRe.match(id).hasMatch()) {
+  if (!isUnsignedIntegerString(id)) {
     if (error) {
       *error = QStringLiteral("numeric_id must be unsigned integer string");
     }
@@ -705,6 +793,52 @@ bool ProfileApiClient::parseAddFriendResult(const QJsonObject &data,
   outResult->userId = userId;
   outResult->friendUserId = friendUserId;
   outResult->status = status;
+  return true;
+}
+
+bool ProfileApiClient::parseDeleteFriendResult(const QJsonObject &data,
+                                               const QString &requestId, int code,
+                                               DeleteFriendResult *outResult,
+                                               QString *error) const {
+  if (!outResult) {
+    if (error) {
+      *error = QStringLiteral("internal error: out result is null");
+    }
+    return false;
+  }
+
+  QString message;
+  QString userNumericId;
+  QString friendNumericId;
+  QString userId;
+  QString friendUserId;
+  int deletedRows = 0;
+  bool ok = false;
+  bool removed = false;
+  if (!readRequiredBool(data, "ok", &ok) ||
+      !readRequiredString(data, "message", &message) ||
+      !readRequiredString(data, "user_numeric_id", &userNumericId, true) ||
+      !readRequiredString(data, "friend_numeric_id", &friendNumericId, true) ||
+      !readRequiredString(data, "user_id", &userId, true) ||
+      !readRequiredString(data, "friend_user_id", &friendUserId, true) ||
+      !readRequiredInt(data, "deleted_rows", &deletedRows) ||
+      !readRequiredBool(data, "removed", &removed)) {
+    if (error) {
+      *error = QStringLiteral("invalid DELETE_FRIEND response fields");
+    }
+    return false;
+  }
+
+  outResult->ok = ok;
+  outResult->message = message.trimmed();
+  outResult->userNumericId = userNumericId;
+  outResult->friendNumericId = friendNumericId;
+  outResult->userId = userId;
+  outResult->friendUserId = friendUserId;
+  outResult->deletedRows = deletedRows;
+  outResult->removed = removed;
+  outResult->requestId = requestId;
+  outResult->code = code;
   return true;
 }
 

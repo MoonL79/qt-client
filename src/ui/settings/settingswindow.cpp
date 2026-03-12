@@ -197,6 +197,8 @@ void SettingsWindow::buildUi() {
   rootLayout->addWidget(m_statusLabel);
 
   auto *buttonLayout = new QHBoxLayout();
+  m_logoutButton = new QPushButton("登出", this);
+  buttonLayout->addWidget(m_logoutButton);
   buttonLayout->addStretch();
 
   m_refreshButton = new QPushButton("刷新", this);
@@ -214,6 +216,8 @@ void SettingsWindow::buildUi() {
           &SettingsWindow::onChooseAvatarClicked);
   connect(m_uploadAvatarButton, &QPushButton::clicked, this,
           &SettingsWindow::onUploadAvatarClicked);
+  connect(m_logoutButton, &QPushButton::clicked, this,
+          &SettingsWindow::onLogoutClicked);
   updateActionButtons();
 }
 
@@ -228,6 +232,7 @@ void SettingsWindow::updateActionButtons() {
   m_saveButton->setEnabled(!busy);
   m_chooseAvatarButton->setEnabled(!busy);
   m_uploadAvatarButton->setEnabled(!busy && !m_selectedAvatarFilePath.isEmpty());
+  m_logoutButton->setEnabled(!busy);
   m_nicknameEdit->setReadOnly(m_saving || m_uploading);
   m_signatureEdit->setReadOnly(m_saving || m_uploading);
 }
@@ -787,4 +792,30 @@ void SettingsWindow::onProfileRequestFailed(const QString &requestId,
     setSaving(false, "保存失败: " + error);
     QMessageBox::warning(this, "保存失败", error);
   }
+}
+
+void SettingsWindow::onLogoutClicked() {
+  if (m_loading || m_saving || m_uploading) {
+    return;
+  }
+  const QMessageBox::StandardButton confirm = QMessageBox::question(
+      this, "确认登出", "确定要退出当前账号吗？", QMessageBox::Yes | QMessageBox::No,
+      QMessageBox::No);
+  if (confirm != QMessageBox::Yes) {
+    return;
+  }
+
+  if (m_avatarPreviewReply) {
+    m_avatarPreviewReply->abort();
+  }
+  if (m_uploadReply) {
+    m_uploadReply->abort();
+  }
+
+  m_pendingGetRequestId.clear();
+  m_pendingSetRequestId.clear();
+  m_pendingUploadRequestId.clear();
+  UserSession::instance().clear();
+  emit logoutRequested();
+  close();
 }
