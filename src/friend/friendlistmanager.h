@@ -2,6 +2,7 @@
 #define FRIENDLISTMANAGER_H
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QJsonObject>
 #include <QList>
 #include <QString>
@@ -19,6 +20,10 @@ struct FriendItem {
   QString avatarUrl;
   QString bio;
   int status = 0;
+  int userStatus = 0;
+  bool isOnline = false;
+  QString lastSeenAtUtc;
+  QDateTime lastSeenAt;
 };
 
 class FriendListManager {

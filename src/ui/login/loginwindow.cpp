@@ -1,4 +1,5 @@
 #include "loginwindow.h"
+#include "authapiclient.h"
 #include "protocol.h"
 #include "registerwindow.h"
 #include "usersession.h"
@@ -402,10 +403,11 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
     return;
   }
 
-  if (!isCurrentLoginResponse(envelope, m_pendingLoginRequestId))
+  if (!AuthApiClient::isCurrentLoginResponse(envelope, m_pendingLoginRequestId))
     return;
 
-  const QString responseMessage = extractLoginErrorMessage(envelope);
+  const QString responseMessage =
+      AuthApiClient::extractAuthErrorMessage(envelope, QStringLiteral("LOGIN"));
   if (envelope.type != "AUTH" || envelope.action != "LOGIN") {
     m_isLoginPending = false;
     m_pendingLoginRequestId.clear();
@@ -421,19 +423,29 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
   ui->loginButton->setEnabled(true);
   ui->loginButton->setText("登录");
 
-  if (isLoginSuccess(envelope)) {
-    const QString loginUsername =
-        extractLoginUsername(envelope, m_pendingUsername);
-    const QString userId = extractLoginUserId(envelope);
-    const QString numericId = extractLoginNumericId(envelope);
-    const QString uploadToken = extractUploadToken(envelope);
-    const QString uploadTokenType = extractUploadTokenType(envelope);
-    const QString uploadTokenExpiresAt = extractUploadTokenExpiresAt(envelope);
+  if (AuthApiClient::isLoginSuccessEnvelope(envelope)) {
+    LoginResult loginResult;
+    QString loginParseError;
+    if (!AuthApiClient::parseLoginResult(envelope, &loginResult, &loginParseError)) {
+      m_pendingPassword.clear();
+      QMessageBox::warning(this, "登录失败",
+                           QStringLiteral("响应解析失败: %1").arg(loginParseError));
+      return;
+    }
 
-    UserSession::instance().setLoginContext(userId, loginUsername, numericId,
-                                            uploadToken,
-                                            uploadTokenType,
-                                            uploadTokenExpiresAt);
+    const QString loginUsername = loginResult.user.username.trimmed().isEmpty()
+                                      ? m_pendingUsername
+                                      : loginResult.user.username.trimmed();
+    const QString userId = loginResult.user.userId;
+    const QString numericId = loginResult.user.numericId;
+    const QString uploadToken = loginResult.uploadToken;
+    const QString uploadTokenType = loginResult.uploadTokenType;
+    const QString uploadTokenExpiresAt = loginResult.uploadTokenExpiresAtUtc;
+
+    UserSession::instance().setLoginContext(
+        userId, loginUsername, numericId, uploadToken, uploadTokenType,
+        uploadTokenExpiresAt, loginResult.presence.isOnline,
+        loginResult.presence.lastSeenAtUtc);
 
     qInfo() << "Login success for user:" << loginUsername << "user_id:" << userId;
     if (userId.isEmpty()) {
@@ -456,6 +468,9 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
               << "token_type:" << uploadTokenType
               << "expires_at:" << uploadTokenExpiresAt;
     }
+    qInfo() << "Presence cached for user_id:" << userId
+            << "is_online:" << UserSession::instance().isOnline()
+            << "last_seen_at:" << UserSession::instance().lastSeenAtUtc();
     m_pendingPassword.clear();
     emit loginSuccess(loginUsername, userId);
     return;

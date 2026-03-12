@@ -33,6 +33,8 @@ qt_add_executable(qt-client
     src/network/websocketclient.cpp
     src/network/protocol.h
     src/network/protocol.cpp
+    src/network/authapiclient.h
+    src/network/authapiclient.cpp
     src/network/profileapiclient.h
     src/network/profileapiclient.cpp
     src/auth/registerutils.h

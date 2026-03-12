@@ -1,6 +1,7 @@
 #ifndef PROFILEAPICLIENT_H
 #define PROFILEAPICLIENT_H
 
+#include <QDateTime>
 #include <QObject>
 #include <QHash>
 #include <QJsonObject>
@@ -61,6 +62,10 @@ struct FriendItem {
   QString numericId;
   QString username;
   int status = 0;
+  int userStatus = 0;
+  bool isOnline = false;
+  QString lastSeenAtUtc;
+  QDateTime lastSeenAt;
   QString nickname;
   QString avatarUrl;
   QString bio;
