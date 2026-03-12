@@ -1,5 +1,6 @@
 #include "addfrienddialog.h"
 
+#include "usersession.h"
 #include "websocketclient.h"
 
 #include <QDialogButtonBox>
@@ -96,6 +97,7 @@ AddFriendDialog::AddFriendDialog(const QString &currentUserId,
     : QDialog(parent), m_profileApiClient(profileApiClient),
       m_currentUserId(currentUserId.trimmed()),
       m_currentUserNumericId(currentUserNumericId.trimmed()) {
+  setAttribute(Qt::WA_DeleteOnClose);
   setWindowTitle("添加好友");
   setModal(true);
   resize(420, 280);
@@ -111,10 +113,18 @@ AddFriendDialog::AddFriendDialog(const QString &currentUserId,
 
   connect(m_profileApiClient, &ProfileApiClient::userProfileQueried, this,
           &AddFriendDialog::onUserProfileQueried);
+  connect(m_profileApiClient, &ProfileApiClient::profileInfoReceived, this,
+          &AddFriendDialog::onSelfProfileInfoReceived);
   connect(m_profileApiClient, &ProfileApiClient::addFriendSuccess, this,
           &AddFriendDialog::onAddFriendSuccess);
   connect(m_profileApiClient, &ProfileApiClient::requestFailedDetailed, this,
           &AddFriendDialog::onRequestFailedDetailed);
+
+  if (!isValidNumericId(m_currentUserNumericId) && !m_currentUserId.isEmpty()) {
+    m_pendingSelfProfileRequestId =
+        m_profileApiClient->requestProfileInfo(m_currentUserId);
+    m_statusLabel->setText("正在加载当前用户信息...");
+  }
 }
 
 AddFriendDialog::~AddFriendDialog() {
@@ -186,7 +196,8 @@ void AddFriendDialog::setQueryLoading(bool loading, const QString &text) {
   m_queryButton->setEnabled(!loading);
   m_queryButton->setText(loading ? "查询中..." : "查询");
   m_numericIdEdit->setEnabled(!loading && !m_addLoading);
-  const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf();
+  const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf() &&
+                      isValidNumericId(m_currentUserNumericId);
   m_addButton->setEnabled(!loading && !m_addLoading && canAdd);
   if (!text.isEmpty()) {
     m_statusLabel->setText(text);
@@ -195,7 +206,8 @@ void AddFriendDialog::setQueryLoading(bool loading, const QString &text) {
 
 void AddFriendDialog::setAddLoading(bool loading, const QString &text) {
   m_addLoading = loading;
-  const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf();
+  const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf() &&
+                      isValidNumericId(m_currentUserNumericId);
   m_addButton->setEnabled(!loading && !m_queryLoading && canAdd);
   m_addButton->setText(loading ? "添加中..." : "添加好友");
   m_numericIdEdit->setEnabled(!loading && !m_queryLoading);
@@ -228,7 +240,8 @@ void AddFriendDialog::applyQueryResult(const ProfileInfo &info) {
   m_nicknameValue->setText(info.nickname.trimmed().isEmpty() ? "-" : info.nickname);
   m_numericIdValue->setText(info.numericId.trimmed().isEmpty() ? "-" : info.numericId);
   m_signatureValue->setText(info.signature.trimmed().isEmpty() ? "-" : info.signature);
-  const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf();
+  const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf() &&
+                      isValidNumericId(m_currentUserNumericId);
   m_addButton->setEnabled(!m_queryLoading && !m_addLoading && canAdd);
   requestAvatar(info.avatarUrl);
 }
@@ -337,7 +350,14 @@ void AddFriendDialog::onAddFriendClicked() {
   if (!m_profileApiClient || m_addLoading || m_queryLoading) {
     return;
   }
-  const QString userNumericId = m_currentUserNumericId.trimmed();
+  QString userNumericId = m_currentUserNumericId.trimmed();
+  if (!isValidNumericId(userNumericId)) {
+    const QString sessionNumericId = UserSession::instance().numericId().trimmed();
+    if (isValidNumericId(sessionNumericId)) {
+      m_currentUserNumericId = sessionNumericId;
+      userNumericId = sessionNumericId;
+    }
+  }
   const QString friendNumericId = m_lastQueriedNumericId.trimmed();
   const QString remark = m_remarkEdit ? m_remarkEdit->text().trimmed() : QString();
   if (isQueriedSelf()) {
@@ -367,6 +387,26 @@ void AddFriendDialog::onAddFriendClicked() {
       m_profileApiClient->addFriend(userNumericId, friendNumericId, remark);
 }
 
+void AddFriendDialog::onSelfProfileInfoReceived(const QString &requestId,
+                                                const ProfileInfo &info) {
+  if (requestId != m_pendingSelfProfileRequestId) {
+    return;
+  }
+  m_pendingSelfProfileRequestId.clear();
+  const QString numericId = info.numericId.trimmed();
+  if (isValidNumericId(numericId)) {
+    m_currentUserNumericId = numericId;
+    const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf() &&
+                        isValidNumericId(m_currentUserNumericId);
+    m_addButton->setEnabled(!m_queryLoading && !m_addLoading && canAdd);
+    if (m_statusLabel->text().contains("正在加载当前用户信息")) {
+      m_statusLabel->setText("当前用户信息已加载");
+    }
+  } else if (m_statusLabel->text().contains("正在加载当前用户信息")) {
+    m_statusLabel->setText("当前用户编号无效，请重新登录");
+  }
+}
+
 void AddFriendDialog::onUserProfileQueried(const QString &requestId,
                                            const ProfileInfo &info) {
   if (requestId != m_pendingQueryRequestId) {
@@ -389,6 +429,7 @@ void AddFriendDialog::onAddFriendSuccess(const QString &requestId,
   }
   m_pendingAddRequestId.clear();
   setAddLoading(false, "添加好友成功");
+  emit friendAdded(result);
   const QString successNumericId =
       result.friendNumericId.trimmed().isEmpty() ? m_lastProfile.numericId.trimmed()
                                                  : result.friendNumericId.trimmed();
@@ -412,6 +453,14 @@ void AddFriendDialog::onRequestFailedDetailed(const QString &requestId,
       m_statusLabel->setText("查询超时或网络断开，请手动重试");
     } else {
       m_statusLabel->setText(resolveQueryErrorMessage(code));
+    }
+    return;
+  }
+
+  if (requestId == m_pendingSelfProfileRequestId && action == "GET_INFO") {
+    m_pendingSelfProfileRequestId.clear();
+    if (m_statusLabel->text().contains("正在加载当前用户信息")) {
+      m_statusLabel->setText("当前用户信息加载失败，请重新登录");
     }
     return;
   }

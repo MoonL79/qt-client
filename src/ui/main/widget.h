@@ -1,6 +1,7 @@
 #ifndef WIDGET_H
 #define WIDGET_H
 
+#include "friendlistmanager.h"
 #include "profileapiclient.h"
 #include "session.h"
 
@@ -15,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QTimer>
 #include <QUrl>
 #include <QWidget>
 #include <QVBoxLayout>
@@ -27,6 +29,7 @@ QT_END_NAMESPACE
 class QPixmap;
 class SettingsWindow;
 class AddFriendDialog;
+class DeleteFriendDialog;
 
 class Widget : public QWidget
 {
@@ -44,6 +47,9 @@ public:
     void setCurrentUserNumericId(const QString& numericId);
     void setProfileApiClient(ProfileApiClient* profileApiClient);
 
+signals:
+    void logoutRequested();
+
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -53,10 +59,13 @@ private:
     void initUI();
     void initAvatarHttpClient();
     void addSessionItem(const Session &session);
+    void requestFriendList(bool force = false);
+    void refreshFriendListUi();
     QUrl resolveAvatarUrl(const QString &avatarUrl) const;
     void requestAvatarImage(const QString &avatarUrl);
     void applyAvatarPixmap(const QPixmap &pixmap);
     void applyDefaultAvatar();
+    void syncFriendListToDeleteDialog();
 
     Ui::Widget *ui;
     
@@ -75,7 +84,11 @@ private:
     ProfileApiClient* m_profileApiClient = nullptr;
     QPointer<SettingsWindow> m_settingsWindow;
     QPointer<AddFriendDialog> m_addFriendDialog;
+    QPointer<DeleteFriendDialog> m_deleteFriendDialog;
     QPushButton* m_addFriendBtn = nullptr;
+    friendlist::FriendListManager m_friendListManager;
+    QString m_pendingFriendListRequestId;
+    QTimer* m_friendListRefreshTimer = nullptr;
     
     QListWidget* m_sessionList;
     QHash<QString, Session> m_sessionsById;
@@ -88,6 +101,11 @@ private slots:
     void onSessionDoubleClicked(QListWidgetItem *item);
     void onOpenSettings();
     void onOpenAddFriend();
+    void onOpenDeleteFriend();
     void onAvatarReplyFinished(QNetworkReply *reply);
+    void onFriendListPayloadReceived(const QString &requestId,
+                                     const QJsonObject &data);
+    void onFriendListFailed(const QString &requestId, int code,
+                            const QString &message);
 };
 #endif // WIDGET_H

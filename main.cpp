@@ -111,6 +111,15 @@ int main(int argc, char *argv[])
       qWarning() << "Profile request failed, action:" << action
                  << "request_id:" << requestId << "error:" << error;
     });
+
+    QObject::connect(&mainWidget, &Widget::logoutRequested, [&]() {
+      UserSession::instance().clear();
+      currentUserId.clear();
+      loginWindow.resetLoginForm();
+      loginWindow.show();
+      loginWindow.raise();
+      loginWindow.activateWindow();
+    });
     
     // 登录成功后显示主窗口
     QObject::connect(&loginWindow, &LoginWindow::loginSuccess,

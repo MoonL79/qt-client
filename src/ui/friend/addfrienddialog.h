@@ -22,10 +22,14 @@ public:
                            QWidget *parent = nullptr);
   ~AddFriendDialog() override;
 
+signals:
+  void friendAdded(const AddFriendResult &result);
+
 private slots:
   void onQueryClicked();
   void onAddFriendClicked();
   void onUserProfileQueried(const QString &requestId, const ProfileInfo &info);
+  void onSelfProfileInfoReceived(const QString &requestId, const ProfileInfo &info);
   void onAddFriendSuccess(const QString &requestId, const AddFriendResult &result);
   void onRequestFailedDetailed(const QString &requestId, const QString &action,
                                int code, const QString &error);
@@ -48,6 +52,7 @@ private:
   QString m_currentUserId;
   QString m_currentUserNumericId;
   QString m_pendingQueryRequestId;
+  QString m_pendingSelfProfileRequestId;
   QString m_pendingAddRequestId;
   QString m_lastQueriedNumericId;
   QString m_lastQueriedAvatarUrl;

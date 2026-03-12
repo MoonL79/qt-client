@@ -276,6 +276,19 @@ LoginWindow::LoginWindow(QWidget *parent)
 
 LoginWindow::~LoginWindow() { delete ui; }
 
+void LoginWindow::resetLoginForm() {
+  m_isLoginPending = false;
+  m_pendingUsername.clear();
+  m_pendingPassword.clear();
+  m_pendingLoginRequestId.clear();
+  ui->usernameEdit->clear();
+  ui->passwordEdit->clear();
+  ui->rememberCheckBox->setChecked(false);
+  ui->loginButton->setEnabled(true);
+  ui->loginButton->setText("登录");
+  ui->usernameEdit->setFocus();
+}
+
 void LoginWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);

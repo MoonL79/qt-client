@@ -23,6 +23,7 @@ class LoginWindow : public QWidget {
 public:
   explicit LoginWindow(QWidget *parent = nullptr);
   ~LoginWindow();
+  void resetLoginForm();
 
 signals:
   void loginSuccess(const QString &username, const QString &userId);

@@ -25,6 +25,7 @@ public:
 signals:
   void profileApplied(const QString &displayName, const QString &avatarUrl,
                       const QString &signature);
+  void logoutRequested();
 
 private slots:
   void onRefreshClicked();
@@ -37,6 +38,7 @@ private slots:
                               const QString &error);
   void onUploadReplyFinished();
   void onAvatarPreviewReplyFinished();
+  void onLogoutClicked();
 
 private:
   void buildUi();
@@ -77,6 +79,7 @@ private:
   QPushButton *m_uploadAvatarButton = nullptr;
   QPushButton *m_refreshButton = nullptr;
   QPushButton *m_saveButton = nullptr;
+  QPushButton *m_logoutButton = nullptr;
   QLabel *m_statusLabel = nullptr;
 };
 
