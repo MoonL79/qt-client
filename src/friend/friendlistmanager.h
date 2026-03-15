@@ -30,6 +30,9 @@ class FriendListManager {
 public:
   bool updateFromJson(const QByteArray &jsonBytes);
   bool updateFromResponse(const QJsonObject &data);
+  bool applyPresenceUpdate(const QString &userId, const QString &numericId,
+                           bool isOnline, const QString &lastSeenAtUtc,
+                           FriendItem *updatedFriend = nullptr);
   const QList<FriendItem> &friends() const;
   void clear();
 

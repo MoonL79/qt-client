@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QListWidget>
 #include <QPointer>
+#include <QJsonObject>
 #include <QPoint>
 #include <QMouseEvent>
 #include <QHBoxLayout>
@@ -30,6 +31,7 @@ class QPixmap;
 class SettingsWindow;
 class AddFriendDialog;
 class DeleteFriendDialog;
+class SessionWindow;
 
 class Widget : public QWidget
 {
@@ -61,6 +63,10 @@ private:
     void addSessionItem(const Session &session);
     void requestFriendList(bool force = false);
     void refreshFriendListUi();
+    void updateFriendListItem(const friendlist::FriendItem &friendItem);
+    void handleIncomingRealtimePayload(const QString &payload,
+                                       const QString &sourceTag);
+    void handlePresenceEnvelope(const QJsonObject &data);
     QUrl resolveAvatarUrl(const QString &avatarUrl) const;
     void requestAvatarImage(const QString &avatarUrl);
     void applyAvatarPixmap(const QPixmap &pixmap);
@@ -92,6 +98,8 @@ private:
     
     QListWidget* m_sessionList;
     QHash<QString, Session> m_sessionsById;
+    QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByUserId;
+    QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByNumericId;
     
     // Dragging support
     bool m_isDragging;
