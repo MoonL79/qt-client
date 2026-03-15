@@ -9,15 +9,45 @@
 #include <QScrollBar>
 #include <QTimer>
 
+namespace {
+QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
+  if (isOnline) {
+    return QStringLiteral("在线");
+  }
+  const QString trimmed = lastSeenAtUtc.trimmed();
+  if (trimmed.isEmpty()) {
+    return QStringLiteral("离线");
+  }
+  return QStringLiteral("离线 · 最近在线 %1").arg(trimmed);
+}
+} // namespace
+
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
     : QWidget(parent), m_session(session), m_isDragging(false),
       m_resizeDir(None), m_chatScroll(nullptr), m_chatContainer(nullptr),
       m_chatLayout(nullptr), m_inputLine(nullptr), m_sendBtn(nullptr),
-      m_statusLabel(nullptr), m_testBtn(nullptr),
+      m_statusLabel(nullptr), m_presenceLabel(nullptr), m_testBtn(nullptr),
       m_websocket(websocketclient::instance()) {
   setAttribute(Qt::WA_DeleteOnClose);
   setMouseTracking(true); // Enable mouse tracking for resize cursor feedback
   initUI();
+}
+
+void SessionWindow::setFriendIdentity(const QString &userId,
+                                      const QString &numericId) {
+  m_friendUserId = userId.trimmed();
+  m_friendNumericId = numericId.trimmed();
+}
+
+void SessionWindow::updateFriendPresence(bool isOnline,
+                                         const QString &lastSeenAtUtc) {
+  m_friendIsOnline = isOnline;
+  m_friendLastSeenAtUtc = lastSeenAtUtc.trimmed();
+  refreshPresenceLabel();
+  qInfo().noquote() << "[SessionWindow] updated friend presence user_id="
+                    << m_friendUserId << "numeric_id=" << m_friendNumericId
+                    << "is_online=" << m_friendIsOnline
+                    << "last_seen_at=" << m_friendLastSeenAtUtc;
 }
 
 void SessionWindow::initUI() {
@@ -55,12 +85,21 @@ void SessionWindow::initUI() {
       "border-top-left-radius: 4px; border-top-right-radius: 4px;");
 
   QHBoxLayout *headerLayout = new QHBoxLayout(header);
-  headerLayout->setContentsMargins(15, 0, 10, 0);
+  headerLayout->setContentsMargins(15, 6, 10, 6);
 
   // 标题文本 (居中)
   QLabel *titleLabel = new QLabel(m_session.displayName(), header);
   titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; color: #333;");
   titleLabel->setAlignment(Qt::AlignCenter);
+  m_presenceLabel = new QLabel(QStringLiteral("离线"), header);
+  m_presenceLabel->setStyleSheet("font-size: 12px; color: #7a7a7a;");
+  m_presenceLabel->setAlignment(Qt::AlignCenter);
+
+  QVBoxLayout *titleLayout = new QVBoxLayout();
+  titleLayout->setContentsMargins(0, 0, 0, 0);
+  titleLayout->setSpacing(2);
+  titleLayout->addWidget(titleLabel, 0, Qt::AlignCenter);
+  titleLayout->addWidget(m_presenceLabel, 0, Qt::AlignCenter);
 
   // 关闭按钮
   QPushButton *closeBtn = new QPushButton("×", header);
@@ -79,7 +118,7 @@ void SessionWindow::initUI() {
   // 这里简化为：Title 占据主要空间并居中显示
 
   headerLayout->addStretch();
-  headerLayout->addWidget(titleLabel);
+  headerLayout->addLayout(titleLayout);
   headerLayout->addStretch();
   headerLayout->addWidget(closeBtn);
 
@@ -195,6 +234,7 @@ void SessionWindow::initUI() {
   contentLayout->addLayout(inputLayout);
 
   containerLayout->addWidget(contentArea);
+  refreshPresenceLabel();
 }
 
 void SessionWindow::sendPendingMessage() {
@@ -302,6 +342,13 @@ void SessionWindow::updateConnectionStatus(QAbstractSocket::SocketState state) {
     break;
   }
   m_statusLabel->setText("连接状态: " + stateText);
+}
+
+void SessionWindow::refreshPresenceLabel() {
+  if (!m_presenceLabel) {
+    return;
+  }
+  m_presenceLabel->setText(presenceText(m_friendIsOnline, m_friendLastSeenAtUtc));
 }
 
 void SessionWindow::onTestConnection() {

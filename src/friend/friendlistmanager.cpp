@@ -117,6 +117,42 @@ bool FriendListManager::updateFromResponse(const QJsonObject &data) {
   return true;
 }
 
+bool FriendListManager::applyPresenceUpdate(const QString &userId,
+                                            const QString &numericId,
+                                            bool isOnline,
+                                            const QString &lastSeenAtUtc,
+                                            FriendItem *updatedFriend) {
+  const QString trimmedUserId = userId.trimmed();
+  const QString trimmedNumericId = numericId.trimmed();
+
+  for (FriendItem &item : m_friends) {
+    const bool userIdMatched =
+        !trimmedUserId.isEmpty() && item.userId == trimmedUserId;
+    const bool numericIdMatched =
+        !trimmedNumericId.isEmpty() && item.numericId == trimmedNumericId;
+    if (!userIdMatched && !numericIdMatched) {
+      continue;
+    }
+
+    item.isOnline = isOnline;
+    item.lastSeenAtUtc = lastSeenAtUtc.trimmed();
+    item.lastSeenAt = parseUtcIsoTime(item.lastSeenAtUtc);
+    item.displayName = item.nickname.isEmpty() ? item.username : item.nickname;
+
+    if (updatedFriend) {
+      *updatedFriend = item;
+    }
+
+    qInfo().noquote()
+        << "[FriendList] applied presence update user_id=" << item.userId
+        << "numeric_id=" << item.numericId << "is_online=" << item.isOnline
+        << "last_seen_at=" << item.lastSeenAtUtc;
+    return true;
+  }
+
+  return false;
+}
+
 const QList<FriendItem> &FriendListManager::friends() const { return m_friends; }
 
 void FriendListManager::clear() { m_friends.clear(); }

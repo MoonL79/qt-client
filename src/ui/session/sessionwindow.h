@@ -19,6 +19,8 @@ class SessionWindow : public QWidget {
   Q_OBJECT
 public:
   explicit SessionWindow(const Session &session, QWidget *parent = nullptr);
+  void setFriendIdentity(const QString &userId, const QString &numericId);
+  void updateFriendPresence(bool isOnline, const QString &lastSeenAtUtc);
 
 protected:
   bool eventFilter(QObject *obj, QEvent *event) override;
@@ -32,6 +34,7 @@ private:
   void appendChatBubble(const QString &message, bool outgoing = false,
                         bool status = false);
   void updateConnectionStatus(QAbstractSocket::SocketState state);
+  void refreshPresenceLabel();
   void handleIncomingPayload(const QString &payload, const QString &sourceTag);
   Session m_session;
 
@@ -66,8 +69,13 @@ private:
   QLineEdit *m_inputLine;
   QPushButton *m_sendBtn;
   QLabel *m_statusLabel;
+  QLabel *m_presenceLabel;
   QPushButton *m_testBtn;
   QString m_pendingMessage;
+  QString m_friendUserId;
+  QString m_friendNumericId;
+  QString m_friendLastSeenAtUtc;
+  bool m_friendIsOnline = false;
   void onSendClicked();
   void sendPendingMessage();
   void onTestConnection();

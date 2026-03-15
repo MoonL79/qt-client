@@ -2,6 +2,7 @@
 
 #include "addfrienddialog.h"
 #include "deletefrienddialog.h"
+#include "protocol.h"
 #include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
@@ -9,6 +10,8 @@
 #include "websocketclient.h"
 
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QNetworkRequest>
 #include <QPainter>
@@ -61,6 +64,17 @@ QString friendStatusText(int status) {
 
 QString friendOnlineText(bool isOnline) {
   return isOnline ? QStringLiteral("在线") : QStringLiteral("离线");
+}
+
+QString friendPresenceText(bool isOnline, const QString &lastSeenAtUtc) {
+  if (isOnline) {
+    return QStringLiteral("在线");
+  }
+  const QString trimmed = lastSeenAtUtc.trimmed();
+  if (trimmed.isEmpty()) {
+    return QStringLiteral("离线");
+  }
+  return QStringLiteral("离线 · 最近在线 %1").arg(trimmed);
 }
 }
 
@@ -268,6 +282,16 @@ void Widget::initUI() {
 
   connect(m_sessionList, &QListWidget::itemDoubleClicked, this,
           &Widget::onSessionDoubleClicked);
+
+  connect(websocketclient::instance(), &websocketclient::textMessageReceived,
+          this, [this](const QString &message) {
+            handleIncomingRealtimePayload(message, QStringLiteral("文本"));
+          });
+  connect(websocketclient::instance(), &websocketclient::binaryMessageReceived,
+          this, [this](const QByteArray &data) {
+            handleIncomingRealtimePayload(QString::fromUtf8(data),
+                                          QStringLiteral("二进制"));
+          });
 }
 
 void Widget::initAvatarHttpClient() {
@@ -471,7 +495,48 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   if (!session.isValid())
     return;
 
-  SessionWindow *sessionWindow = new SessionWindow(session);
+  const QString userId = item->data(Qt::UserRole + 2).toString().trimmed();
+  const QString numericId = item->data(Qt::UserRole + 3).toString().trimmed();
+  SessionWindow *sessionWindow = nullptr;
+  if (!userId.isEmpty()) {
+    sessionWindow = m_sessionWindowsByUserId.value(userId);
+  }
+  if (!sessionWindow && !numericId.isEmpty()) {
+    sessionWindow = m_sessionWindowsByNumericId.value(numericId);
+  }
+
+  if (sessionWindow) {
+    if (sessionWindow->isMinimized()) {
+      sessionWindow->showNormal();
+    } else {
+      sessionWindow->show();
+    }
+    sessionWindow->raise();
+    sessionWindow->activateWindow();
+    qInfo().noquote() << "[MainWidget] reuse session window user_id=" << userId
+                      << "numeric_id=" << numericId;
+    return;
+  }
+
+  sessionWindow = new SessionWindow(session);
+  sessionWindow->setFriendIdentity(userId, numericId);
+  sessionWindow->updateFriendPresence(item->data(Qt::UserRole + 5).toBool(),
+                                      item->data(Qt::UserRole + 6).toString());
+  if (!userId.isEmpty()) {
+    m_sessionWindowsByUserId.insert(userId, sessionWindow);
+  }
+  if (!numericId.isEmpty()) {
+    m_sessionWindowsByNumericId.insert(numericId, sessionWindow);
+  }
+  connect(sessionWindow, &QObject::destroyed, this,
+          [this, userId, numericId]() {
+            if (!userId.isEmpty()) {
+              m_sessionWindowsByUserId.remove(userId);
+            }
+            if (!numericId.isEmpty()) {
+              m_sessionWindowsByNumericId.remove(numericId);
+            }
+          });
   sessionWindow->show();
 }
 
@@ -537,6 +602,8 @@ void Widget::onOpenSettings() {
       m_friendListRefreshTimer->stop();
     }
     m_friendListManager.clear();
+    m_sessionWindowsByUserId.clear();
+    m_sessionWindowsByNumericId.clear();
     refreshFriendListUi();
     emit logoutRequested();
     close();
@@ -713,14 +780,120 @@ void Widget::refreshFriendListUi() {
     item->setData(Qt::UserRole + 4, friendItem.userStatus);
     item->setData(Qt::UserRole + 5, friendItem.isOnline);
     item->setData(Qt::UserRole + 6, friendItem.lastSeenAtUtc);
+    item->setToolTip(friendPresenceText(friendItem.isOnline,
+                                        friendItem.lastSeenAtUtc));
     item->setIcon(QIcon(":/resources/chat_icon.png"));
     m_sessionList->addItem(item);
+  }
+}
+
+void Widget::updateFriendListItem(const friendlist::FriendItem &friendItem) {
+  if (!m_sessionList) {
+    return;
+  }
+
+  for (int i = 0; i < m_sessionList->count(); ++i) {
+    QListWidgetItem *item = m_sessionList->item(i);
+    if (!item) {
+      continue;
+    }
+
+    const QString itemUserId = item->data(Qt::UserRole + 2).toString().trimmed();
+    const QString itemNumericId =
+        item->data(Qt::UserRole + 3).toString().trimmed();
+    if ((!friendItem.userId.isEmpty() && itemUserId == friendItem.userId) ||
+        (!friendItem.numericId.isEmpty() &&
+         itemNumericId == friendItem.numericId)) {
+      item->setText(QStringLiteral("%1 (%2) [%3|%4]")
+                        .arg(friendItem.displayName, friendItem.numericId,
+                             friendOnlineText(friendItem.isOnline),
+                             friendStatusText(friendItem.userStatus)));
+      item->setData(Qt::UserRole + 4, friendItem.userStatus);
+      item->setData(Qt::UserRole + 5, friendItem.isOnline);
+      item->setData(Qt::UserRole + 6, friendItem.lastSeenAtUtc);
+      item->setToolTip(friendPresenceText(friendItem.isOnline,
+                                          friendItem.lastSeenAtUtc));
+      qInfo().noquote() << "[MainWidget] refreshed friend list item user_id="
+                        << friendItem.userId
+                        << "numeric_id=" << friendItem.numericId
+                        << "presence=" << friendPresenceText(friendItem.isOnline,
+                                                             friendItem.lastSeenAtUtc);
+      return;
+    }
   }
 }
 
 void Widget::syncFriendListToDeleteDialog() {
   if (m_deleteFriendDialog) {
     m_deleteFriendDialog->setFriends(m_friendListManager.friends());
+  }
+}
+
+void Widget::handleIncomingRealtimePayload(const QString &payload,
+                                           const QString &sourceTag) {
+  protocol::Envelope envelope;
+  QString parseError;
+  if (!protocol::parseEnvelope(payload, &envelope, &parseError)) {
+    return;
+  }
+
+  if (envelope.type == QStringLiteral("MESSAGE") &&
+      envelope.action == QStringLiteral("PRESENCE")) {
+    qInfo().noquote() << "[MainWidget] received presence broadcast source="
+                      << sourceTag << "payload="
+                      << QString::fromUtf8(
+                             QJsonDocument(envelope.data)
+                                 .toJson(QJsonDocument::Compact));
+    handlePresenceEnvelope(envelope.data);
+  }
+}
+
+void Widget::handlePresenceEnvelope(const QJsonObject &data) {
+  const QString userId = data.value(QStringLiteral("user_id")).toString().trimmed();
+  const QString numericId =
+      data.value(QStringLiteral("numeric_id")).toString().trimmed();
+  const QString presenceEvent =
+      data.value(QStringLiteral("presence_event")).toString().trimmed().toLower();
+
+  bool isOnline = data.value(QStringLiteral("is_online")).toBool(false);
+  if (presenceEvent == QStringLiteral("online")) {
+    isOnline = true;
+  } else if (presenceEvent == QStringLiteral("offline")) {
+    isOnline = false;
+  }
+  const QString lastSeenAtUtc =
+      data.value(QStringLiteral("last_seen_at")).toString().trimmed();
+
+  qInfo().noquote()
+      << "[MainWidget] apply presence event user_id=" << userId
+      << "numeric_id=" << numericId << "presence_event=" << presenceEvent
+      << "is_online=" << isOnline << "last_seen_at=" << lastSeenAtUtc;
+
+  friendlist::FriendItem updatedFriend;
+  if (!m_friendListManager.applyPresenceUpdate(userId, numericId, isOnline,
+                                               lastSeenAtUtc, &updatedFriend)) {
+    qInfo().noquote()
+        << "[MainWidget] ignore presence update: friend not found user_id="
+        << userId << "numeric_id=" << numericId;
+    return;
+  }
+
+  updateFriendListItem(updatedFriend);
+  syncFriendListToDeleteDialog();
+
+  SessionWindow *sessionWindow = nullptr;
+  if (!updatedFriend.userId.isEmpty()) {
+    sessionWindow = m_sessionWindowsByUserId.value(updatedFriend.userId);
+  }
+  if (!sessionWindow && !updatedFriend.numericId.isEmpty()) {
+    sessionWindow = m_sessionWindowsByNumericId.value(updatedFriend.numericId);
+  }
+  if (sessionWindow) {
+    sessionWindow->updateFriendPresence(updatedFriend.isOnline,
+                                        updatedFriend.lastSeenAtUtc);
+    qInfo().noquote()
+        << "[MainWidget] refreshed open session window user_id="
+        << updatedFriend.userId << "numeric_id=" << updatedFriend.numericId;
   }
 }
 
