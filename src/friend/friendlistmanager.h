@@ -12,6 +12,7 @@ class QListWidget;
 namespace friendlist {
 
 struct FriendItem {
+  QString conversationId;
   QString userId;
   QString numericId;
   QString username;

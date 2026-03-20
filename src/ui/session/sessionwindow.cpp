@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QScrollBar>
 #include <QTimer>
+#include <QUuid>
 
 namespace {
 QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
@@ -19,6 +20,83 @@ QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
     return QStringLiteral("离线");
   }
   return QStringLiteral("离线 · 最近在线 %1").arg(trimmed);
+}
+
+QString jsonStringValue(const QJsonObject &obj, const char *key) {
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (value.isString()) {
+    return value.toString().trimmed();
+  }
+  if (value.isDouble()) {
+    return QString::number(static_cast<qint64>(value.toDouble()));
+  }
+  return QString();
+}
+
+qint64 jsonIntegerValue(const QJsonObject &obj, const char *key,
+                        qint64 defaultValue = 0) {
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (value.isDouble()) {
+    return static_cast<qint64>(value.toDouble(defaultValue));
+  }
+  if (value.isString()) {
+    bool ok = false;
+    const qint64 parsed = value.toString().trimmed().toLongLong(&ok);
+    return ok ? parsed : defaultValue;
+  }
+  return defaultValue;
+}
+
+QString formatMessageTime(const QString &utcIsoTime) {
+  const QString trimmed = utcIsoTime.trimmed();
+  if (trimmed.isEmpty()) {
+    return QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+  }
+
+  const QDateTime parsed = QDateTime::fromString(trimmed, Qt::ISODate);
+  if (!parsed.isValid()) {
+    return QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+  }
+  return parsed.toLocalTime().toString(QStringLiteral("HH:mm:ss"));
+}
+
+QString messageStatusText(SessionWindow::MessageStatus status) {
+  switch (status) {
+  case SessionWindow::MessageStatus::Pending:
+    return QStringLiteral("发送中");
+  case SessionWindow::MessageStatus::Sent:
+    return QStringLiteral("已发送");
+  case SessionWindow::MessageStatus::Failed:
+    return QStringLiteral("发送失败");
+  case SessionWindow::MessageStatus::Received:
+    return QStringLiteral("已接收");
+  }
+  return QStringLiteral("未知状态");
+}
+
+QString messageErrorText(int code, const QString &fallback) {
+  switch (code) {
+  case 2001:
+    return QStringLiteral("发送失败：未登录");
+  case 2005:
+    return QStringLiteral("发送失败：不是会话成员或已被禁言");
+  case 4001:
+    return QStringLiteral("发送失败：消息参数非法");
+  case 4002:
+    return QStringLiteral("发送失败：消息过大");
+  case 4005:
+    return QStringLiteral("发送失败：会话不存在");
+  case 1099:
+    return QStringLiteral("发送失败：服务端内部错误");
+  default:
+    break;
+  }
+
+  const QString trimmed = fallback.trimmed();
+  if (!trimmed.isEmpty()) {
+    return QStringLiteral("发送失败：%1").arg(trimmed);
+  }
+  return QStringLiteral("发送失败：未知错误(%1)").arg(code);
 }
 } // namespace
 
@@ -248,19 +326,43 @@ void SessionWindow::sendPendingMessage() {
     return;
 
   m_pendingMessage.clear();
-  const QString line =
-      QDateTime::currentDateTime().toString("HH:mm:ss ") + "发送: " + message;
-  appendChatBubble(line, true, false);
+  const QString conversationId = m_session.conversationId().trimmed();
+  if (conversationId.isEmpty()) {
+    appendStatusLine(QStringLiteral("缺少 conversation_uuid，无法发送消息"));
+    qWarning() << "[SessionWindow] missing conversation_uuid for display_name="
+               << m_session.displayName() << "friend_user_id=" << m_friendUserId
+               << "friend_numeric_id=" << m_friendNumericId;
+    return;
+  }
+
+  ChatMessage localMessage;
+  localMessage.localId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+  localMessage.requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+  localMessage.conversationId = conversationId;
+  localMessage.content = message;
+  localMessage.sentAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+  localMessage.senderUserId = UserSession::instance().userId().trimmed();
+  localMessage.senderUsername = UserSession::instance().username().trimmed();
+  localMessage.status = MessageStatus::Pending;
+  const int messageIndex = appendMessage(localMessage);
+  m_pendingMessageIndexesByRequestId.insert(localMessage.requestId, messageIndex);
 
   QJsonObject data;
-  data.insert("conversation_id", m_session.id());
+  data.insert("conversation_id", conversationId);
   data.insert("content", message);
 
   const QString payload =
-      protocol::createRequest("MESSAGE", "SEND", data);
-  qInfo() << "MESSAGE SEND, conversation_id:" << m_session.id();
+      protocol::createRequest("MESSAGE", "SEND", data, localMessage.requestId);
+  qInfo() << "[SessionWindow] MESSAGE SEND request_id=" << localMessage.requestId
+          << "conversation_id=" << conversationId;
+  if (!m_websocket || !m_websocket->isConnected()) {
+    markPendingMessageFailed(messageIndex, QStringLiteral("连接未建立"));
+    appendStatusLine(QStringLiteral("发送失败：WebSocket 未连接"));
+    return;
+  }
   m_websocket->sendTextMessage(payload);
   m_inputLine->clear();
+  emit outgoingMessageSubmitted(conversationId, message);
 }
 
 void SessionWindow::onSendClicked() {
@@ -276,10 +378,10 @@ void SessionWindow::appendStatusLine(const QString &message) {
   qInfo() << "Session status:" << message;
 }
 
-void SessionWindow::appendChatBubble(const QString &message, bool outgoing,
-                                     bool status) {
+QLabel *SessionWindow::appendChatBubble(const QString &message, bool outgoing,
+                                        bool status) {
   if (!m_chatLayout || !m_chatContainer || !m_chatScroll)
-    return;
+    return nullptr;
 
   QWidget *row = new QWidget(m_chatContainer);
   QHBoxLayout *rowLayout = new QHBoxLayout(row);
@@ -294,16 +396,18 @@ void SessionWindow::appendChatBubble(const QString &message, bool outgoing,
     bubble->setStyleSheet("QLabel { background: #f1f3f5; color: #4f5b66; "
                           "border-radius: 10px; padding: 8px 12px; }");
     rowLayout->addWidget(bubble);
+    rowLayout->addStretch();
   } else if (outgoing) {
     bubble->setStyleSheet("QLabel { background: #e2f0ff; color: #1f3552; "
                           "border-radius: 12px; padding: 8px 12px; }");
+    rowLayout->addStretch();
     rowLayout->addWidget(bubble);
   } else {
     bubble->setStyleSheet("QLabel { background: #f7f7f8; color: #2f2f2f; "
                           "border-radius: 12px; padding: 8px 12px; }");
     rowLayout->addWidget(bubble);
+    rowLayout->addStretch();
   }
-  rowLayout->addStretch();
 
   m_chatLayout->addWidget(row);
   QTimer::singleShot(0, this, [this]() {
@@ -312,6 +416,7 @@ void SessionWindow::appendChatBubble(const QString &message, bool outgoing,
           m_chatScroll->verticalScrollBar()->maximum());
     }
   });
+  return bubble;
 }
 
 void SessionWindow::updateConnectionStatus(QAbstractSocket::SocketState state) {
@@ -371,45 +476,164 @@ void SessionWindow::handleIncomingPayload(const QString &payload,
   protocol::Envelope envelope;
   QString parseError;
   if (protocol::parseEnvelope(payload, &envelope, &parseError)) {
-    QString content;
-    if (envelope.data.value("echo").isObject()) {
-      const QJsonObject echo = envelope.data.value("echo").toObject();
-      if (echo.value("content").isString()) {
-        content = echo.value("content").toString();
+    if (envelope.type == QStringLiteral("MESSAGE") &&
+        envelope.action == QStringLiteral("SEND")) {
+      if (envelope.requestId.trimmed().isEmpty()) {
+        handleIncomingMessagePush(envelope);
       } else {
-        content =
-            QString::fromUtf8(QJsonDocument(echo).toJson(QJsonDocument::Compact));
+        handleMessageSendResponse(envelope);
       }
-    } else if (envelope.data.value("content").isString()) {
-      content = envelope.data.value("content").toString();
-    } else {
-      content = QString::fromUtf8(
-          QJsonDocument(envelope.data).toJson(QJsonDocument::Compact));
     }
-
-    QString statusText;
-    if (envelope.data.value("ok").isBool()) {
-      statusText = envelope.data.value("ok").toBool() ? "ok=true" : "ok=false";
-    }
-    if (envelope.data.value("message").isString()) {
-      const QString msg = envelope.data.value("message").toString();
-      statusText = statusText.isEmpty() ? msg : statusText + " " + msg;
-    }
-
-    const QString display = statusText.isEmpty() ? content : statusText + " " + content;
-    const QString line = QDateTime::currentDateTime().toString("HH:mm:ss ") +
-                         QString("[%1/%2] %3")
-                             .arg(envelope.type, envelope.action, display.trimmed());
-    appendChatBubble(line, false, false);
     return;
   }
 
-  const QString line = QDateTime::currentDateTime().toString("HH:mm:ss ") +
-                       QString("%1原始数据: %2")
-                           .arg(sourceTag, payload);
-  appendChatBubble(line, false, false);
   qWarning() << "Protocol parse failed, source:" << sourceTag << "error:"
              << parseError << "payload:" << payload;
+}
+
+int SessionWindow::appendMessage(const ChatMessage &message) {
+  m_messages.push_back(message);
+  const int index = m_messages.size() - 1;
+  m_messages[index].bubbleLabel =
+      appendChatBubble(QString(), message.status != MessageStatus::Received, false);
+  updateMessageBubble(index);
+  return index;
+}
+
+void SessionWindow::updateMessageBubble(int index) {
+  if (index < 0 || index >= m_messages.size()) {
+    return;
+  }
+
+  ChatMessage &message = m_messages[index];
+  if (!message.bubbleLabel) {
+    return;
+  }
+
+  const QString timeText = formatMessageTime(message.sentAt);
+  QString bubbleText;
+  if (message.status == MessageStatus::Received) {
+    const QString sender =
+        message.senderUsername.trimmed().isEmpty() ? QStringLiteral("对方")
+                                                   : message.senderUsername.trimmed();
+    bubbleText = QStringLiteral("%1 %2: %3")
+                     .arg(timeText, sender, message.content);
+  } else {
+    bubbleText = QStringLiteral("%1 我: %2 [%3]")
+                     .arg(timeText, message.content, messageStatusText(message.status));
+    if (message.status == MessageStatus::Sent && message.seq > 0) {
+      bubbleText += QStringLiteral(" (#%1)").arg(message.seq);
+    }
+  }
+  message.bubbleLabel->setText(bubbleText);
+}
+
+void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope) {
+  const QString requestId = envelope.requestId.trimmed();
+  if (requestId.isEmpty()) {
+    return;
+  }
+
+  const auto it = m_pendingMessageIndexesByRequestId.constFind(requestId);
+  if (it == m_pendingMessageIndexesByRequestId.cend()) {
+    return;
+  }
+
+  const int index = it.value();
+  if (index < 0 || index >= m_messages.size()) {
+    m_pendingMessageIndexesByRequestId.remove(requestId);
+    return;
+  }
+
+  ChatMessage &message = m_messages[index];
+  const QString responseConversationId =
+      jsonStringValue(envelope.data, "conversation_id");
+  if (!responseConversationId.isEmpty() &&
+      responseConversationId != m_session.conversationId().trimmed()) {
+    qWarning() << "[SessionWindow] ignore MESSAGE/SEND response with mismatched "
+                  "conversation_id request_id="
+               << requestId << "response_conversation_id="
+               << responseConversationId << "session_conversation_id="
+               << m_session.conversationId();
+    return;
+  }
+
+  const bool ok = envelope.code == 0 && envelope.data.value("ok").toBool(false);
+  if (!ok) {
+    const QString errorText =
+        messageErrorText(envelope.code, jsonStringValue(envelope.data, "message"));
+    markPendingMessageFailed(index, errorText);
+    appendStatusLine(errorText);
+    m_pendingMessageIndexesByRequestId.remove(requestId);
+    qWarning() << "[SessionWindow] MESSAGE/SEND failed request_id=" << requestId
+               << "code=" << envelope.code << "data="
+               << QString::fromUtf8(
+                      QJsonDocument(envelope.data).toJson(QJsonDocument::Compact));
+    return;
+  }
+
+  message.conversationId = responseConversationId.isEmpty() ? message.conversationId
+                                                            : responseConversationId;
+  message.messageId = jsonStringValue(envelope.data, "message_id");
+  message.seq = jsonIntegerValue(envelope.data, "seq");
+  const QString sentAt = jsonStringValue(envelope.data, "sent_at");
+  if (!sentAt.isEmpty()) {
+    message.sentAt = sentAt;
+  }
+  const QString content = jsonStringValue(envelope.data, "content");
+  if (!content.isEmpty()) {
+    message.content = content;
+  }
+  message.status = MessageStatus::Sent;
+  updateMessageBubble(index);
+  m_pendingMessageIndexesByRequestId.remove(requestId);
+
+  qInfo() << "[SessionWindow] MESSAGE/SEND ack request_id=" << requestId
+          << "message_id=" << message.messageId << "seq=" << message.seq
+          << "sent_at=" << message.sentAt;
+}
+
+void SessionWindow::handleIncomingMessagePush(const protocol::Envelope &envelope) {
+  const QString conversationId = jsonStringValue(envelope.data, "conversation_id");
+  if (conversationId.isEmpty() ||
+      conversationId != m_session.conversationId().trimmed()) {
+    return;
+  }
+
+  ChatMessage incoming;
+  incoming.localId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+  incoming.conversationId = conversationId;
+  incoming.messageId = jsonStringValue(envelope.data, "message_id");
+  incoming.seq = jsonIntegerValue(envelope.data, "seq");
+  incoming.content = jsonStringValue(envelope.data, "content");
+  incoming.sentAt = jsonStringValue(envelope.data, "sent_at");
+  incoming.senderUserId = jsonStringValue(envelope.data, "from_user_id");
+  incoming.senderUsername = jsonStringValue(envelope.data, "from_username");
+  incoming.status = MessageStatus::Received;
+
+  if (incoming.content.isEmpty()) {
+    qWarning() << "[SessionWindow] ignore incoming MESSAGE/SEND without content "
+                  "conversation_id="
+               << conversationId;
+    return;
+  }
+
+  appendMessage(incoming);
+  qInfo() << "[SessionWindow] received incoming MESSAGE/SEND conversation_id="
+          << conversationId << "message_id=" << incoming.messageId
+          << "from_user_id=" << incoming.senderUserId;
+}
+
+void SessionWindow::markPendingMessageFailed(int index, const QString &reason) {
+  if (index < 0 || index >= m_messages.size()) {
+    return;
+  }
+
+  ChatMessage &message = m_messages[index];
+  message.status = MessageStatus::Failed;
+  updateMessageBubble(index);
+  qWarning() << "[SessionWindow] pending message failed request_id="
+             << message.requestId << "reason=" << reason;
 }
 
 bool SessionWindow::eventFilter(QObject *obj, QEvent *event) {
