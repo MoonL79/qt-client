@@ -89,6 +89,10 @@ bool FriendListManager::updateFromResponse(const QJsonObject &data) {
 
     const QJsonObject obj = itemValue.toObject();
     FriendItem item;
+    item.conversationId = valueToString(obj.value("conversation_uuid"));
+    if (item.conversationId.isEmpty()) {
+      item.conversationId = valueToString(obj.value("conversation_id"));
+    }
     item.userId = valueToString(obj.value("user_id"));
     item.numericId = valueToString(obj.value("numeric_id"));
     item.username = valueToString(obj.value("username"));

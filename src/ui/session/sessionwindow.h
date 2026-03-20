@@ -1,10 +1,13 @@
 #ifndef SESSIONWINDOW_H
 #define SESSIONWINDOW_H
 
+#include "protocol.h"
 #include "session.h"
+#include "usersession.h"
 #include "websocketclient.h"
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QHash>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -12,15 +15,36 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QString>
+#include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
 
 class SessionWindow : public QWidget {
   Q_OBJECT
 public:
+  enum class MessageStatus { Pending, Sent, Failed, Received };
+
+  struct ChatMessage {
+    QString localId;
+    QString requestId;
+    QString conversationId;
+    QString messageId;
+    qint64 seq = 0;
+    QString content;
+    QString sentAt;
+    QString senderUserId;
+    QString senderUsername;
+    MessageStatus status = MessageStatus::Received;
+    QLabel *bubbleLabel = nullptr;
+  };
+
   explicit SessionWindow(const Session &session, QWidget *parent = nullptr);
   void setFriendIdentity(const QString &userId, const QString &numericId);
   void updateFriendPresence(bool isOnline, const QString &lastSeenAtUtc);
+
+signals:
+  void outgoingMessageSubmitted(const QString &conversationId,
+                                const QString &previewText);
 
 protected:
   bool eventFilter(QObject *obj, QEvent *event) override;
@@ -31,11 +55,16 @@ protected:
 private:
   void initUI();
   void appendStatusLine(const QString &message);
-  void appendChatBubble(const QString &message, bool outgoing = false,
-                        bool status = false);
+  QLabel *appendChatBubble(const QString &message, bool outgoing = false,
+                           bool status = false);
   void updateConnectionStatus(QAbstractSocket::SocketState state);
   void refreshPresenceLabel();
   void handleIncomingPayload(const QString &payload, const QString &sourceTag);
+  int appendMessage(const ChatMessage &message);
+  void updateMessageBubble(int index);
+  void handleMessageSendResponse(const protocol::Envelope &envelope);
+  void handleIncomingMessagePush(const protocol::Envelope &envelope);
+  void markPendingMessageFailed(int index, const QString &reason);
   Session m_session;
 
   // Dragging support
@@ -76,6 +105,8 @@ private:
   QString m_friendNumericId;
   QString m_friendLastSeenAtUtc;
   bool m_friendIsOnline = false;
+  QVector<ChatMessage> m_messages;
+  QHash<QString, int> m_pendingMessageIndexesByRequestId;
   void onSendClicked();
   void sendPendingMessage();
   void onTestConnection();

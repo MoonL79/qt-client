@@ -58,6 +58,16 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
 
 private:
+    struct ConversationListState {
+        QString conversationId;
+        QString displayName;
+        QString userId;
+        QString numericId;
+        QString lastMessagePreview;
+        int unreadCount = 0;
+        bool placeholder = false;
+    };
+
     void initUI();
     void initAvatarHttpClient();
     void addSessionItem(const Session &session);
@@ -66,12 +76,27 @@ private:
     void updateFriendListItem(const friendlist::FriendItem &friendItem);
     void handleIncomingRealtimePayload(const QString &payload,
                                        const QString &sourceTag);
+    void handleMessageEnvelope(const protocol::Envelope &envelope);
     void handlePresenceEnvelope(const QJsonObject &data);
     QUrl resolveAvatarUrl(const QString &avatarUrl) const;
     void requestAvatarImage(const QString &avatarUrl);
     void applyAvatarPixmap(const QPixmap &pixmap);
     void applyDefaultAvatar();
     void syncFriendListToDeleteDialog();
+    QListWidgetItem *findSessionItemByConversationId(const QString &conversationId) const;
+    QListWidgetItem *upsertConversationListItem(const ConversationListState &state,
+                                                const friendlist::FriendItem *friendItem);
+    void applyConversationStateToItem(QListWidgetItem *item,
+                                      const ConversationListState &state,
+                                      const friendlist::FriendItem *friendItem);
+    void resetConversationUnread(const QString &conversationId);
+    QString buildSessionItemText(const QString &displayName,
+                                 const QString &numericId,
+                                 bool isOnline,
+                                 int userStatus,
+                                 const QString &preview,
+                                 int unreadCount) const;
+    QString elidePreview(const QString &preview) const;
 
     Ui::Widget *ui;
     
@@ -100,6 +125,8 @@ private:
     QHash<QString, Session> m_sessionsById;
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByUserId;
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByNumericId;
+    QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByConversationId;
+    QHash<QString, ConversationListState> m_conversationStatesByConversationId;
     
     // Dragging support
     bool m_isDragging;

@@ -18,6 +18,7 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QtGlobal>
 
@@ -76,6 +77,17 @@ QString friendPresenceText(bool isOnline, const QString &lastSeenAtUtc) {
   }
   return QStringLiteral("离线 · 最近在线 %1").arg(trimmed);
 }
+
+constexpr int kRoleSessionId = Qt::UserRole;
+constexpr int kRoleSessionType = Qt::UserRole + 1;
+constexpr int kRoleUserId = Qt::UserRole + 2;
+constexpr int kRoleNumericId = Qt::UserRole + 3;
+constexpr int kRoleUserStatus = Qt::UserRole + 4;
+constexpr int kRoleIsOnline = Qt::UserRole + 5;
+constexpr int kRoleLastSeenAtUtc = Qt::UserRole + 6;
+constexpr int kRoleConversationId = Qt::UserRole + 7;
+constexpr int kRoleLastPreview = Qt::UserRole + 8;
+constexpr int kRoleUnreadCount = Qt::UserRole + 9;
 }
 
 Widget::Widget(QWidget *parent)
@@ -490,15 +502,20 @@ void Widget::mouseReleaseEvent(QMouseEvent *event) {
 void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   if (!item)
     return;
-  const QString sessionId = item->data(Qt::UserRole).toString();
+  const QString sessionId = item->data(kRoleSessionId).toString();
   const Session session = m_sessionsById.value(sessionId);
   if (!session.isValid())
     return;
 
-  const QString userId = item->data(Qt::UserRole + 2).toString().trimmed();
-  const QString numericId = item->data(Qt::UserRole + 3).toString().trimmed();
+  const QString userId = item->data(kRoleUserId).toString().trimmed();
+  const QString numericId = item->data(kRoleNumericId).toString().trimmed();
+  const QString conversationId =
+      item->data(kRoleConversationId).toString().trimmed();
   SessionWindow *sessionWindow = nullptr;
-  if (!userId.isEmpty()) {
+  if (!conversationId.isEmpty()) {
+    sessionWindow = m_sessionWindowsByConversationId.value(conversationId);
+  }
+  if (!sessionWindow && !userId.isEmpty()) {
     sessionWindow = m_sessionWindowsByUserId.value(userId);
   }
   if (!sessionWindow && !numericId.isEmpty()) {
@@ -520,23 +537,46 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
 
   sessionWindow = new SessionWindow(session);
   sessionWindow->setFriendIdentity(userId, numericId);
-  sessionWindow->updateFriendPresence(item->data(Qt::UserRole + 5).toBool(),
-                                      item->data(Qt::UserRole + 6).toString());
+  sessionWindow->updateFriendPresence(item->data(kRoleIsOnline).toBool(),
+                                      item->data(kRoleLastSeenAtUtc).toString());
   if (!userId.isEmpty()) {
     m_sessionWindowsByUserId.insert(userId, sessionWindow);
   }
   if (!numericId.isEmpty()) {
     m_sessionWindowsByNumericId.insert(numericId, sessionWindow);
   }
+  if (!conversationId.isEmpty()) {
+    m_sessionWindowsByConversationId.insert(conversationId, sessionWindow);
+  }
+  connect(sessionWindow, &SessionWindow::outgoingMessageSubmitted, this,
+          [this](const QString &conversationId, const QString &previewText) {
+            if (conversationId.isEmpty()) {
+              return;
+            }
+            ConversationListState state =
+                m_conversationStatesByConversationId.value(conversationId);
+            state.conversationId = conversationId;
+            state.lastMessagePreview = previewText.trimmed();
+            state.unreadCount = 0;
+            m_conversationStatesByConversationId.insert(conversationId, state);
+            if (QListWidgetItem *listItem =
+                    findSessionItemByConversationId(conversationId)) {
+              applyConversationStateToItem(listItem, state, nullptr);
+            }
+          });
   connect(sessionWindow, &QObject::destroyed, this,
-          [this, userId, numericId]() {
+          [this, userId, numericId, conversationId]() {
             if (!userId.isEmpty()) {
               m_sessionWindowsByUserId.remove(userId);
             }
             if (!numericId.isEmpty()) {
               m_sessionWindowsByNumericId.remove(numericId);
             }
+            if (!conversationId.isEmpty()) {
+              m_sessionWindowsByConversationId.remove(conversationId);
+            }
           });
+  resetConversationUnread(conversationId);
   sessionWindow->show();
 }
 
@@ -546,9 +586,10 @@ void Widget::addSessionItem(const Session &session) {
 
   m_sessionsById.insert(session.id(), session);
   QListWidgetItem *item = new QListWidgetItem(session.displayName());
-  item->setData(Qt::UserRole, session.id());
-  item->setData(Qt::UserRole + 1,
+  item->setData(kRoleSessionId, session.id());
+  item->setData(kRoleSessionType,
                 session.type() == Session::Type::Group ? "group" : "direct");
+  item->setData(kRoleConversationId, session.conversationId());
   item->setIcon(QIcon(":/resources/chat_icon.png"));
   m_sessionList->addItem(item);
 }
@@ -604,6 +645,8 @@ void Widget::onOpenSettings() {
     m_friendListManager.clear();
     m_sessionWindowsByUserId.clear();
     m_sessionWindowsByNumericId.clear();
+    m_sessionWindowsByConversationId.clear();
+    m_conversationStatesByConversationId.clear();
     refreshFriendListUi();
     emit logoutRequested();
     close();
@@ -752,9 +795,10 @@ void Widget::refreshFriendListUi() {
 
   m_sessionList->clear();
   m_sessionsById.clear();
+  QSet<QString> renderedConversationIds;
 
   const QList<friendlist::FriendItem> &friends = m_friendListManager.friends();
-  if (friends.isEmpty()) {
+  if (friends.isEmpty() && m_conversationStatesByConversationId.isEmpty()) {
     auto *emptyItem = new QListWidgetItem(QStringLiteral("暂无好友"));
     emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable &
                         ~Qt::ItemIsEnabled);
@@ -763,27 +807,26 @@ void Widget::refreshFriendListUi() {
   }
 
   for (const friendlist::FriendItem &friendItem : friends) {
-    const Session session =
-        Session::create(friendItem.displayName, Session::Type::Direct);
-    m_sessionsById.insert(session.id(), session);
+    ConversationListState state =
+        m_conversationStatesByConversationId.value(friendItem.conversationId);
+    state.conversationId = friendItem.conversationId.trimmed();
+    state.displayName = friendItem.displayName;
+    state.userId = friendItem.userId;
+    state.numericId = friendItem.numericId;
+    state.placeholder = false;
+    if (!state.conversationId.isEmpty()) {
+      m_conversationStatesByConversationId.insert(state.conversationId, state);
+      renderedConversationIds.insert(state.conversationId);
+    }
+    upsertConversationListItem(state, &friendItem);
+  }
 
-    const QString itemText =
-        QStringLiteral("%1 (%2) [%3|%4]")
-            .arg(friendItem.displayName, friendItem.numericId,
-                 friendOnlineText(friendItem.isOnline),
-                 friendStatusText(friendItem.userStatus));
-    auto *item = new QListWidgetItem(itemText);
-    item->setData(Qt::UserRole, session.id());
-    item->setData(Qt::UserRole + 1, QStringLiteral("direct"));
-    item->setData(Qt::UserRole + 2, friendItem.userId);
-    item->setData(Qt::UserRole + 3, friendItem.numericId);
-    item->setData(Qt::UserRole + 4, friendItem.userStatus);
-    item->setData(Qt::UserRole + 5, friendItem.isOnline);
-    item->setData(Qt::UserRole + 6, friendItem.lastSeenAtUtc);
-    item->setToolTip(friendPresenceText(friendItem.isOnline,
-                                        friendItem.lastSeenAtUtc));
-    item->setIcon(QIcon(":/resources/chat_icon.png"));
-    m_sessionList->addItem(item);
+  const auto conversationStates = m_conversationStatesByConversationId;
+  for (auto it = conversationStates.cbegin(); it != conversationStates.cend(); ++it) {
+    if (it.key().isEmpty() || renderedConversationIds.contains(it.key())) {
+      continue;
+    }
+    upsertConversationListItem(it.value(), nullptr);
   }
 }
 
@@ -798,21 +841,23 @@ void Widget::updateFriendListItem(const friendlist::FriendItem &friendItem) {
       continue;
     }
 
-    const QString itemUserId = item->data(Qt::UserRole + 2).toString().trimmed();
+    const QString itemUserId = item->data(kRoleUserId).toString().trimmed();
     const QString itemNumericId =
-        item->data(Qt::UserRole + 3).toString().trimmed();
+        item->data(kRoleNumericId).toString().trimmed();
     if ((!friendItem.userId.isEmpty() && itemUserId == friendItem.userId) ||
         (!friendItem.numericId.isEmpty() &&
          itemNumericId == friendItem.numericId)) {
-      item->setText(QStringLiteral("%1 (%2) [%3|%4]")
-                        .arg(friendItem.displayName, friendItem.numericId,
-                             friendOnlineText(friendItem.isOnline),
-                             friendStatusText(friendItem.userStatus)));
-      item->setData(Qt::UserRole + 4, friendItem.userStatus);
-      item->setData(Qt::UserRole + 5, friendItem.isOnline);
-      item->setData(Qt::UserRole + 6, friendItem.lastSeenAtUtc);
-      item->setToolTip(friendPresenceText(friendItem.isOnline,
-                                          friendItem.lastSeenAtUtc));
+      ConversationListState state =
+          m_conversationStatesByConversationId.value(friendItem.conversationId);
+      state.conversationId = friendItem.conversationId.trimmed();
+      state.displayName = friendItem.displayName;
+      state.userId = friendItem.userId;
+      state.numericId = friendItem.numericId;
+      state.placeholder = false;
+      if (!state.conversationId.isEmpty()) {
+        m_conversationStatesByConversationId.insert(state.conversationId, state);
+      }
+      applyConversationStateToItem(item, state, &friendItem);
       qInfo().noquote() << "[MainWidget] refreshed friend list item user_id="
                         << friendItem.userId
                         << "numeric_id=" << friendItem.numericId
@@ -838,6 +883,12 @@ void Widget::handleIncomingRealtimePayload(const QString &payload,
   }
 
   if (envelope.type == QStringLiteral("MESSAGE") &&
+      envelope.action == QStringLiteral("SEND")) {
+    handleMessageEnvelope(envelope);
+    return;
+  }
+
+  if (envelope.type == QStringLiteral("MESSAGE") &&
       envelope.action == QStringLiteral("PRESENCE")) {
     qInfo().noquote() << "[MainWidget] received presence broadcast source="
                       << sourceTag << "payload="
@@ -846,6 +897,62 @@ void Widget::handleIncomingRealtimePayload(const QString &payload,
                                  .toJson(QJsonDocument::Compact));
     handlePresenceEnvelope(envelope.data);
   }
+}
+
+void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
+  if (!envelope.requestId.trimmed().isEmpty()) {
+    return;
+  }
+
+  const QString conversationId =
+      envelope.data.value(QStringLiteral("conversation_id")).toString().trimmed();
+  const QString content =
+      envelope.data.value(QStringLiteral("content")).toString().trimmed();
+  if (conversationId.isEmpty() || content.isEmpty()) {
+    qWarning() << "[MainWidget] ignore MESSAGE/SEND push with invalid data"
+               << QString::fromUtf8(
+                      QJsonDocument(envelope.data).toJson(QJsonDocument::Compact));
+    return;
+  }
+
+  ConversationListState state =
+      m_conversationStatesByConversationId.value(conversationId);
+  state.conversationId = conversationId;
+  if (state.displayName.isEmpty()) {
+    state.displayName =
+        envelope.data.value(QStringLiteral("from_username")).toString().trimmed();
+    if (state.displayName.isEmpty()) {
+      state.displayName = conversationId;
+    }
+  }
+  if (state.userId.isEmpty()) {
+    state.userId =
+        envelope.data.value(QStringLiteral("from_user_id")).toString().trimmed();
+  }
+  if (state.numericId.isEmpty()) {
+    state.numericId =
+        envelope.data.value(QStringLiteral("from_numeric_id")).toString().trimmed();
+  }
+  state.lastMessagePreview = content;
+  state.placeholder = false;
+
+  SessionWindow *openWindow = m_sessionWindowsByConversationId.value(conversationId);
+  if (!openWindow) {
+    state.unreadCount += 1;
+  } else {
+    state.unreadCount = 0;
+  }
+  m_conversationStatesByConversationId.insert(conversationId, state);
+
+  if (QListWidgetItem *item = findSessionItemByConversationId(conversationId)) {
+    applyConversationStateToItem(item, state, nullptr);
+  } else {
+    upsertConversationListItem(state, nullptr);
+  }
+
+  qInfo() << "[MainWidget] routed incoming MESSAGE/SEND conversation_id="
+          << conversationId << "open_window=" << (openWindow != nullptr)
+          << "unread=" << state.unreadCount;
 }
 
 void Widget::handlePresenceEnvelope(const QJsonObject &data) {
@@ -924,4 +1031,137 @@ void Widget::onFriendListFailed(const QString &requestId, int code,
   m_friendListManager.clear();
   refreshFriendListUi();
   syncFriendListToDeleteDialog();
+}
+
+QListWidgetItem *Widget::findSessionItemByConversationId(
+    const QString &conversationId) const {
+  if (!m_sessionList || conversationId.trimmed().isEmpty()) {
+    return nullptr;
+  }
+
+  for (int i = 0; i < m_sessionList->count(); ++i) {
+    QListWidgetItem *item = m_sessionList->item(i);
+    if (!item) {
+      continue;
+    }
+    if (item->data(kRoleConversationId).toString().trimmed() ==
+        conversationId.trimmed()) {
+      return item;
+    }
+  }
+  return nullptr;
+}
+
+QListWidgetItem *Widget::upsertConversationListItem(
+    const ConversationListState &state, const friendlist::FriendItem *friendItem) {
+  if (!m_sessionList) {
+    return nullptr;
+  }
+
+  if (!state.conversationId.isEmpty()) {
+    if (QListWidgetItem *existing =
+            findSessionItemByConversationId(state.conversationId)) {
+      applyConversationStateToItem(existing, state, friendItem);
+      return existing;
+    }
+  }
+
+  const QString displayName =
+      state.displayName.isEmpty() ? QStringLiteral("未知会话") : state.displayName;
+  const Session session =
+      Session::create(displayName, Session::Type::Direct, state.conversationId);
+  m_sessionsById.insert(session.id(), session);
+
+  auto *item = new QListWidgetItem();
+  item->setData(kRoleSessionId, session.id());
+  item->setData(kRoleSessionType, QStringLiteral("direct"));
+  item->setIcon(QIcon(":/resources/chat_icon.png"));
+  applyConversationStateToItem(item, state, friendItem);
+  m_sessionList->addItem(item);
+  return item;
+}
+
+void Widget::applyConversationStateToItem(QListWidgetItem *item,
+                                          const ConversationListState &state,
+                                          const friendlist::FriendItem *friendItem) {
+  if (!item) {
+    return;
+  }
+
+  const QString displayName = state.displayName.isEmpty()
+                                  ? item->text().trimmed()
+                                  : state.displayName;
+  const QString numericId = !state.numericId.isEmpty()
+                                ? state.numericId
+                                : item->data(kRoleNumericId).toString().trimmed();
+
+  bool isOnline = item->data(kRoleIsOnline).toBool();
+  int userStatus = item->data(kRoleUserStatus).toInt();
+  QString lastSeenAtUtc = item->data(kRoleLastSeenAtUtc).toString();
+  QString userId = state.userId;
+
+  if (friendItem) {
+    isOnline = friendItem->isOnline;
+    userStatus = friendItem->userStatus;
+    lastSeenAtUtc = friendItem->lastSeenAtUtc;
+    if (userId.isEmpty()) {
+      userId = friendItem->userId;
+    }
+  }
+
+  item->setText(buildSessionItemText(displayName, numericId, isOnline, userStatus,
+                                     state.lastMessagePreview, state.unreadCount));
+  item->setData(kRoleUserId, userId);
+  item->setData(kRoleNumericId, numericId);
+  item->setData(kRoleUserStatus, userStatus);
+  item->setData(kRoleIsOnline, isOnline);
+  item->setData(kRoleLastSeenAtUtc, lastSeenAtUtc);
+  item->setData(kRoleConversationId, state.conversationId);
+  item->setData(kRoleLastPreview, state.lastMessagePreview);
+  item->setData(kRoleUnreadCount, state.unreadCount);
+  item->setToolTip(friendPresenceText(isOnline, lastSeenAtUtc));
+}
+
+void Widget::resetConversationUnread(const QString &conversationId) {
+  const QString trimmedConversationId = conversationId.trimmed();
+  if (trimmedConversationId.isEmpty()) {
+    return;
+  }
+
+  auto it = m_conversationStatesByConversationId.find(trimmedConversationId);
+  if (it == m_conversationStatesByConversationId.end()) {
+    return;
+  }
+
+  it->unreadCount = 0;
+  if (QListWidgetItem *item = findSessionItemByConversationId(trimmedConversationId)) {
+    applyConversationStateToItem(item, it.value(), nullptr);
+  }
+}
+
+QString Widget::buildSessionItemText(const QString &displayName,
+                                     const QString &numericId, bool isOnline,
+                                     int userStatus, const QString &preview,
+                                     int unreadCount) const {
+  QString firstLine = QStringLiteral("%1 (%2) [%3|%4]")
+                          .arg(displayName,
+                               numericId.isEmpty() ? QStringLiteral("-") : numericId,
+                               friendOnlineText(isOnline),
+                               friendStatusText(userStatus));
+  const QString previewText =
+      preview.trimmed().isEmpty() ? QStringLiteral("暂无消息") : elidePreview(preview);
+  if (unreadCount > 0) {
+    firstLine += QStringLiteral("  未读:%1").arg(unreadCount);
+  }
+  return firstLine + QLatin1Char('\n') + previewText;
+}
+
+QString Widget::elidePreview(const QString &preview) const {
+  QString singleLine = preview;
+  singleLine.replace(QLatin1Char('\n'), QLatin1Char(' '));
+  singleLine = singleLine.trimmed();
+  if (singleLine.size() > 36) {
+    return singleLine.left(36) + QStringLiteral("...");
+  }
+  return singleLine;
 }
