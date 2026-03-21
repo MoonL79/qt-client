@@ -17,6 +17,7 @@ constexpr const char *kActionGet = "GET";
 constexpr const char *kActionAddFriend = "ADD_FRIEND";
 constexpr const char *kActionDeleteFriend = "DELETE_FRIEND";
 constexpr const char *kActionListFriends = "LIST_FRIENDS";
+constexpr const char *kActionListConversations = "LIST_CONVERSATIONS";
 
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
@@ -142,6 +143,8 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
   qRegisterMetaType<DeleteFriendResult>("DeleteFriendResult");
   qRegisterMetaType<FriendItem>("FriendItem");
   qRegisterMetaType<QVector<FriendItem>>("QVector<FriendItem>");
+  qRegisterMetaType<ConversationItem>("ConversationItem");
+  qRegisterMetaType<QVector<ConversationItem>>("QVector<ConversationItem>");
   qRegisterMetaType<QJsonObject>("QJsonObject");
 
   Q_ASSERT_X(thread() == QThread::currentThread(), "ProfileApiClient",
@@ -270,6 +273,22 @@ QString ProfileApiClient::fetchFriendList(const QString &myNumericId) {
   return requestId;
 }
 
+QString ProfileApiClient::fetchConversationList(const QString &myNumericId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionListConversations);
+
+  QString error;
+  if (!validateFetchConversationList(myNumericId, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonObject data;
+  data.insert("numeric_id", myNumericId.trimmed());
+  sendProfileRequest(action, requestId, data, kMaxRetryCount, true);
+  return requestId;
+}
+
 void ProfileApiClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -382,6 +401,18 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
       return;
     }
     emit friendListFetched(requestId, friends);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionListConversations)) {
+    emit conversationListPayloadReceived(requestId, envelope.data);
+    QVector<ConversationItem> conversations;
+    QString error;
+    if (!parseConversationList(envelope.data, &conversations, &error)) {
+      failRequest(requestId, expectedAction, error, 3003);
+      return;
+    }
+    emit conversationListFetched(requestId, conversations);
     return;
   }
 
@@ -591,6 +622,11 @@ bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
   return true;
 }
 
+bool ProfileApiClient::validateFetchConversationList(const QString &myNumericId,
+                                                     QString *error) const {
+  return validateFetchFriendList(myNumericId, error);
+}
+
 void ProfileApiClient::sendProfileRequest(const QString &action,
                                           const QString &requestId,
                                           const QJsonObject &data, int retries,
@@ -706,6 +742,9 @@ void ProfileApiClient::failRequest(const QString &requestId, const QString &acti
                        << "message=" << errorMessage;
   if (action == QLatin1String(kActionListFriends)) {
     emit friendListFailed(requestId, code, errorMessage);
+  }
+  if (action == QLatin1String(kActionListConversations)) {
+    emit conversationListFailed(requestId, code, errorMessage);
   }
   emit requestFailedDetailed(requestId, action, code, errorMessage);
   emit requestFailed(requestId, action, errorMessage);
@@ -927,6 +966,87 @@ bool ProfileApiClient::parseFriendList(const QJsonObject &data,
     item.avatarUrl = obj.value("avatar_url").toString();
     item.bio = obj.value("bio").toString();
     outFriends->push_back(item);
+  }
+  return true;
+}
+
+bool ProfileApiClient::parseConversationList(
+    const QJsonObject &data, QVector<ConversationItem> *outConversations,
+    QString *error) const {
+  if (!outConversations) {
+    if (error) {
+      *error = QStringLiteral("internal error: out conversations is null");
+    }
+    return false;
+  }
+  QString ignored;
+  if (!readRequiredString(data, "numeric_id", &ignored, true) ||
+      !readRequiredString(data, "user_id", &ignored, true)) {
+    if (error) {
+      *error = QStringLiteral("invalid LIST_CONVERSATIONS response owner fields");
+    }
+    return false;
+  }
+
+  const QJsonValue conversationsVal = data.value("conversations");
+  if (conversationsVal.isUndefined() || conversationsVal.isNull()) {
+    outConversations->clear();
+    return true;
+  }
+  if (!conversationsVal.isArray()) {
+    if (error) {
+      *error = QStringLiteral(
+          "invalid LIST_CONVERSATIONS response: conversations is not array");
+    }
+    return false;
+  }
+
+  const QJsonArray arr = conversationsVal.toArray();
+  outConversations->clear();
+  outConversations->reserve(arr.size());
+  for (const QJsonValue &itemVal : arr) {
+    if (!itemVal.isObject()) {
+      continue;
+    }
+    const QJsonObject obj = itemVal.toObject();
+    ConversationItem item;
+    item.conversationId = jsonValueToString(obj.value("conversation_id"));
+    item.conversationUuid = jsonValueToString(obj.value("conversation_uuid"));
+    item.conversationType = readOptionalInt(obj, "conversation_type", 0);
+    item.name = obj.value("name").toString().trimmed();
+    item.avatarUrl = obj.value("avatar_url").toString().trimmed();
+    item.peerUserId = jsonValueToString(obj.value("peer_user_id"));
+    item.peerNumericId = jsonValueToString(obj.value("peer_numeric_id"));
+    item.peerUsername = obj.value("peer_username").toString().trimmed();
+    item.peerNickname = obj.value("peer_nickname").toString().trimmed();
+    item.peerAvatarUrl = obj.value("peer_avatar_url").toString().trimmed();
+    item.peerBio = obj.value("peer_bio").toString().trimmed();
+    item.peerStatus = readOptionalInt(obj, "peer_status", 0);
+    item.peerIsOnline = readOptionalBool(obj, "peer_is_online", false);
+    item.peerLastSeenAt = obj.value("peer_last_seen_at").toString().trimmed();
+    item.peerLastSeenAtUtc = parseUtcIsoTime(item.peerLastSeenAt);
+
+    if (item.conversationId.isEmpty()) {
+      continue;
+    }
+    if (item.conversationUuid.isEmpty()) {
+      item.conversationUuid = item.conversationId;
+    }
+    if (item.name.isEmpty()) {
+      if (!item.peerNickname.isEmpty()) {
+        item.name = item.peerNickname;
+      } else if (!item.peerUsername.isEmpty()) {
+        item.name = item.peerUsername;
+      } else if (!item.peerNumericId.isEmpty()) {
+        item.name = item.peerNumericId;
+      } else {
+        item.name = item.conversationId;
+      }
+    }
+    if (item.avatarUrl.isEmpty()) {
+      item.avatarUrl = item.peerAvatarUrl;
+    }
+    outConversations->push_back(item);
   }
   return true;
 }
