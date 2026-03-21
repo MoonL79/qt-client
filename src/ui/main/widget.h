@@ -36,6 +36,7 @@ class SettingsWindow;
 class AddFriendDialog;
 class DeleteFriendDialog;
 class CreateGroupDialog;
+class SearchGroupDialog;
 class SessionWindow;
 
 class Widget : public QWidget
@@ -66,6 +67,7 @@ private:
     struct ConversationListState {
         QString conversationId;
         QString conversationUuid;
+        QString groupNumericId;
         int conversationType = 0;
         QString displayName;
         QString avatarUrl;
@@ -119,11 +121,13 @@ private:
     void resetConversationUnread(const QString &conversationId);
     QString buildSessionItemText(int conversationType,
                                  const QString &displayName,
+                                 const QString &groupNumericId,
                                  const QString &numericId,
                                  bool isOnline,
                                  int userStatus,
                                  const QString &preview,
                                  int memberCount,
+                                 bool preferGroupMeta,
                                  int unreadCount) const;
     QString elidePreview(const QString &preview) const;
 
@@ -146,6 +150,7 @@ private:
     QPointer<AddFriendDialog> m_addFriendDialog;
     QPointer<DeleteFriendDialog> m_deleteFriendDialog;
     QPointer<CreateGroupDialog> m_createGroupDialog;
+    QPointer<SearchGroupDialog> m_searchGroupDialog;
     conversationlist::ConversationListManager m_conversationListManager;
     friendlist::FriendListManager m_friendListManager;
     QString m_pendingConversationListRequestId;
@@ -172,6 +177,7 @@ private slots:
     void onOpenAddFriend();
     void onOpenDeleteFriend();
     void onOpenCreateGroup();
+    void onOpenSearchGroup();
     void onAvatarReplyFinished(QNetworkReply *reply);
     void onConversationListPayloadReceived(const QString &requestId,
                                            const QJsonObject &data);

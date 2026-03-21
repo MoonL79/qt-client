@@ -4,6 +4,7 @@
 #include "creategroupdialog.h"
 #include "deletefrienddialog.h"
 #include "protocol.h"
+#include "searchgroupdialog.h"
 #include "settingswindow.h"
 #include "sessionwindow.h"
 #include "ui_widget.h"
@@ -247,8 +248,7 @@ void Widget::initUI() {
     onOpenCreateGroup();
   });
   connect(joinGroupAction, &QAction::triggered, this, [this]() {
-    QMessageBox::information(this, QStringLiteral("加入群聊"),
-                             QStringLiteral("加入群聊功能暂未实现。"));
+    onOpenSearchGroup();
   });
 
   quickActionLayout->addWidget(quickActionBtn);
@@ -700,6 +700,9 @@ void Widget::onOpenSettings() {
     if (m_createGroupDialog) {
       m_createGroupDialog->close();
     }
+    if (m_searchGroupDialog) {
+      m_searchGroupDialog->close();
+    }
     m_currentUserId.clear();
     m_currentUserNumericId.clear();
     m_currentDisplayName.clear();
@@ -879,6 +882,54 @@ void Widget::onOpenCreateGroup() {
   m_createGroupDialog->activateWindow();
 }
 
+void Widget::onOpenSearchGroup() {
+  if (!m_profileApiClient) {
+    QMessageBox::warning(this, QStringLiteral("无法搜索群聊"),
+                         QStringLiteral("Profile 服务未初始化。"));
+    return;
+  }
+
+  if (m_searchGroupDialog) {
+    if (m_searchGroupDialog->isMinimized()) {
+      m_searchGroupDialog->showNormal();
+    } else {
+      m_searchGroupDialog->show();
+    }
+    m_searchGroupDialog->raise();
+    m_searchGroupDialog->activateWindow();
+    return;
+  }
+
+  m_searchGroupDialog = new SearchGroupDialog(m_profileApiClient, this);
+  connect(m_searchGroupDialog, &SearchGroupDialog::groupJoined, this,
+          [this](const JoinGroupResult &result) {
+            const QString conversationId = result.conversationId.trimmed();
+            const QString action = result.message.trimmed();
+            if (action == QStringLiteral("open_existing_group")) {
+              if (!conversationId.isEmpty()) {
+                if (QListWidgetItem *item =
+                        findConversationItemByConversationId(conversationId)) {
+                  onSessionDoubleClicked(item);
+                  return;
+                }
+                m_pendingOpenConversationId = conversationId;
+              }
+              requestConversationList(true);
+              return;
+            }
+
+            if (!conversationId.isEmpty()) {
+              m_pendingOpenConversationId = conversationId;
+            }
+            requestConversationList(true);
+          });
+  connect(m_searchGroupDialog, &QObject::destroyed, this,
+          [this]() { m_searchGroupDialog = nullptr; });
+  m_searchGroupDialog->show();
+  m_searchGroupDialog->raise();
+  m_searchGroupDialog->activateWindow();
+}
+
 void Widget::requestConversationList(bool force) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
@@ -962,6 +1013,7 @@ void Widget::refreshConversationListUi() {
         m_conversationStatesByConversationId.value(conversationItem.conversationId);
     state.conversationId = conversationItem.conversationId.trimmed();
     state.conversationUuid = conversationItem.conversationUuid.trimmed();
+    state.groupNumericId = conversationItem.groupNumericId.trimmed();
     state.conversationType = conversationItem.conversationType;
     state.displayName = conversationItem.name;
     state.avatarUrl = conversationItem.avatarUrl;
@@ -1015,6 +1067,7 @@ void Widget::refreshGroupListUi() {
         m_conversationStatesByConversationId.value(conversationItem.conversationId);
     state.conversationId = conversationItem.conversationId.trimmed();
     state.conversationUuid = conversationItem.conversationUuid.trimmed();
+    state.groupNumericId = conversationItem.groupNumericId.trimmed();
     state.conversationType = conversationItem.conversationType;
     state.displayName = conversationItem.name;
     state.avatarUrl = conversationItem.avatarUrl;
@@ -1061,6 +1114,7 @@ void Widget::updateConversationListItem(
       m_conversationStatesByConversationId.value(conversationItem.conversationId);
   state.conversationId = conversationItem.conversationId.trimmed();
   state.conversationUuid = conversationItem.conversationUuid.trimmed();
+  state.groupNumericId = conversationItem.groupNumericId.trimmed();
   state.conversationType = conversationItem.conversationType;
   state.displayName = conversationItem.name;
   state.avatarUrl = conversationItem.avatarUrl;
@@ -1360,8 +1414,9 @@ QListWidgetItem *Widget::upsertConversationListItemToList(
       state.displayName.isEmpty() ? QStringLiteral("未知会话") : state.displayName;
   const Session::Type sessionType =
       state.conversationType == 2 ? Session::Type::Group : Session::Type::Direct;
-  const Session session =
-      Session::create(displayName, sessionType, state.conversationId);
+  const Session session = Session::create(displayName, sessionType,
+                                          state.conversationId,
+                                          state.groupNumericId);
   m_sessionsById.insert(session.id(), session);
 
   auto *item = new QListWidgetItem();
@@ -1418,10 +1473,9 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
   if (sessionId.isEmpty() || !m_sessionsById.contains(sessionId)) {
     const Session::Type sessionType =
         state.conversationType == 2 ? Session::Type::Group : Session::Type::Direct;
-    const Session session =
-        Session::create(displayName.isEmpty() ? QStringLiteral("未知会话")
-                                              : displayName,
-                        sessionType, state.conversationId);
+    const Session session = Session::create(
+        displayName.isEmpty() ? QStringLiteral("未知会话") : displayName,
+        sessionType, state.conversationId, state.groupNumericId);
     sessionId = session.id();
     m_sessionsById.insert(sessionId, session);
     item->setData(kRoleSessionId, sessionId);
@@ -1429,9 +1483,11 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
                   sessionType == Session::Type::Group ? "group" : "direct");
   }
 
-  item->setText(buildSessionItemText(state.conversationType, displayName, numericId,
+  item->setText(buildSessionItemText(state.conversationType, displayName,
+                                     state.groupNumericId, numericId,
                                      isOnline, userStatus,
                                      state.lastMessagePreview, state.memberCount,
+                                     item->listWidget() == m_groupList,
                                      state.unreadCount));
   item->setData(kRoleDisplayName, displayName);
   item->setData(kRoleUserId, userId);
@@ -1445,9 +1501,16 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
   item->setData(kRoleAvatarUrl, state.avatarUrl);
   item->setIcon(conversationIcon(state.conversationType));
   if (state.conversationType == 2) {
-    item->setToolTip(state.memberCount > 0
-                         ? QStringLiteral("群聊成员数: %1").arg(state.memberCount)
-                         : QStringLiteral("群聊"));
+    QStringList toolTipParts;
+    if (!state.groupNumericId.trimmed().isEmpty()) {
+      toolTipParts.push_back(
+          QStringLiteral("群号: %1").arg(state.groupNumericId.trimmed()));
+    }
+    if (state.memberCount > 0) {
+      toolTipParts.push_back(QStringLiteral("群聊成员数: %1").arg(state.memberCount));
+    }
+    item->setToolTip(toolTipParts.isEmpty() ? QStringLiteral("群聊")
+                                            : toolTipParts.join(QStringLiteral("\n")));
   } else {
     item->setToolTip(friendPresenceText(isOnline, lastSeenAtUtc));
   }
@@ -1473,18 +1536,31 @@ void Widget::resetConversationUnread(const QString &conversationId) {
 
 QString Widget::buildSessionItemText(int conversationType,
                                      const QString &displayName,
+                                     const QString &groupNumericId,
                                      const QString &numericId, bool isOnline,
                                      int userStatus, const QString &preview,
                                      int memberCount,
+                                     bool preferGroupMeta,
                                      int unreadCount) const {
   QString firstLine;
   QString previewText;
   if (conversationType == 2) {
     firstLine = displayName;
-    previewText = preview.trimmed().isEmpty()
-                      ? (memberCount > 0 ? QStringLiteral("%1 人").arg(memberCount)
-                                         : QStringLiteral("群聊"))
-                      : elidePreview(preview);
+    QStringList groupMeta;
+    if (!groupNumericId.trimmed().isEmpty()) {
+      groupMeta.push_back(QStringLiteral("群号: %1").arg(groupNumericId));
+    }
+    if (memberCount > 0) {
+      groupMeta.push_back(QStringLiteral("%1 人").arg(memberCount));
+    }
+    const QString groupMetaText =
+        groupMeta.isEmpty() ? QStringLiteral("群聊")
+                            : groupMeta.join(QStringLiteral("  "));
+    if (preferGroupMeta || preview.trimmed().isEmpty()) {
+      previewText = groupMetaText;
+    } else {
+      previewText = elidePreview(preview);
+    }
   } else {
     firstLine = QStringLiteral("%1 (%2) [%3|%4]")
                     .arg(displayName,

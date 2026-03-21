@@ -9,15 +9,18 @@ public:
 
   Session() = default;
   Session(const QString &id, const QString &displayName, Type type,
-          const QString &conversationId = QString());
+          const QString &conversationId = QString(),
+          const QString &groupNumericId = QString());
 
   static Session create(const QString &displayName, Type type,
-                        const QString &conversationId = QString());
+                        const QString &conversationId = QString(),
+                        const QString &groupNumericId = QString());
 
   const QString &id() const;
   const QString &displayName() const;
   Type type() const;
   const QString &conversationId() const;
+  const QString &groupNumericId() const;
 
   bool isValid() const;
 
@@ -26,6 +29,7 @@ private:
   QString m_displayName;
   Type m_type = Type::Direct;
   QString m_conversationId;
+  QString m_groupNumericId;
 };
 
 #endif // SESSION_H

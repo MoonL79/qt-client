@@ -12,6 +12,7 @@ namespace conversationlist {
 struct ConversationItem {
   QString conversationId;
   QString conversationUuid;
+  QString groupNumericId;
   int conversationType = 0;
   QString name;
   QString avatarUrl;
