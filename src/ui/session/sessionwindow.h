@@ -39,8 +39,8 @@ public:
   };
 
   explicit SessionWindow(const Session &session, QWidget *parent = nullptr);
-  void setFriendIdentity(const QString &userId, const QString &numericId);
-  void updateFriendPresence(bool isOnline, const QString &lastSeenAtUtc);
+  void setPeerIdentity(const QString &userId, const QString &numericId);
+  void updatePeerPresence(bool isOnline, const QString &lastSeenAtUtc);
 
 signals:
   void outgoingMessageSubmitted(const QString &conversationId,
@@ -101,10 +101,10 @@ private:
   QLabel *m_presenceLabel;
   QPushButton *m_testBtn;
   QString m_pendingMessage;
-  QString m_friendUserId;
-  QString m_friendNumericId;
-  QString m_friendLastSeenAtUtc;
-  bool m_friendIsOnline = false;
+  QString m_peerUserId;
+  QString m_peerNumericId;
+  QString m_peerLastSeenAtUtc;
+  bool m_peerIsOnline = false;
   QVector<ChatMessage> m_messages;
   QHash<QString, int> m_pendingMessageIndexesByRequestId;
   void onSendClicked();

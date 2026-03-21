@@ -73,6 +73,26 @@ struct FriendItem {
 Q_DECLARE_METATYPE(FriendItem)
 Q_DECLARE_METATYPE(QVector<FriendItem>)
 
+struct ConversationItem {
+  QString conversationId;
+  QString conversationUuid;
+  int conversationType = 0;
+  QString name;
+  QString avatarUrl;
+  QString peerUserId;
+  QString peerNumericId;
+  QString peerUsername;
+  QString peerNickname;
+  QString peerAvatarUrl;
+  QString peerBio;
+  int peerStatus = 0;
+  bool peerIsOnline = false;
+  QString peerLastSeenAt;
+  QDateTime peerLastSeenAtUtc;
+};
+Q_DECLARE_METATYPE(ConversationItem)
+Q_DECLARE_METATYPE(QVector<ConversationItem>)
+
 class ProfileApiClient : public QObject {
   Q_OBJECT
 
@@ -90,6 +110,7 @@ public:
   QString deleteFriend(const QString &userNumericId,
                        const QString &friendNumericId);
   QString fetchFriendList(const QString &myNumericId);
+  QString fetchConversationList(const QString &myNumericId);
 
 signals:
   void profileInfoReceived(const QString &requestId, const ProfileInfo &info);
@@ -104,6 +125,12 @@ signals:
                                  const QJsonObject &data);
   void friendListFailed(const QString &requestId, int code,
                         const QString &message);
+  void conversationListFetched(const QString &requestId,
+                               const QVector<ConversationItem> &conversations);
+  void conversationListPayloadReceived(const QString &requestId,
+                                       const QJsonObject &data);
+  void conversationListFailed(const QString &requestId, int code,
+                              const QString &message);
   void requestFailed(const QString &requestId, const QString &action,
                      const QString &error);
   void requestFailedDetailed(const QString &requestId, const QString &action,
@@ -135,6 +162,8 @@ private:
                             const QString &friendNumericId,
                             QString *error) const;
   bool validateFetchFriendList(const QString &myNumericId, QString *error) const;
+  bool validateFetchConversationList(const QString &myNumericId,
+                                     QString *error) const;
 
   void sendProfileRequest(const QString &action, const QString &requestId,
                           const QJsonObject &data, int retries,
@@ -158,6 +187,9 @@ private:
                                QString *error) const;
   bool parseFriendList(const QJsonObject &data, QVector<FriendItem> *outFriends,
                        QString *error) const;
+  bool parseConversationList(const QJsonObject &data,
+                             QVector<ConversationItem> *outConversations,
+                             QString *error) const;
 
 private:
   websocketclient *m_client = nullptr;

@@ -43,6 +43,8 @@ qt_add_executable(qt-client
     src/session/session.cpp
     src/session/usersession.h
     src/session/usersession.cpp
+    src/conversation/conversationlistmanager.h
+    src/conversation/conversationlistmanager.cpp
     src/friend/friendlistmanager.h
     src/friend/friendlistmanager.cpp
 )
@@ -58,6 +60,7 @@ target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/network
     ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
     ${CMAKE_CURRENT_SOURCE_DIR}/src/session
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/conversation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/friend
 )
 

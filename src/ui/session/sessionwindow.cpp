@@ -111,21 +111,21 @@ SessionWindow::SessionWindow(const Session &session, QWidget *parent)
   initUI();
 }
 
-void SessionWindow::setFriendIdentity(const QString &userId,
-                                      const QString &numericId) {
-  m_friendUserId = userId.trimmed();
-  m_friendNumericId = numericId.trimmed();
+void SessionWindow::setPeerIdentity(const QString &userId,
+                                    const QString &numericId) {
+  m_peerUserId = userId.trimmed();
+  m_peerNumericId = numericId.trimmed();
 }
 
-void SessionWindow::updateFriendPresence(bool isOnline,
-                                         const QString &lastSeenAtUtc) {
-  m_friendIsOnline = isOnline;
-  m_friendLastSeenAtUtc = lastSeenAtUtc.trimmed();
+void SessionWindow::updatePeerPresence(bool isOnline,
+                                       const QString &lastSeenAtUtc) {
+  m_peerIsOnline = isOnline;
+  m_peerLastSeenAtUtc = lastSeenAtUtc.trimmed();
   refreshPresenceLabel();
-  qInfo().noquote() << "[SessionWindow] updated friend presence user_id="
-                    << m_friendUserId << "numeric_id=" << m_friendNumericId
-                    << "is_online=" << m_friendIsOnline
-                    << "last_seen_at=" << m_friendLastSeenAtUtc;
+  qInfo().noquote() << "[SessionWindow] updated peer presence user_id="
+                    << m_peerUserId << "numeric_id=" << m_peerNumericId
+                    << "is_online=" << m_peerIsOnline << "last_seen_at="
+                    << m_peerLastSeenAtUtc;
 }
 
 void SessionWindow::initUI() {
@@ -328,10 +328,10 @@ void SessionWindow::sendPendingMessage() {
   m_pendingMessage.clear();
   const QString conversationId = m_session.conversationId().trimmed();
   if (conversationId.isEmpty()) {
-    appendStatusLine(QStringLiteral("缺少 conversation_uuid，无法发送消息"));
-    qWarning() << "[SessionWindow] missing conversation_uuid for display_name="
-               << m_session.displayName() << "friend_user_id=" << m_friendUserId
-               << "friend_numeric_id=" << m_friendNumericId;
+    appendStatusLine(QStringLiteral("缺少 conversation_id，无法发送消息"));
+    qWarning() << "[SessionWindow] missing conversation_id for display_name="
+               << m_session.displayName() << "peer_user_id=" << m_peerUserId
+               << "peer_numeric_id=" << m_peerNumericId;
     return;
   }
 
@@ -453,7 +453,7 @@ void SessionWindow::refreshPresenceLabel() {
   if (!m_presenceLabel) {
     return;
   }
-  m_presenceLabel->setText(presenceText(m_friendIsOnline, m_friendLastSeenAtUtc));
+  m_presenceLabel->setText(presenceText(m_peerIsOnline, m_peerLastSeenAtUtc));
 }
 
 void SessionWindow::onTestConnection() {

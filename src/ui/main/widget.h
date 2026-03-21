@@ -1,6 +1,7 @@
 #ifndef WIDGET_H
 #define WIDGET_H
 
+#include "conversationlistmanager.h"
 #include "friendlistmanager.h"
 #include "profileapiclient.h"
 #include "session.h"
@@ -60,9 +61,19 @@ protected:
 private:
     struct ConversationListState {
         QString conversationId;
+        QString conversationUuid;
+        int conversationType = 0;
         QString displayName;
-        QString userId;
-        QString numericId;
+        QString avatarUrl;
+        QString peerUserId;
+        QString peerNumericId;
+        QString peerUsername;
+        QString peerNickname;
+        QString peerAvatarUrl;
+        QString peerBio;
+        int peerStatus = 0;
+        bool peerIsOnline = false;
+        QString peerLastSeenAt;
         QString lastMessagePreview;
         int unreadCount = 0;
         bool placeholder = false;
@@ -71,9 +82,11 @@ private:
     void initUI();
     void initAvatarHttpClient();
     void addSessionItem(const Session &session);
-    void requestFriendList(bool force = false);
-    void refreshFriendListUi();
-    void updateFriendListItem(const friendlist::FriendItem &friendItem);
+    void requestConversationList(bool force = false);
+    void requestFriendListForContacts(bool force = false);
+    void refreshConversationListUi();
+    void updateConversationListItem(
+        const conversationlist::ConversationItem &conversationItem);
     void handleIncomingRealtimePayload(const QString &payload,
                                        const QString &sourceTag);
     void handleMessageEnvelope(const protocol::Envelope &envelope);
@@ -85,10 +98,10 @@ private:
     void syncFriendListToDeleteDialog();
     QListWidgetItem *findSessionItemByConversationId(const QString &conversationId) const;
     QListWidgetItem *upsertConversationListItem(const ConversationListState &state,
-                                                const friendlist::FriendItem *friendItem);
+                                                const conversationlist::ConversationItem *conversationItem);
     void applyConversationStateToItem(QListWidgetItem *item,
                                       const ConversationListState &state,
-                                      const friendlist::FriendItem *friendItem);
+                                      const conversationlist::ConversationItem *conversationItem);
     void resetConversationUnread(const QString &conversationId);
     QString buildSessionItemText(const QString &displayName,
                                  const QString &numericId,
@@ -117,9 +130,11 @@ private:
     QPointer<AddFriendDialog> m_addFriendDialog;
     QPointer<DeleteFriendDialog> m_deleteFriendDialog;
     QPushButton* m_addFriendBtn = nullptr;
+    conversationlist::ConversationListManager m_conversationListManager;
     friendlist::FriendListManager m_friendListManager;
+    QString m_pendingConversationListRequestId;
     QString m_pendingFriendListRequestId;
-    QTimer* m_friendListRefreshTimer = nullptr;
+    QTimer* m_conversationListRefreshTimer = nullptr;
     
     QListWidget* m_sessionList;
     QHash<QString, Session> m_sessionsById;
@@ -138,6 +153,10 @@ private slots:
     void onOpenAddFriend();
     void onOpenDeleteFriend();
     void onAvatarReplyFinished(QNetworkReply *reply);
+    void onConversationListPayloadReceived(const QString &requestId,
+                                           const QJsonObject &data);
+    void onConversationListFailed(const QString &requestId, int code,
+                                  const QString &message);
     void onFriendListPayloadReceived(const QString &requestId,
                                      const QJsonObject &data);
     void onFriendListFailed(const QString &requestId, int code,
