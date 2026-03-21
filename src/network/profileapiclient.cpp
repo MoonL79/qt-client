@@ -20,6 +20,8 @@ constexpr const char *kActionDeleteFriend = "DELETE_FRIEND";
 constexpr const char *kActionListFriends = "LIST_FRIENDS";
 constexpr const char *kActionListConversations = "LIST_CONVERSATIONS";
 constexpr const char *kActionCreateGroup = "CREATE_GROUP";
+constexpr const char *kActionJoinGroup = "JOIN_GROUP";
+constexpr const char *kActionListGroups = "LIST_GROUPS";
 
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
@@ -35,6 +37,20 @@ QString jsonValueToString(const QJsonValue &value) {
     return QString::number(num);
   }
   return QString();
+}
+
+QString readGroupNumericId(const QJsonObject &obj) {
+  const QString groupNumericId = jsonValueToString(obj.value("group_numeric_id"));
+  if (!groupNumericId.isEmpty()) {
+    return groupNumericId;
+  }
+
+  const QString numericId = jsonValueToString(obj.value("numeric_id"));
+  if (!numericId.isEmpty()) {
+    return numericId;
+  }
+
+  return jsonValueToString(obj.value("group_id"));
 }
 
 bool readRequiredString(const QJsonObject &obj, const char *key, QString *out,
@@ -148,6 +164,9 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
   qRegisterMetaType<ConversationItem>("ConversationItem");
   qRegisterMetaType<QVector<ConversationItem>>("QVector<ConversationItem>");
   qRegisterMetaType<CreateGroupResult>("CreateGroupResult");
+  qRegisterMetaType<JoinGroupResult>("JoinGroupResult");
+  qRegisterMetaType<GroupSearchItem>("GroupSearchItem");
+  qRegisterMetaType<QVector<GroupSearchItem>>("QVector<GroupSearchItem>");
   qRegisterMetaType<QJsonObject>("QJsonObject");
 
   Q_ASSERT_X(thread() == QThread::currentThread(), "ProfileApiClient",
@@ -315,6 +334,53 @@ QString ProfileApiClient::createGroup(const QString &name,
   return requestId;
 }
 
+QString ProfileApiClient::joinGroup(const QString &groupNumericId,
+                                    const QString &conversationId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionJoinGroup);
+
+  QString error;
+  if (!validateJoinGroup(groupNumericId, conversationId, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonObject data;
+  const QString trimmedGroupNumericId = groupNumericId.trimmed();
+  const QString trimmedConversationId = conversationId.trimmed();
+  if (!trimmedGroupNumericId.isEmpty()) {
+    data.insert("group_numeric_id", trimmedGroupNumericId);
+  } else if (!trimmedConversationId.isEmpty()) {
+    data.insert("conversation_id", trimmedConversationId);
+  }
+  sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
+QString ProfileApiClient::listGroups(const QString &keyword,
+                                     const QString &groupNumericId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionListGroups);
+
+  QString error;
+  if (!validateListGroups(keyword, groupNumericId, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonObject data;
+  const QString trimmedKeyword = keyword.trimmed();
+  const QString trimmedGroupNumericId = groupNumericId.trimmed();
+  if (!trimmedKeyword.isEmpty()) {
+    data.insert("keyword", trimmedKeyword);
+  }
+  if (!trimmedGroupNumericId.isEmpty()) {
+    data.insert("group_numeric_id", trimmedGroupNumericId);
+  }
+  sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
 void ProfileApiClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -454,6 +520,30 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
       return;
     }
     emit createGroupSucceeded(requestId, result);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionJoinGroup)) {
+    JoinGroupResult result;
+    QString error;
+    if (!parseJoinGroupResult(envelope.data, &result, &error)) {
+      failRequest(requestId, expectedAction, error, 3003);
+      return;
+    }
+    result.ok = true;
+    result.message = msg;
+    emit joinGroupSucceeded(requestId, result);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionListGroups)) {
+    QVector<GroupSearchItem> groups;
+    QString error;
+    if (!parseGroupSearchList(envelope.data, &groups, &error)) {
+      failRequest(requestId, expectedAction, error, 3003);
+      return;
+    }
+    emit groupsListed(requestId, groups);
     return;
   }
 
@@ -704,6 +794,33 @@ bool ProfileApiClient::validateCreateGroup(const QString &name,
     return false;
   }
   return true;
+}
+
+bool ProfileApiClient::validateJoinGroup(const QString &groupNumericId,
+                                         const QString &conversationId,
+                                         QString *error) const {
+  if (groupNumericId.trimmed().isEmpty() && conversationId.trimmed().isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("group_numeric_id or conversation_id is required");
+    }
+    return false;
+  }
+  if (groupNumericId.trimmed().size() > 255 ||
+      conversationId.trimmed().size() > 255) {
+    if (error) {
+      *error = QStringLiteral("group identifier is too long");
+    }
+    return false;
+  }
+  return true;
+}
+
+bool ProfileApiClient::validateListGroups(const QString &keyword,
+                                          const QString &groupNumericId,
+                                          QString *error) const {
+  Q_UNUSED(error);
+  return keyword.trimmed().size() <= 255 &&
+         groupNumericId.trimmed().size() <= 255;
 }
 
 void ProfileApiClient::sendProfileRequest(const QString &action,
@@ -1030,6 +1147,103 @@ bool ProfileApiClient::parseCreateGroupResult(const QJsonObject &data,
   return true;
 }
 
+bool ProfileApiClient::parseJoinGroupResult(const QJsonObject &data,
+                                            JoinGroupResult *outResult,
+                                            QString *error) const {
+  if (!outResult) {
+    if (error) {
+      *error = QStringLiteral("internal error: out result is null");
+    }
+    return false;
+  }
+
+  JoinGroupResult result;
+  result.conversationId = jsonValueToString(data.value("conversation_id"));
+  result.conversationUuid = jsonValueToString(data.value("conversation_uuid"));
+  result.groupNumericId = readGroupNumericId(data);
+  result.conversationType = readOptionalInt(data, "conversation_type", 0);
+  result.name = data.value("name").toString().trimmed();
+  result.ownerUserId = jsonValueToString(data.value("owner_user_id"));
+  result.memberCount = readOptionalInt(data, "member_count", 0);
+  result.joinedUserId = jsonValueToString(data.value("joined_user_id"));
+  result.joinedNumericId = jsonValueToString(data.value("joined_numeric_id"));
+
+  if (result.conversationId.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("invalid JOIN_GROUP response fields");
+    }
+    return false;
+  }
+  if (result.conversationUuid.isEmpty()) {
+    result.conversationUuid = result.conversationId;
+  }
+  if (result.name.isEmpty()) {
+    result.name = result.conversationId;
+  }
+
+  *outResult = result;
+  return true;
+}
+
+bool ProfileApiClient::parseGroupSearchList(const QJsonObject &data,
+                                            QVector<GroupSearchItem> *outGroups,
+                                            QString *error) const {
+  if (!outGroups) {
+    if (error) {
+      *error = QStringLiteral("internal error: out groups is null");
+    }
+    return false;
+  }
+
+  const QJsonValue groupsVal = data.value("groups");
+  if (groupsVal.isUndefined() || groupsVal.isNull()) {
+    outGroups->clear();
+    return true;
+  }
+  if (!groupsVal.isArray()) {
+    if (error) {
+      *error = QStringLiteral("invalid LIST_GROUPS response: groups is not array");
+    }
+    return false;
+  }
+
+  const QJsonArray arr = groupsVal.toArray();
+  outGroups->clear();
+  outGroups->reserve(arr.size());
+  for (const QJsonValue &itemVal : arr) {
+    if (!itemVal.isObject()) {
+      continue;
+    }
+
+    const QJsonObject obj = itemVal.toObject();
+    GroupSearchItem item;
+    item.conversationId = jsonValueToString(obj.value("conversation_id"));
+    item.conversationUuid = jsonValueToString(obj.value("conversation_uuid"));
+    item.groupNumericId = readGroupNumericId(obj);
+    item.conversationType = readOptionalInt(obj, "conversation_type", 0);
+    item.name = obj.value("name").toString().trimmed();
+    item.avatarUrl = obj.value("avatar_url").toString().trimmed();
+    item.notice = obj.value("notice").toString().trimmed();
+    item.ownerUserId = jsonValueToString(obj.value("owner_user_id"));
+    item.memberCount = readOptionalInt(obj, "member_count", 0);
+    item.isMember = readOptionalBool(obj, "is_member", false);
+    item.role = readOptionalInt(obj, "role", 0);
+    item.updatedAt = obj.value("updated_at").toString().trimmed();
+
+    if (item.conversationId.isEmpty()) {
+      continue;
+    }
+    if (item.conversationUuid.isEmpty()) {
+      item.conversationUuid = item.conversationId;
+    }
+    if (item.name.isEmpty()) {
+      item.name = item.conversationId;
+    }
+    outGroups->push_back(item);
+  }
+  return true;
+}
+
 bool ProfileApiClient::parseFriendList(const QJsonObject &data,
                                        QVector<FriendItem> *outFriends,
                                        QString *error) const {
@@ -1127,6 +1341,7 @@ bool ProfileApiClient::parseConversationList(
     ConversationItem item;
     item.conversationId = jsonValueToString(obj.value("conversation_id"));
     item.conversationUuid = jsonValueToString(obj.value("conversation_uuid"));
+    item.groupNumericId = readGroupNumericId(obj);
     item.conversationType = readOptionalInt(obj, "conversation_type", 0);
     item.name = obj.value("name").toString().trimmed();
     item.avatarUrl = obj.value("avatar_url").toString().trimmed();

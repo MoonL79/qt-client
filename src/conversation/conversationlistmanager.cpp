@@ -71,6 +71,24 @@ QString resolveDisplayName(const conversationlist::ConversationItem &item) {
 
 namespace conversationlist {
 
+namespace {
+
+QString readGroupNumericId(const QJsonObject &obj) {
+  const QString groupNumericId = valueToString(obj.value("group_numeric_id"));
+  if (!groupNumericId.isEmpty()) {
+    return groupNumericId;
+  }
+
+  const QString numericId = valueToString(obj.value("numeric_id"));
+  if (!numericId.isEmpty()) {
+    return numericId;
+  }
+
+  return valueToString(obj.value("group_id"));
+}
+
+} // namespace
+
 bool ConversationListManager::updateFromJson(const QByteArray &jsonBytes) {
   QJsonParseError parseError;
   const QJsonDocument doc = QJsonDocument::fromJson(jsonBytes, &parseError);
@@ -104,6 +122,7 @@ bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
     ConversationItem item;
     item.conversationId = valueToString(obj.value("conversation_id"));
     item.conversationUuid = valueToString(obj.value("conversation_uuid"));
+    item.groupNumericId = readGroupNumericId(obj);
     item.conversationType = valueToInt(obj.value("conversation_type"), 0);
     item.name = valueToString(obj.value("name"));
     item.avatarUrl = valueToString(obj.value("avatar_url"));

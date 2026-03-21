@@ -77,6 +77,7 @@ Q_DECLARE_METATYPE(QVector<FriendItem>)
 struct ConversationItem {
   QString conversationId;
   QString conversationUuid;
+  QString groupNumericId;
   int conversationType = 0;
   QString name;
   QString avatarUrl;
@@ -107,6 +108,38 @@ struct CreateGroupResult {
 };
 Q_DECLARE_METATYPE(CreateGroupResult)
 
+struct GroupSearchItem {
+  QString conversationId;
+  QString conversationUuid;
+  QString groupNumericId;
+  int conversationType = 0;
+  QString name;
+  QString avatarUrl;
+  QString notice;
+  QString ownerUserId;
+  int memberCount = 0;
+  bool isMember = false;
+  int role = 0;
+  QString updatedAt;
+};
+Q_DECLARE_METATYPE(GroupSearchItem)
+Q_DECLARE_METATYPE(QVector<GroupSearchItem>)
+
+struct JoinGroupResult {
+  bool ok = false;
+  QString message;
+  QString conversationId;
+  QString conversationUuid;
+  QString groupNumericId;
+  int conversationType = 0;
+  QString name;
+  QString ownerUserId;
+  int memberCount = 0;
+  QString joinedUserId;
+  QString joinedNumericId;
+};
+Q_DECLARE_METATYPE(JoinGroupResult)
+
 class ProfileApiClient : public QObject {
   Q_OBJECT
 
@@ -126,6 +159,10 @@ public:
   QString fetchFriendList(const QString &myNumericId);
   QString fetchConversationList(const QString &myNumericId);
   QString createGroup(const QString &name, const QStringList &memberNumericIds);
+  QString joinGroup(const QString &groupNumericId,
+                    const QString &conversationId = QString());
+  QString listGroups(const QString &keyword,
+                     const QString &groupNumericId = QString());
 
 signals:
   void profileInfoReceived(const QString &requestId, const ProfileInfo &info);
@@ -144,6 +181,9 @@ signals:
                                const QVector<ConversationItem> &conversations);
   void createGroupSucceeded(const QString &requestId,
                             const CreateGroupResult &result);
+  void joinGroupSucceeded(const QString &requestId, const JoinGroupResult &result);
+  void groupsListed(const QString &requestId,
+                    const QVector<GroupSearchItem> &groups);
   void conversationListPayloadReceived(const QString &requestId,
                                        const QJsonObject &data);
   void conversationListFailed(const QString &requestId, int code,
@@ -184,6 +224,12 @@ private:
   bool validateCreateGroup(const QString &name,
                            const QStringList &memberNumericIds,
                            QString *error) const;
+  bool validateJoinGroup(const QString &groupNumericId,
+                         const QString &conversationId,
+                         QString *error) const;
+  bool validateListGroups(const QString &keyword,
+                          const QString &groupNumericId,
+                          QString *error) const;
 
   void sendProfileRequest(const QString &action, const QString &requestId,
                           const QJsonObject &data, int retries,
@@ -208,6 +254,11 @@ private:
   bool parseCreateGroupResult(const QJsonObject &data,
                               CreateGroupResult *outResult,
                               QString *error) const;
+  bool parseJoinGroupResult(const QJsonObject &data, JoinGroupResult *outResult,
+                            QString *error) const;
+  bool parseGroupSearchList(const QJsonObject &data,
+                            QVector<GroupSearchItem> *outGroups,
+                            QString *error) const;
   bool parseFriendList(const QJsonObject &data, QVector<FriendItem> *outFriends,
                        QString *error) const;
   bool parseConversationList(const QJsonObject &data,
