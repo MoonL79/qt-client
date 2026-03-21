@@ -40,6 +40,8 @@ bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
   const QJsonValue action = obj.value("action");
   const QJsonValue requestId = obj.value("request_id");
   const QJsonValue code = obj.value("code");
+  const QJsonValue ok = obj.value("ok");
+  const QJsonValue message = obj.value("message");
   const QJsonValue data = obj.value("data");
 
   if (!type.isString() || !action.isString() || !requestId.isString() ||
@@ -55,6 +57,9 @@ bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
   outEnvelope->requestId = requestId.toString();
   outEnvelope->hasCode = false;
   outEnvelope->code = 0;
+  outEnvelope->hasOk = false;
+  outEnvelope->ok = false;
+  outEnvelope->message.clear();
   if (code.isDouble()) {
     outEnvelope->code = code.toInt();
     outEnvelope->hasCode = true;
@@ -65,6 +70,13 @@ bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
       outEnvelope->code = parsedCode;
       outEnvelope->hasCode = true;
     }
+  }
+  if (ok.isBool()) {
+    outEnvelope->ok = ok.toBool();
+    outEnvelope->hasOk = true;
+  }
+  if (message.isString()) {
+    outEnvelope->message = message.toString().trimmed();
   }
   outEnvelope->data = data.toObject();
   outEnvelope->isValid = true;

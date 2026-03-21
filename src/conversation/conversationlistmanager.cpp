@@ -107,6 +107,7 @@ bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
     item.conversationType = valueToInt(obj.value("conversation_type"), 0);
     item.name = valueToString(obj.value("name"));
     item.avatarUrl = valueToString(obj.value("avatar_url"));
+    item.memberCount = valueToInt(obj.value("member_count"), 0);
     item.peerUserId = valueToString(obj.value("peer_user_id"));
     item.peerNumericId = valueToString(obj.value("peer_numeric_id"));
     item.peerUsername = valueToString(obj.value("peer_username"));

@@ -1,6 +1,7 @@
 #include "widget.h"
 
 #include "addfrienddialog.h"
+#include "creategroupdialog.h"
 #include "deletefrienddialog.h"
 #include "protocol.h"
 #include "settingswindow.h"
@@ -12,6 +13,7 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMenu>
 #include <QMessageBox>
 #include <QNetworkRequest>
 #include <QPainter>
@@ -19,7 +21,10 @@
 #include <QPixmap>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStyle>
 #include <QStandardPaths>
+#include <QToolButton>
+#include <QTabBar>
 #include <QtGlobal>
 
 namespace {
@@ -89,6 +94,7 @@ constexpr int kRoleConversationId = Qt::UserRole + 7;
 constexpr int kRoleLastPreview = Qt::UserRole + 8;
 constexpr int kRoleUnreadCount = Qt::UserRole + 9;
 constexpr int kRoleAvatarUrl = Qt::UserRole + 10;
+constexpr int kRoleDisplayName = Qt::UserRole + 11;
 }
 
 Widget::Widget(QWidget *parent)
@@ -203,29 +209,50 @@ void Widget::initUI() {
   rightBtnLayout->addLayout(btnRowLayout);
   rightBtnLayout->addStretch();
 
-  QHBoxLayout *friendBtnLayout = new QHBoxLayout();
-  friendBtnLayout->setContentsMargins(0, 0, 0, 0);
-  friendBtnLayout->setSpacing(8);
-  friendBtnLayout->addStretch();
+  QHBoxLayout *quickActionLayout = new QHBoxLayout();
+  quickActionLayout->setContentsMargins(0, 0, 5, 5);
+  quickActionLayout->setSpacing(8);
+  quickActionLayout->addStretch();
 
-  QPushButton *addFriendBtn = new QPushButton("添加好友", m_topPanel);
-  QPushButton *removeFriendBtn = new QPushButton("删除好友", m_topPanel);
-  addFriendBtn->setFixedHeight(28);
-  removeFriendBtn->setFixedHeight(28);
-  addFriendBtn->setCursor(Qt::ArrowCursor);
-  removeFriendBtn->setCursor(Qt::ArrowCursor);
-  addFriendBtn->setStyleSheet(
-      "QPushButton { border: 1px solid #d0d0d0; border-radius: 4px; "
-      "background-color: #ffffff; color: #333333; padding: 0 10px; }"
-      "QPushButton:hover { background-color: #f5f5f5; }");
-  removeFriendBtn->setStyleSheet(
-      "QPushButton { border: 1px solid #d0d0d0; border-radius: 4px; "
-      "background-color: #ffffff; color: #333333; padding: 0 10px; }"
-      "QPushButton:hover { background-color: #f5f5f5; }");
-  friendBtnLayout->addWidget(addFriendBtn);
-  friendBtnLayout->addWidget(removeFriendBtn);
-  m_addFriendBtn = addFriendBtn;
-  rightBtnLayout->addLayout(friendBtnLayout);
+  auto *quickActionBtn = new QToolButton(m_topPanel);
+  quickActionBtn->setText("+");
+  quickActionBtn->setFixedSize(28, 28);
+  quickActionBtn->setPopupMode(QToolButton::InstantPopup);
+  quickActionBtn->setCursor(Qt::ArrowCursor);
+  quickActionBtn->setStyleSheet(
+      "QToolButton { border: 1px solid #d0d0d0; border-radius: 14px; "
+      "background-color: #ffffff; color: #333333; font-size: 18px; "
+      "font-weight: bold; }"
+      "QToolButton:hover { background-color: #f5f5f5; }"
+      "QToolButton::menu-indicator { image: none; width: 0px; }");
+
+  auto *quickActionMenu = new QMenu(quickActionBtn);
+  quickActionMenu->setStyleSheet(
+      "QMenu { background: #ffffff; border: 1px solid #d9d9d9; padding: 6px 0; }"
+      "QMenu::item { padding: 8px 18px; color: #222222; }"
+      "QMenu::item:selected { background: #f0f0f0; }");
+  QAction *addFriendAction = quickActionMenu->addAction(QStringLiteral("添加好友"));
+  QAction *deleteFriendAction =
+      quickActionMenu->addAction(QStringLiteral("删除好友"));
+  quickActionMenu->addSeparator();
+  QAction *createGroupAction =
+      quickActionMenu->addAction(QStringLiteral("创建群聊"));
+  QAction *joinGroupAction = quickActionMenu->addAction(QStringLiteral("加入群聊"));
+  quickActionBtn->setMenu(quickActionMenu);
+
+  connect(addFriendAction, &QAction::triggered, this, &Widget::onOpenAddFriend);
+  connect(deleteFriendAction, &QAction::triggered, this,
+          &Widget::onOpenDeleteFriend);
+  connect(createGroupAction, &QAction::triggered, this, [this]() {
+    onOpenCreateGroup();
+  });
+  connect(joinGroupAction, &QAction::triggered, this, [this]() {
+    QMessageBox::information(this, QStringLiteral("加入群聊"),
+                             QStringLiteral("加入群聊功能暂未实现。"));
+  });
+
+  quickActionLayout->addWidget(quickActionBtn);
+  rightBtnLayout->addLayout(quickActionLayout);
   mainTopLayout->addLayout(rightBtnLayout);
 
   // 样式：悬浮时背景变灰/红
@@ -252,19 +279,23 @@ void Widget::initUI() {
   closeBtn->setCursor(Qt::ArrowCursor);
 
   connect(settingsBtn, &QPushButton::clicked, this, &Widget::onOpenSettings);
-  connect(addFriendBtn, &QPushButton::clicked, this, &Widget::onOpenAddFriend);
-  connect(removeFriendBtn, &QPushButton::clicked, this,
-          &Widget::onOpenDeleteFriend);
   connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
   connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
 
-  // --- 中下部：会话列表 ---
-  m_sessionList = new QListWidget(container);
-  m_sessionList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-  m_sessionList->setFrameShape(QFrame::NoFrame); // 无边框
-  m_sessionList->setVerticalScrollBarPolicy(
-      Qt::ScrollBarAlwaysOn); // 滚动条常驻
-  m_sessionList->setStyleSheet(
+  // --- 中下部：标签页 ---
+  m_tabWidget = new QTabWidget(container);
+  m_tabWidget->setDocumentMode(true);
+  m_tabWidget->tabBar()->setExpanding(true);
+  m_tabWidget->tabBar()->setUsesScrollButtons(false);
+  m_tabWidget->setStyleSheet(
+      "QTabWidget::pane { border: none; background: transparent; }"
+      "QTabBar::tab { background: #e9ecef; color: #333333; padding: 8px 0; "
+      "margin: 10px 0 0 0; border-top-left-radius: 6px; "
+      "border-top-right-radius: 6px; }"
+      "QTabBar::tab:selected { background: #ffffff; font-weight: bold; }"
+      "QTabBar::tab:hover { background: #f5f5f5; }");
+
+  const QString listWidgetStyle =
       "QListWidget { background-color: #ffffff; color: #000000; border: "
       "none; "
       "margin: 10px; border-radius: 1px; outline: none; }"
@@ -287,13 +318,37 @@ void Widget::initUI() {
       "height: "
       "0px; }"
       "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { "
-      "background: none; }");
+      "background: none; }";
+
+  m_sessionList = new QListWidget(m_tabWidget);
+  m_sessionList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  m_sessionList->setFrameShape(QFrame::NoFrame);
+  m_sessionList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  m_sessionList->setStyleSheet(listWidgetStyle);
+
+  m_contactList = new QListWidget(m_tabWidget);
+  m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  m_contactList->setFrameShape(QFrame::NoFrame);
+  m_contactList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  m_contactList->setStyleSheet(listWidgetStyle);
+
+  m_groupList = new QListWidget(m_tabWidget);
+  m_groupList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+  m_groupList->setFrameShape(QFrame::NoFrame);
+  m_groupList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  m_groupList->setStyleSheet(listWidgetStyle);
+
+  m_tabWidget->addTab(m_sessionList, QStringLiteral("会话"));
+  m_tabWidget->addTab(m_contactList, QStringLiteral("联系人"));
+  m_tabWidget->addTab(m_groupList, QStringLiteral("群聊"));
 
   // 添加到容器布局
   containerLayout->addWidget(m_topPanel);
-  containerLayout->addWidget(m_sessionList);
+  containerLayout->addWidget(m_tabWidget);
 
   connect(m_sessionList, &QListWidget::itemDoubleClicked, this,
+          &Widget::onSessionDoubleClicked);
+  connect(m_groupList, &QListWidget::itemDoubleClicked, this,
           &Widget::onSessionDoubleClicked);
 
   connect(websocketclient::instance(), &websocketclient::textMessageReceived,
@@ -458,6 +513,7 @@ void Widget::setCurrentUserNumericId(const QString &numericId) {
     }
   }
   requestConversationList();
+  requestFriendListForContacts();
 }
 
 void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
@@ -480,6 +536,7 @@ void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
     m_conversationListRefreshTimer->start();
   }
   requestConversationList();
+  requestFriendListForContacts();
 }
 
 // --- 拖拽窗口支持 ---
@@ -567,7 +624,7 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
             state.unreadCount = 0;
             m_conversationStatesByConversationId.insert(conversationId, state);
             if (QListWidgetItem *listItem =
-                    findSessionItemByConversationId(conversationId)) {
+                    findConversationItemByConversationId(conversationId)) {
               applyConversationStateToItem(listItem, state, nullptr);
             }
           });
@@ -597,7 +654,7 @@ void Widget::addSessionItem(const Session &session) {
   item->setData(kRoleSessionType,
                 session.type() == Session::Type::Group ? "group" : "direct");
   item->setData(kRoleConversationId, session.conversationId());
-  item->setIcon(QIcon(":/resources/chat_icon.png"));
+  item->setIcon(conversationIcon(session.type() == Session::Type::Group ? 2 : 1));
   m_sessionList->addItem(item);
 }
 
@@ -640,6 +697,9 @@ void Widget::onOpenSettings() {
     if (m_deleteFriendDialog) {
       m_deleteFriendDialog->close();
     }
+    if (m_createGroupDialog) {
+      m_createGroupDialog->close();
+    }
     m_currentUserId.clear();
     m_currentUserNumericId.clear();
     m_currentDisplayName.clear();
@@ -647,6 +707,7 @@ void Widget::onOpenSettings() {
     m_currentAvatarUrl.clear();
     m_pendingConversationListRequestId.clear();
     m_pendingFriendListRequestId.clear();
+    m_pendingOpenConversationId.clear();
     if (m_conversationListRefreshTimer) {
       m_conversationListRefreshTimer->stop();
     }
@@ -657,6 +718,8 @@ void Widget::onOpenSettings() {
     m_sessionWindowsByConversationId.clear();
     m_conversationStatesByConversationId.clear();
     refreshConversationListUi();
+    refreshGroupListUi();
+    refreshContactListUi();
     emit logoutRequested();
     close();
   });
@@ -782,6 +845,40 @@ void Widget::onOpenDeleteFriend() {
   m_deleteFriendDialog->activateWindow();
 }
 
+void Widget::onOpenCreateGroup() {
+  if (!m_profileApiClient) {
+    QMessageBox::warning(this, QStringLiteral("无法创建群聊"),
+                         QStringLiteral("Profile 服务未初始化。"));
+    return;
+  }
+
+  if (m_createGroupDialog) {
+    m_createGroupDialog->setFriends(m_friendListManager.friends());
+    if (m_createGroupDialog->isMinimized()) {
+      m_createGroupDialog->showNormal();
+    } else {
+      m_createGroupDialog->show();
+    }
+    m_createGroupDialog->raise();
+    m_createGroupDialog->activateWindow();
+    return;
+  }
+
+  m_createGroupDialog = new CreateGroupDialog(m_friendListManager.friends(),
+                                              m_profileApiClient, this);
+  connect(m_createGroupDialog, &CreateGroupDialog::groupCreated, this,
+          [this](const CreateGroupResult &result) {
+            m_pendingOpenConversationId = result.conversationId.trimmed();
+            requestConversationList(true);
+          });
+  connect(m_createGroupDialog, &QObject::destroyed, this,
+          [this]() { m_createGroupDialog = nullptr; });
+  requestFriendListForContacts(true);
+  m_createGroupDialog->show();
+  m_createGroupDialog->raise();
+  m_createGroupDialog->activateWindow();
+}
+
 void Widget::requestConversationList(bool force) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
@@ -832,16 +929,32 @@ void Widget::refreshConversationListUi() {
 
   m_sessionList->clear();
   m_sessionsById.clear();
-  QSet<QString> renderedConversationIds;
+  QSet<QString> activeConversationIds;
 
   const QList<conversationlist::ConversationItem> &conversations =
       m_conversationListManager.conversations();
-  if (conversations.isEmpty() && m_conversationStatesByConversationId.isEmpty()) {
+  bool hasConversation = false;
+  for (const conversationlist::ConversationItem &conversationItem : conversations) {
+    if (!conversationItem.conversationId.trimmed().isEmpty()) {
+      activeConversationIds.insert(conversationItem.conversationId.trimmed());
+    }
+    hasConversation = true;
+  }
+
+  for (auto it = m_conversationStatesByConversationId.begin();
+       it != m_conversationStatesByConversationId.end();) {
+    if (!activeConversationIds.contains(it.key())) {
+      it = m_conversationStatesByConversationId.erase(it);
+      continue;
+    }
+    ++it;
+  }
+
+  if (!hasConversation) {
     auto *emptyItem = new QListWidgetItem(QStringLiteral("暂无会话"));
     emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable &
                         ~Qt::ItemIsEnabled);
     m_sessionList->addItem(emptyItem);
-    return;
   }
 
   for (const conversationlist::ConversationItem &conversationItem : conversations) {
@@ -852,6 +965,7 @@ void Widget::refreshConversationListUi() {
     state.conversationType = conversationItem.conversationType;
     state.displayName = conversationItem.name;
     state.avatarUrl = conversationItem.avatarUrl;
+    state.memberCount = conversationItem.memberCount;
     state.peerUserId = conversationItem.peerUserId;
     state.peerNumericId = conversationItem.peerNumericId;
     state.peerUsername = conversationItem.peerUsername;
@@ -864,77 +978,120 @@ void Widget::refreshConversationListUi() {
     state.placeholder = false;
     if (!state.conversationId.isEmpty()) {
       m_conversationStatesByConversationId.insert(state.conversationId, state);
-      renderedConversationIds.insert(state.conversationId);
+    }
+    upsertConversationListItemToList(m_sessionList, state, &conversationItem);
+  }
+}
+
+void Widget::refreshGroupListUi() {
+  if (!m_groupList) {
+    qWarning() << "[MainWidget] refresh group list skipped: group list is null";
+    return;
+  }
+
+  m_groupList->clear();
+
+  const QList<conversationlist::ConversationItem> &conversations =
+      m_conversationListManager.conversations();
+  bool hasGroupConversation = false;
+  for (const conversationlist::ConversationItem &conversationItem : conversations) {
+    if (conversationItem.conversationType == 2) {
+      hasGroupConversation = true;
+      break;
+    }
+  }
+  if (!hasGroupConversation) {
+    auto *emptyItem = new QListWidgetItem(QStringLiteral("暂无群聊"));
+    emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable &
+                        ~Qt::ItemIsEnabled);
+    m_groupList->addItem(emptyItem);
+  }
+
+  for (const conversationlist::ConversationItem &conversationItem : conversations) {
+    if (conversationItem.conversationType != 2) {
+      continue;
+    }
+    ConversationListState state =
+        m_conversationStatesByConversationId.value(conversationItem.conversationId);
+    state.conversationId = conversationItem.conversationId.trimmed();
+    state.conversationUuid = conversationItem.conversationUuid.trimmed();
+    state.conversationType = conversationItem.conversationType;
+    state.displayName = conversationItem.name;
+    state.avatarUrl = conversationItem.avatarUrl;
+    state.memberCount = conversationItem.memberCount;
+    state.peerUserId = conversationItem.peerUserId;
+    state.peerNumericId = conversationItem.peerNumericId;
+    state.peerUsername = conversationItem.peerUsername;
+    state.peerNickname = conversationItem.peerNickname;
+    state.peerAvatarUrl = conversationItem.peerAvatarUrl;
+    state.peerBio = conversationItem.peerBio;
+    state.peerStatus = conversationItem.peerStatus;
+    state.peerIsOnline = conversationItem.peerIsOnline;
+    state.peerLastSeenAt = conversationItem.peerLastSeenAt;
+    state.placeholder = false;
+    if (!state.conversationId.isEmpty()) {
+      m_conversationStatesByConversationId.insert(state.conversationId, state);
     }
     upsertConversationListItem(state, &conversationItem);
   }
+}
 
-  const auto conversationStates = m_conversationStatesByConversationId;
-  for (auto it = conversationStates.cbegin(); it != conversationStates.cend(); ++it) {
-    if (it.key().isEmpty() || renderedConversationIds.contains(it.key())) {
-      continue;
-    }
-    upsertConversationListItem(it.value(), nullptr);
+void Widget::refreshContactListUi() {
+  if (!m_contactList) {
+    qWarning() << "[MainWidget] refresh contact list skipped: contact list is null";
+    return;
   }
+  // Contacts still depend on LIST_FRIENDS until dedicated contact models are split out.
+  friendlist::FriendListManager::refreshListWidget(m_contactList,
+                                                   m_friendListManager.friends());
 }
 
 void Widget::updateConversationListItem(
     const conversationlist::ConversationItem &conversationItem) {
-  if (!m_sessionList) {
+  if (!m_sessionList && !m_groupList) {
+    return;
+  }
+  QListWidgetItem *item =
+      findConversationItemByConversationId(conversationItem.conversationId);
+  if (!item) {
     return;
   }
 
-  for (int i = 0; i < m_sessionList->count(); ++i) {
-    QListWidgetItem *item = m_sessionList->item(i);
-    if (!item) {
-      continue;
-    }
-
-    const QString itemUserId = item->data(kRoleUserId).toString().trimmed();
-    const QString itemNumericId =
-        item->data(kRoleNumericId).toString().trimmed();
-    if ((!conversationItem.peerUserId.isEmpty() &&
-         itemUserId == conversationItem.peerUserId) ||
-        (!conversationItem.peerNumericId.isEmpty() &&
-         itemNumericId == conversationItem.peerNumericId) ||
-        item->data(kRoleConversationId).toString().trimmed() ==
-            conversationItem.conversationId.trimmed()) {
-      ConversationListState state =
-          m_conversationStatesByConversationId.value(
-              conversationItem.conversationId);
-      state.conversationId = conversationItem.conversationId.trimmed();
-      state.conversationUuid = conversationItem.conversationUuid.trimmed();
-      state.conversationType = conversationItem.conversationType;
-      state.displayName = conversationItem.name;
-      state.avatarUrl = conversationItem.avatarUrl;
-      state.peerUserId = conversationItem.peerUserId;
-      state.peerNumericId = conversationItem.peerNumericId;
-      state.peerUsername = conversationItem.peerUsername;
-      state.peerNickname = conversationItem.peerNickname;
-      state.peerAvatarUrl = conversationItem.peerAvatarUrl;
-      state.peerBio = conversationItem.peerBio;
-      state.peerStatus = conversationItem.peerStatus;
-      state.peerIsOnline = conversationItem.peerIsOnline;
-      state.peerLastSeenAt = conversationItem.peerLastSeenAt;
-      state.placeholder = false;
-      if (!state.conversationId.isEmpty()) {
-        m_conversationStatesByConversationId.insert(state.conversationId, state);
-      }
-      applyConversationStateToItem(item, state, &conversationItem);
-      qInfo().noquote() << "[MainWidget] refreshed conversation list item peer_user_id="
-                        << conversationItem.peerUserId
-                        << "peer_numeric_id=" << conversationItem.peerNumericId
-                        << "presence="
-                        << friendPresenceText(conversationItem.peerIsOnline,
-                                              conversationItem.peerLastSeenAt);
-      return;
-    }
+  ConversationListState state =
+      m_conversationStatesByConversationId.value(conversationItem.conversationId);
+  state.conversationId = conversationItem.conversationId.trimmed();
+  state.conversationUuid = conversationItem.conversationUuid.trimmed();
+  state.conversationType = conversationItem.conversationType;
+  state.displayName = conversationItem.name;
+  state.avatarUrl = conversationItem.avatarUrl;
+  state.memberCount = conversationItem.memberCount;
+  state.peerUserId = conversationItem.peerUserId;
+  state.peerNumericId = conversationItem.peerNumericId;
+  state.peerUsername = conversationItem.peerUsername;
+  state.peerNickname = conversationItem.peerNickname;
+  state.peerAvatarUrl = conversationItem.peerAvatarUrl;
+  state.peerBio = conversationItem.peerBio;
+  state.peerStatus = conversationItem.peerStatus;
+  state.peerIsOnline = conversationItem.peerIsOnline;
+  state.peerLastSeenAt = conversationItem.peerLastSeenAt;
+  state.placeholder = false;
+  if (!state.conversationId.isEmpty()) {
+    m_conversationStatesByConversationId.insert(state.conversationId, state);
   }
+  applyConversationStateToItem(item, state, &conversationItem);
+  qInfo().noquote() << "[MainWidget] refreshed conversation list item peer_user_id="
+                    << conversationItem.peerUserId << "peer_numeric_id="
+                    << conversationItem.peerNumericId << "presence="
+                    << friendPresenceText(conversationItem.peerIsOnline,
+                                          conversationItem.peerLastSeenAt);
 }
 
 void Widget::syncFriendListToDeleteDialog() {
   if (m_deleteFriendDialog) {
     m_deleteFriendDialog->setFriends(m_friendListManager.friends());
+  }
+  if (m_createGroupDialog) {
+    m_createGroupDialog->setFriends(m_friendListManager.friends());
   }
 }
 
@@ -1008,7 +1165,7 @@ void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
   }
   m_conversationStatesByConversationId.insert(conversationId, state);
 
-  if (QListWidgetItem *item = findSessionItemByConversationId(conversationId)) {
+  if (QListWidgetItem *item = findConversationItemByConversationId(conversationId)) {
     applyConversationStateToItem(item, state, nullptr);
   } else {
     upsertConversationListItem(state, nullptr);
@@ -1082,6 +1239,17 @@ void Widget::onConversationListPayloadReceived(const QString &requestId,
     return;
   }
   refreshConversationListUi();
+  refreshGroupListUi();
+  if (!m_pendingOpenConversationId.isEmpty()) {
+    if (QListWidgetItem *item =
+            findConversationItemByConversationId(m_pendingOpenConversationId)) {
+      const QString createdConversationId = m_pendingOpenConversationId;
+      m_pendingOpenConversationId.clear();
+      onSessionDoubleClicked(item);
+      qInfo() << "[MainWidget] opened created group conversation_id="
+              << createdConversationId;
+    }
+  }
 }
 
 void Widget::onConversationListFailed(const QString &requestId, int code,
@@ -1095,6 +1263,7 @@ void Widget::onConversationListFailed(const QString &requestId, int code,
              << "message=" << message;
   m_conversationListManager.clear();
   refreshConversationListUi();
+  refreshGroupListUi();
 }
 
 void Widget::onFriendListPayloadReceived(const QString &requestId,
@@ -1108,6 +1277,7 @@ void Widget::onFriendListPayloadReceived(const QString &requestId,
     qWarning() << "[MainWidget] failed to parse friend list payload";
     return;
   }
+  refreshContactListUi();
   syncFriendListToDeleteDialog();
 }
 
@@ -1121,17 +1291,22 @@ void Widget::onFriendListFailed(const QString &requestId, int code,
   qWarning() << "[MainWidget] friend list request failed, code=" << code
              << "message=" << message;
   m_friendListManager.clear();
+  refreshContactListUi();
   syncFriendListToDeleteDialog();
 }
 
-QListWidgetItem *Widget::findSessionItemByConversationId(
-    const QString &conversationId) const {
-  if (!m_sessionList || conversationId.trimmed().isEmpty()) {
+QListWidget *Widget::listWidgetForConversationType(int conversationType) const {
+  return conversationType == 2 ? m_groupList : m_sessionList;
+}
+
+QListWidgetItem *Widget::findConversationItemInList(
+    QListWidget *listWidget, const QString &conversationId) const {
+  if (!listWidget || conversationId.trimmed().isEmpty()) {
     return nullptr;
   }
 
-  for (int i = 0; i < m_sessionList->count(); ++i) {
-    QListWidgetItem *item = m_sessionList->item(i);
+  for (int i = 0; i < listWidget->count(); ++i) {
+    QListWidgetItem *item = listWidget->item(i);
     if (!item) {
       continue;
     }
@@ -1143,16 +1318,39 @@ QListWidgetItem *Widget::findSessionItemByConversationId(
   return nullptr;
 }
 
+QListWidgetItem *Widget::findConversationItemByConversationId(
+    const QString &conversationId) const {
+  if (conversationId.trimmed().isEmpty()) {
+    return nullptr;
+  }
+
+  const QList<QListWidget *> listWidgets = {m_sessionList, m_groupList};
+  for (QListWidget *listWidget : listWidgets) {
+    if (QListWidgetItem *item =
+            findConversationItemInList(listWidget, conversationId)) {
+      return item;
+    }
+  }
+  return nullptr;
+}
+
 QListWidgetItem *Widget::upsertConversationListItem(
     const ConversationListState &state,
     const conversationlist::ConversationItem *conversationItem) {
-  if (!m_sessionList) {
+  QListWidget *targetList = listWidgetForConversationType(state.conversationType);
+  return upsertConversationListItemToList(targetList, state, conversationItem);
+}
+
+QListWidgetItem *Widget::upsertConversationListItemToList(
+    QListWidget *targetList, const ConversationListState &state,
+    const conversationlist::ConversationItem *conversationItem) {
+  if (!targetList) {
     return nullptr;
   }
 
   if (!state.conversationId.isEmpty()) {
     if (QListWidgetItem *existing =
-            findSessionItemByConversationId(state.conversationId)) {
+            findConversationItemInList(targetList, state.conversationId)) {
       applyConversationStateToItem(existing, state, conversationItem);
       return existing;
     }
@@ -1170,10 +1368,19 @@ QListWidgetItem *Widget::upsertConversationListItem(
   item->setData(kRoleSessionId, session.id());
   item->setData(kRoleSessionType,
                 sessionType == Session::Type::Group ? "group" : "direct");
-  item->setIcon(QIcon(":/resources/chat_icon.png"));
+  item->setIcon(conversationIcon(state.conversationType));
   applyConversationStateToItem(item, state, conversationItem);
-  m_sessionList->addItem(item);
+  targetList->addItem(item);
   return item;
+}
+
+QIcon Widget::conversationIcon(int conversationType) const {
+  if (!style()) {
+    return QIcon();
+  }
+  return conversationType == 2
+             ? style()->standardIcon(QStyle::SP_DirIcon)
+             : style()->standardIcon(QStyle::SP_FileDialogContentsView);
 }
 
 void Widget::applyConversationStateToItem(QListWidgetItem *item,
@@ -1183,9 +1390,10 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
     return;
   }
 
-  const QString displayName = state.displayName.isEmpty()
-                                  ? item->text().trimmed()
-                                  : state.displayName;
+  const QString displayName =
+      state.displayName.isEmpty()
+          ? item->data(kRoleDisplayName).toString().trimmed()
+          : state.displayName;
   const QString numericId = !state.peerNumericId.isEmpty()
                                 ? state.peerNumericId
                                 : item->data(kRoleNumericId).toString().trimmed();
@@ -1206,8 +1414,26 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
     lastSeenAtUtc = state.peerLastSeenAt;
   }
 
-  item->setText(buildSessionItemText(displayName, numericId, isOnline, userStatus,
-                                     state.lastMessagePreview, state.unreadCount));
+  QString sessionId = item->data(kRoleSessionId).toString().trimmed();
+  if (sessionId.isEmpty() || !m_sessionsById.contains(sessionId)) {
+    const Session::Type sessionType =
+        state.conversationType == 2 ? Session::Type::Group : Session::Type::Direct;
+    const Session session =
+        Session::create(displayName.isEmpty() ? QStringLiteral("未知会话")
+                                              : displayName,
+                        sessionType, state.conversationId);
+    sessionId = session.id();
+    m_sessionsById.insert(sessionId, session);
+    item->setData(kRoleSessionId, sessionId);
+    item->setData(kRoleSessionType,
+                  sessionType == Session::Type::Group ? "group" : "direct");
+  }
+
+  item->setText(buildSessionItemText(state.conversationType, displayName, numericId,
+                                     isOnline, userStatus,
+                                     state.lastMessagePreview, state.memberCount,
+                                     state.unreadCount));
+  item->setData(kRoleDisplayName, displayName);
   item->setData(kRoleUserId, userId);
   item->setData(kRoleNumericId, numericId);
   item->setData(kRoleUserStatus, userStatus);
@@ -1217,7 +1443,14 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
   item->setData(kRoleLastPreview, state.lastMessagePreview);
   item->setData(kRoleUnreadCount, state.unreadCount);
   item->setData(kRoleAvatarUrl, state.avatarUrl);
-  item->setToolTip(friendPresenceText(isOnline, lastSeenAtUtc));
+  item->setIcon(conversationIcon(state.conversationType));
+  if (state.conversationType == 2) {
+    item->setToolTip(state.memberCount > 0
+                         ? QStringLiteral("群聊成员数: %1").arg(state.memberCount)
+                         : QStringLiteral("群聊"));
+  } else {
+    item->setToolTip(friendPresenceText(isOnline, lastSeenAtUtc));
+  }
 }
 
 void Widget::resetConversationUnread(const QString &conversationId) {
@@ -1232,22 +1465,34 @@ void Widget::resetConversationUnread(const QString &conversationId) {
   }
 
   it->unreadCount = 0;
-  if (QListWidgetItem *item = findSessionItemByConversationId(trimmedConversationId)) {
+  if (QListWidgetItem *item =
+          findConversationItemByConversationId(trimmedConversationId)) {
     applyConversationStateToItem(item, it.value(), nullptr);
   }
 }
 
-QString Widget::buildSessionItemText(const QString &displayName,
+QString Widget::buildSessionItemText(int conversationType,
+                                     const QString &displayName,
                                      const QString &numericId, bool isOnline,
                                      int userStatus, const QString &preview,
+                                     int memberCount,
                                      int unreadCount) const {
-  QString firstLine = QStringLiteral("%1 (%2) [%3|%4]")
-                          .arg(displayName,
-                               numericId.isEmpty() ? QStringLiteral("-") : numericId,
-                               friendOnlineText(isOnline),
-                               friendStatusText(userStatus));
-  const QString previewText =
-      preview.trimmed().isEmpty() ? QStringLiteral("暂无消息") : elidePreview(preview);
+  QString firstLine;
+  QString previewText;
+  if (conversationType == 2) {
+    firstLine = displayName;
+    previewText = preview.trimmed().isEmpty()
+                      ? (memberCount > 0 ? QStringLiteral("%1 人").arg(memberCount)
+                                         : QStringLiteral("群聊"))
+                      : elidePreview(preview);
+  } else {
+    firstLine = QStringLiteral("%1 (%2) [%3|%4]")
+                    .arg(displayName,
+                         numericId.isEmpty() ? QStringLiteral("-") : numericId,
+                         friendOnlineText(isOnline), friendStatusText(userStatus));
+    previewText = preview.trimmed().isEmpty() ? QStringLiteral("暂无消息")
+                                              : elidePreview(preview);
+  }
   if (unreadCount > 0) {
     firstLine += QStringLiteral("  未读:%1").arg(unreadCount);
   }

@@ -28,6 +28,8 @@ qt_add_executable(qt-client
     src/ui/friend/addfrienddialog.cpp
     src/ui/friend/deletefrienddialog.h
     src/ui/friend/deletefrienddialog.cpp
+    src/ui/friend/creategroupdialog.h
+    src/ui/friend/creategroupdialog.cpp
     resources/resources.qrc
     src/network/websocketclient.h
     src/network/websocketclient.cpp

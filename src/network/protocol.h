@@ -12,6 +12,9 @@ struct Envelope {
   QString requestId;
   int code = 0;
   bool hasCode = false;
+  bool ok = false;
+  bool hasOk = false;
+  QString message;
   QJsonObject data;
   bool isValid = false;
 };

@@ -16,8 +16,11 @@
 #include <QPoint>
 #include <QMouseEvent>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QPushButton>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
 #include <QUrl>
 #include <QWidget>
@@ -32,6 +35,7 @@ class QPixmap;
 class SettingsWindow;
 class AddFriendDialog;
 class DeleteFriendDialog;
+class CreateGroupDialog;
 class SessionWindow;
 
 class Widget : public QWidget
@@ -65,6 +69,7 @@ private:
         int conversationType = 0;
         QString displayName;
         QString avatarUrl;
+        int memberCount = 0;
         QString peerUserId;
         QString peerNumericId;
         QString peerUsername;
@@ -85,6 +90,8 @@ private:
     void requestConversationList(bool force = false);
     void requestFriendListForContacts(bool force = false);
     void refreshConversationListUi();
+    void refreshGroupListUi();
+    void refreshContactListUi();
     void updateConversationListItem(
         const conversationlist::ConversationItem &conversationItem);
     void handleIncomingRealtimePayload(const QString &payload,
@@ -96,18 +103,27 @@ private:
     void applyAvatarPixmap(const QPixmap &pixmap);
     void applyDefaultAvatar();
     void syncFriendListToDeleteDialog();
-    QListWidgetItem *findSessionItemByConversationId(const QString &conversationId) const;
+    QIcon conversationIcon(int conversationType) const;
+    QListWidget *listWidgetForConversationType(int conversationType) const;
+    QListWidgetItem *findConversationItemInList(QListWidget *listWidget,
+                                                const QString &conversationId) const;
+    QListWidgetItem *upsertConversationListItemToList(
+        QListWidget *targetList, const ConversationListState &state,
+        const conversationlist::ConversationItem *conversationItem);
+    QListWidgetItem *findConversationItemByConversationId(const QString &conversationId) const;
     QListWidgetItem *upsertConversationListItem(const ConversationListState &state,
                                                 const conversationlist::ConversationItem *conversationItem);
     void applyConversationStateToItem(QListWidgetItem *item,
                                       const ConversationListState &state,
                                       const conversationlist::ConversationItem *conversationItem);
     void resetConversationUnread(const QString &conversationId);
-    QString buildSessionItemText(const QString &displayName,
+    QString buildSessionItemText(int conversationType,
+                                 const QString &displayName,
                                  const QString &numericId,
                                  bool isOnline,
                                  int userStatus,
                                  const QString &preview,
+                                 int memberCount,
                                  int unreadCount) const;
     QString elidePreview(const QString &preview) const;
 
@@ -129,14 +145,17 @@ private:
     QPointer<SettingsWindow> m_settingsWindow;
     QPointer<AddFriendDialog> m_addFriendDialog;
     QPointer<DeleteFriendDialog> m_deleteFriendDialog;
-    QPushButton* m_addFriendBtn = nullptr;
+    QPointer<CreateGroupDialog> m_createGroupDialog;
     conversationlist::ConversationListManager m_conversationListManager;
     friendlist::FriendListManager m_friendListManager;
     QString m_pendingConversationListRequestId;
     QString m_pendingFriendListRequestId;
+    QString m_pendingOpenConversationId;
     QTimer* m_conversationListRefreshTimer = nullptr;
-    
-    QListWidget* m_sessionList;
+    QTabWidget* m_tabWidget = nullptr;
+    QListWidget* m_sessionList = nullptr;
+    QListWidget* m_groupList = nullptr;
+    QListWidget* m_contactList = nullptr;
     QHash<QString, Session> m_sessionsById;
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByUserId;
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByNumericId;
@@ -152,6 +171,7 @@ private slots:
     void onOpenSettings();
     void onOpenAddFriend();
     void onOpenDeleteFriend();
+    void onOpenCreateGroup();
     void onAvatarReplyFinished(QNetworkReply *reply);
     void onConversationListPayloadReceived(const QString &requestId,
                                            const QJsonObject &data);

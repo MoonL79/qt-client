@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QPointer>
+#include <QStringList>
 #include <QTimer>
 #include <QVector>
 
@@ -79,6 +80,7 @@ struct ConversationItem {
   int conversationType = 0;
   QString name;
   QString avatarUrl;
+  int memberCount = 0;
   QString peerUserId;
   QString peerNumericId;
   QString peerUsername;
@@ -92,6 +94,18 @@ struct ConversationItem {
 };
 Q_DECLARE_METATYPE(ConversationItem)
 Q_DECLARE_METATYPE(QVector<ConversationItem>)
+
+struct CreateGroupResult {
+  QString conversationId;
+  QString conversationUuid;
+  int conversationType = 0;
+  QString internalConversationId;
+  QString name;
+  QString ownerUserId;
+  QString ownerNumericId;
+  int memberCount = 0;
+};
+Q_DECLARE_METATYPE(CreateGroupResult)
 
 class ProfileApiClient : public QObject {
   Q_OBJECT
@@ -111,6 +125,7 @@ public:
                        const QString &friendNumericId);
   QString fetchFriendList(const QString &myNumericId);
   QString fetchConversationList(const QString &myNumericId);
+  QString createGroup(const QString &name, const QStringList &memberNumericIds);
 
 signals:
   void profileInfoReceived(const QString &requestId, const ProfileInfo &info);
@@ -127,6 +142,8 @@ signals:
                         const QString &message);
   void conversationListFetched(const QString &requestId,
                                const QVector<ConversationItem> &conversations);
+  void createGroupSucceeded(const QString &requestId,
+                            const CreateGroupResult &result);
   void conversationListPayloadReceived(const QString &requestId,
                                        const QJsonObject &data);
   void conversationListFailed(const QString &requestId, int code,
@@ -164,6 +181,9 @@ private:
   bool validateFetchFriendList(const QString &myNumericId, QString *error) const;
   bool validateFetchConversationList(const QString &myNumericId,
                                      QString *error) const;
+  bool validateCreateGroup(const QString &name,
+                           const QStringList &memberNumericIds,
+                           QString *error) const;
 
   void sendProfileRequest(const QString &action, const QString &requestId,
                           const QJsonObject &data, int retries,
@@ -185,6 +205,9 @@ private:
   bool parseDeleteFriendResult(const QJsonObject &data, const QString &requestId,
                                int code, DeleteFriendResult *outResult,
                                QString *error) const;
+  bool parseCreateGroupResult(const QJsonObject &data,
+                              CreateGroupResult *outResult,
+                              QString *error) const;
   bool parseFriendList(const QJsonObject &data, QVector<FriendItem> *outFriends,
                        QString *error) const;
   bool parseConversationList(const QJsonObject &data,
