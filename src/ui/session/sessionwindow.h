@@ -57,7 +57,6 @@ private:
   void appendStatusLine(const QString &message);
   QLabel *appendChatBubble(const QString &message, bool outgoing = false,
                            bool status = false);
-  void updateConnectionStatus(QAbstractSocket::SocketState state);
   void refreshPresenceLabel();
   void handleIncomingPayload(const QString &payload, const QString &sourceTag);
   int appendMessage(const ChatMessage &message);
@@ -97,9 +96,7 @@ private:
   QVBoxLayout *m_chatLayout;
   QLineEdit *m_inputLine;
   QPushButton *m_sendBtn;
-  QLabel *m_statusLabel;
   QLabel *m_presenceLabel;
-  QPushButton *m_testBtn;
   QString m_pendingMessage;
   QString m_peerUserId;
   QString m_peerNumericId;
@@ -109,7 +106,6 @@ private:
   QHash<QString, int> m_pendingMessageIndexesByRequestId;
   void onSendClicked();
   void sendPendingMessage();
-  void onTestConnection();
 
   websocketclient *m_websocket;
 };

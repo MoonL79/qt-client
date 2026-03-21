@@ -15,6 +15,7 @@ struct ConversationItem {
   int conversationType = 0;
   QString name;
   QString avatarUrl;
+  int memberCount = 0;
   QString peerUserId;
   QString peerNumericId;
   QString peerUsername;

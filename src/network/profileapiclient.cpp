@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 #include <QThread>
 #include <QTimeZone>
 #include <QUuid>
@@ -18,6 +19,7 @@ constexpr const char *kActionAddFriend = "ADD_FRIEND";
 constexpr const char *kActionDeleteFriend = "DELETE_FRIEND";
 constexpr const char *kActionListFriends = "LIST_FRIENDS";
 constexpr const char *kActionListConversations = "LIST_CONVERSATIONS";
+constexpr const char *kActionCreateGroup = "CREATE_GROUP";
 
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
@@ -145,6 +147,7 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
   qRegisterMetaType<QVector<FriendItem>>("QVector<FriendItem>");
   qRegisterMetaType<ConversationItem>("ConversationItem");
   qRegisterMetaType<QVector<ConversationItem>>("QVector<ConversationItem>");
+  qRegisterMetaType<CreateGroupResult>("CreateGroupResult");
   qRegisterMetaType<QJsonObject>("QJsonObject");
 
   Q_ASSERT_X(thread() == QThread::currentThread(), "ProfileApiClient",
@@ -289,6 +292,29 @@ QString ProfileApiClient::fetchConversationList(const QString &myNumericId) {
   return requestId;
 }
 
+QString ProfileApiClient::createGroup(const QString &name,
+                                      const QStringList &memberNumericIds) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionCreateGroup);
+
+  QString error;
+  if (!validateCreateGroup(name, memberNumericIds, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonArray memberArray;
+  for (const QString &memberNumericId : memberNumericIds) {
+    memberArray.append(memberNumericId.trimmed());
+  }
+
+  QJsonObject data;
+  data.insert("name", name.trimmed());
+  data.insert("member_numeric_ids", memberArray);
+  sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
 void ProfileApiClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -323,8 +349,12 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
   }
 
   const int code = envelope.hasCode ? envelope.code : 0;
-  const bool ok = envelope.data.value("ok").toBool(false);
-  const QString msg = envelope.data.value("message").toString().trimmed();
+  const bool ok = envelope.hasOk ? envelope.ok
+                                 : envelope.data.value("ok").toBool(false);
+  const QString msg =
+      envelope.message.trimmed().isEmpty()
+          ? envelope.data.value("message").toString().trimmed()
+          : envelope.message.trimmed();
 
   qInfo().noquote() << "[PROFILE] action=" << expectedAction
                     << "request_id=" << requestId << "code=" << code
@@ -413,6 +443,17 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
       return;
     }
     emit conversationListFetched(requestId, conversations);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionCreateGroup)) {
+    CreateGroupResult result;
+    QString error;
+    if (!parseCreateGroupResult(envelope.data, &result, &error)) {
+      failRequest(requestId, expectedAction, error, 3003);
+      return;
+    }
+    emit createGroupSucceeded(requestId, result);
     return;
   }
 
@@ -625,6 +666,44 @@ bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
 bool ProfileApiClient::validateFetchConversationList(const QString &myNumericId,
                                                      QString *error) const {
   return validateFetchFriendList(myNumericId, error);
+}
+
+bool ProfileApiClient::validateCreateGroup(const QString &name,
+                                           const QStringList &memberNumericIds,
+                                           QString *error) const {
+  const QString trimmedName = name.trimmed();
+  if (trimmedName.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("group name is required");
+    }
+    return false;
+  }
+  if (memberNumericIds.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("member_numeric_ids is required");
+    }
+    return false;
+  }
+
+  QSet<QString> uniqueMembers;
+  for (const QString &memberNumericId : memberNumericIds) {
+    const QString trimmedId = memberNumericId.trimmed();
+    if (trimmedId.isEmpty() || !isUnsignedIntegerString(trimmedId)) {
+      if (error) {
+        *error = QStringLiteral(
+            "member_numeric_ids must be unsigned integer string");
+      }
+      return false;
+    }
+    uniqueMembers.insert(trimmedId);
+  }
+  if (uniqueMembers.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("member_numeric_ids is required");
+    }
+    return false;
+  }
+  return true;
 }
 
 void ProfileApiClient::sendProfileRequest(const QString &action,
@@ -915,6 +994,42 @@ bool ProfileApiClient::parseDeleteFriendResult(const QJsonObject &data,
   return true;
 }
 
+bool ProfileApiClient::parseCreateGroupResult(const QJsonObject &data,
+                                              CreateGroupResult *outResult,
+                                              QString *error) const {
+  if (!outResult) {
+    if (error) {
+      *error = QStringLiteral("internal error: out result is null");
+    }
+    return false;
+  }
+
+  if (!readRequiredString(data, "conversation_id", &outResult->conversationId,
+                          true) ||
+      !readRequiredString(data, "conversation_uuid",
+                          &outResult->conversationUuid, true) ||
+      !readRequiredInt(data, "conversation_type",
+                       &outResult->conversationType) ||
+      !readRequiredString(data, "name", &outResult->name) ||
+      !readRequiredString(data, "owner_user_id", &outResult->ownerUserId,
+                          true) ||
+      !readRequiredString(data, "owner_numeric_id",
+                          &outResult->ownerNumericId, true) ||
+      !readRequiredInt(data, "member_count", &outResult->memberCount)) {
+    if (error) {
+      *error = QStringLiteral("invalid CREATE_GROUP response fields");
+    }
+    return false;
+  }
+
+  outResult->internalConversationId =
+      jsonValueToString(data.value("internal_conversation_id"));
+  if (outResult->conversationUuid.isEmpty()) {
+    outResult->conversationUuid = outResult->conversationId;
+  }
+  return true;
+}
+
 bool ProfileApiClient::parseFriendList(const QJsonObject &data,
                                        QVector<FriendItem> *outFriends,
                                        QString *error) const {
@@ -1015,6 +1130,7 @@ bool ProfileApiClient::parseConversationList(
     item.conversationType = readOptionalInt(obj, "conversation_type", 0);
     item.name = obj.value("name").toString().trimmed();
     item.avatarUrl = obj.value("avatar_url").toString().trimmed();
+    item.memberCount = readOptionalInt(obj, "member_count", 0);
     item.peerUserId = jsonValueToString(obj.value("peer_user_id"));
     item.peerNumericId = jsonValueToString(obj.value("peer_numeric_id"));
     item.peerUsername = obj.value("peer_username").toString().trimmed();
