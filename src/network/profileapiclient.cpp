@@ -21,6 +21,7 @@ constexpr const char *kActionListFriends = "LIST_FRIENDS";
 constexpr const char *kActionListConversations = "LIST_CONVERSATIONS";
 constexpr const char *kActionCreateGroup = "CREATE_GROUP";
 constexpr const char *kActionJoinGroup = "JOIN_GROUP";
+constexpr const char *kActionLeaveGroup = "LEAVE_GROUP";
 constexpr const char *kActionListGroups = "LIST_GROUPS";
 
 QString normalizeTheme(const QString &theme) {
@@ -165,6 +166,7 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
   qRegisterMetaType<QVector<ConversationItem>>("QVector<ConversationItem>");
   qRegisterMetaType<CreateGroupResult>("CreateGroupResult");
   qRegisterMetaType<JoinGroupResult>("JoinGroupResult");
+  qRegisterMetaType<LeaveGroupResult>("LeaveGroupResult");
   qRegisterMetaType<GroupSearchItem>("GroupSearchItem");
   qRegisterMetaType<QVector<GroupSearchItem>>("QVector<GroupSearchItem>");
   qRegisterMetaType<QJsonObject>("QJsonObject");
@@ -357,6 +359,40 @@ QString ProfileApiClient::joinGroup(const QString &groupNumericId,
   return requestId;
 }
 
+QString ProfileApiClient::leaveGroup(const QString &conversationId,
+                                     const QString &groupNumericId) {
+  const QString requestId = generateRequestId();
+  const QString action = QString::fromLatin1(kActionLeaveGroup);
+
+  QString error;
+  if (!validateLeaveGroup(conversationId, groupNumericId, &error)) {
+    failRequest(requestId, action, error, 3003);
+    return requestId;
+  }
+
+  QJsonObject data;
+  const QString trimmedConversationId = conversationId.trimmed();
+  const QString trimmedGroupNumericId = groupNumericId.trimmed();
+  if (!trimmedConversationId.isEmpty()) {
+    data.insert("conversation_id", trimmedConversationId);
+  }
+  if (!trimmedGroupNumericId.isEmpty()) {
+    data.insert("group_numeric_id", trimmedGroupNumericId);
+  }
+  sendProfileRequest(action, requestId, data, 0, false);
+  return requestId;
+}
+
+QString ProfileApiClient::leaveGroupByConversationId(
+    const QString &conversationId) {
+  return leaveGroup(conversationId, QString());
+}
+
+QString ProfileApiClient::leaveGroupByGroupNumericId(
+    const QString &groupNumericId) {
+  return leaveGroup(QString(), groupNumericId);
+}
+
 QString ProfileApiClient::listGroups(const QString &keyword,
                                      const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -533,6 +569,21 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
     result.ok = true;
     result.message = msg;
     emit joinGroupSucceeded(requestId, result);
+    return;
+  }
+
+  if (expectedAction == QLatin1String(kActionLeaveGroup)) {
+    LeaveGroupResult result;
+    QString error;
+    if (!parseLeaveGroupResult(envelope.data, &result, &error)) {
+      failRequest(requestId, expectedAction, error, 3003);
+      return;
+    }
+    result.ok = true;
+    result.code = code;
+    result.message = msg;
+    result.requestId = requestId;
+    emit leaveGroupFinished(requestId, result);
     return;
   }
 
@@ -815,6 +866,25 @@ bool ProfileApiClient::validateJoinGroup(const QString &groupNumericId,
   return true;
 }
 
+bool ProfileApiClient::validateLeaveGroup(const QString &conversationId,
+                                          const QString &groupNumericId,
+                                          QString *error) const {
+  if (conversationId.trimmed().isEmpty() && groupNumericId.trimmed().isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("group_numeric_id or conversation_id is required");
+    }
+    return false;
+  }
+  if (conversationId.trimmed().size() > 255 ||
+      groupNumericId.trimmed().size() > 255) {
+    if (error) {
+      *error = QStringLiteral("group identifier is too long");
+    }
+    return false;
+  }
+  return true;
+}
+
 bool ProfileApiClient::validateListGroups(const QString &keyword,
                                           const QString &groupNumericId,
                                           QString *error) const {
@@ -936,6 +1006,14 @@ void ProfileApiClient::failRequest(const QString &requestId, const QString &acti
                        << "request_id=" << requestId
                        << "code=" << code
                        << "message=" << errorMessage;
+  if (action == QLatin1String(kActionLeaveGroup)) {
+    LeaveGroupResult result;
+    result.ok = false;
+    result.code = code;
+    result.message = errorMessage;
+    result.requestId = requestId;
+    emit leaveGroupFinished(requestId, result);
+  }
   if (action == QLatin1String(kActionListFriends)) {
     emit friendListFailed(requestId, code, errorMessage);
   }
@@ -1171,6 +1249,45 @@ bool ProfileApiClient::parseJoinGroupResult(const QJsonObject &data,
   if (result.conversationId.isEmpty()) {
     if (error) {
       *error = QStringLiteral("invalid JOIN_GROUP response fields");
+    }
+    return false;
+  }
+  if (result.conversationUuid.isEmpty()) {
+    result.conversationUuid = result.conversationId;
+  }
+  if (result.name.isEmpty()) {
+    result.name = result.conversationId;
+  }
+
+  *outResult = result;
+  return true;
+}
+
+bool ProfileApiClient::parseLeaveGroupResult(const QJsonObject &data,
+                                             LeaveGroupResult *outResult,
+                                             QString *error) const {
+  if (!outResult) {
+    if (error) {
+      *error = QStringLiteral("internal error: out result is null");
+    }
+    return false;
+  }
+
+  LeaveGroupResult result;
+  result.conversationId = jsonValueToString(data.value("conversation_id"));
+  result.conversationUuid = jsonValueToString(data.value("conversation_uuid"));
+  result.groupNumericId = readGroupNumericId(data);
+  result.conversationType = readOptionalInt(data, "conversation_type", 0);
+  result.name = data.value("name").toString().trimmed();
+  result.ownerUserId = jsonValueToString(data.value("owner_user_id"));
+  result.memberCount = readOptionalInt(data, "member_count", 0);
+  result.removed = readOptionalBool(data, "removed", false);
+  result.leftUserId = jsonValueToString(data.value("left_user_id"));
+  result.leftNumericId = jsonValueToString(data.value("left_numeric_id"));
+
+  if (result.conversationId.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("invalid LEAVE_GROUP response fields");
     }
     return false;
   }

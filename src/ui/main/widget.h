@@ -32,11 +32,13 @@ class Widget;
 }
 QT_END_NAMESPACE
 class QPixmap;
+class QMenu;
 class SettingsWindow;
 class AddFriendDialog;
 class DeleteFriendDialog;
 class CreateGroupDialog;
 class SearchGroupDialog;
+class LeaveGroupDialog;
 class SessionWindow;
 
 class Widget : public QWidget
@@ -94,6 +96,7 @@ private:
     void refreshConversationListUi();
     void refreshGroupListUi();
     void refreshContactListUi();
+    void handleLeaveGroupResult(const LeaveGroupResult &result);
     void updateConversationListItem(
         const conversationlist::ConversationItem &conversationItem);
     void handleIncomingRealtimePayload(const QString &payload,
@@ -151,6 +154,7 @@ private:
     QPointer<DeleteFriendDialog> m_deleteFriendDialog;
     QPointer<CreateGroupDialog> m_createGroupDialog;
     QPointer<SearchGroupDialog> m_searchGroupDialog;
+    QPointer<LeaveGroupDialog> m_leaveGroupDialog;
     conversationlist::ConversationListManager m_conversationListManager;
     friendlist::FriendListManager m_friendListManager;
     QString m_pendingConversationListRequestId;
@@ -178,6 +182,7 @@ private slots:
     void onOpenDeleteFriend();
     void onOpenCreateGroup();
     void onOpenSearchGroup();
+    void onOpenLeaveGroup();
     void onAvatarReplyFinished(QNetworkReply *reply);
     void onConversationListPayloadReceived(const QString &requestId,
                                            const QJsonObject &data);
@@ -187,5 +192,7 @@ private slots:
                                      const QJsonObject &data);
     void onFriendListFailed(const QString &requestId, int code,
                             const QString &message);
+    void onLeaveGroupFinished(const QString &requestId,
+                              const LeaveGroupResult &result);
 };
 #endif // WIDGET_H

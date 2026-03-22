@@ -36,6 +36,9 @@ public:
   bool applyPeerPresenceUpdate(const QString &userId, const QString &numericId,
                                bool isOnline, const QString &lastSeenAtUtc,
                                ConversationItem *updatedConversation = nullptr);
+  bool removeConversation(const QString &conversationId,
+                          const QString &groupNumericId = QString(),
+                          ConversationItem *removedConversation = nullptr);
   const QList<ConversationItem> &conversations() const;
   void clear();
 
