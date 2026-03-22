@@ -140,6 +140,24 @@ struct JoinGroupResult {
 };
 Q_DECLARE_METATYPE(JoinGroupResult)
 
+struct LeaveGroupResult {
+  bool ok = false;
+  int code = -1;
+  QString message;
+  QString requestId;
+  QString conversationId;
+  QString conversationUuid;
+  QString groupNumericId;
+  int conversationType = 0;
+  QString name;
+  QString ownerUserId;
+  int memberCount = 0;
+  bool removed = false;
+  QString leftUserId;
+  QString leftNumericId;
+};
+Q_DECLARE_METATYPE(LeaveGroupResult)
+
 class ProfileApiClient : public QObject {
   Q_OBJECT
 
@@ -161,6 +179,10 @@ public:
   QString createGroup(const QString &name, const QStringList &memberNumericIds);
   QString joinGroup(const QString &groupNumericId,
                     const QString &conversationId = QString());
+  QString leaveGroup(const QString &conversationId = QString(),
+                     const QString &groupNumericId = QString());
+  QString leaveGroupByConversationId(const QString &conversationId);
+  QString leaveGroupByGroupNumericId(const QString &groupNumericId);
   QString listGroups(const QString &keyword,
                      const QString &groupNumericId = QString());
 
@@ -182,6 +204,8 @@ signals:
   void createGroupSucceeded(const QString &requestId,
                             const CreateGroupResult &result);
   void joinGroupSucceeded(const QString &requestId, const JoinGroupResult &result);
+  void leaveGroupFinished(const QString &requestId,
+                          const LeaveGroupResult &result);
   void groupsListed(const QString &requestId,
                     const QVector<GroupSearchItem> &groups);
   void conversationListPayloadReceived(const QString &requestId,
@@ -227,6 +251,9 @@ private:
   bool validateJoinGroup(const QString &groupNumericId,
                          const QString &conversationId,
                          QString *error) const;
+  bool validateLeaveGroup(const QString &conversationId,
+                          const QString &groupNumericId,
+                          QString *error) const;
   bool validateListGroups(const QString &keyword,
                           const QString &groupNumericId,
                           QString *error) const;
@@ -256,6 +283,9 @@ private:
                               QString *error) const;
   bool parseJoinGroupResult(const QJsonObject &data, JoinGroupResult *outResult,
                             QString *error) const;
+  bool parseLeaveGroupResult(const QJsonObject &data,
+                             LeaveGroupResult *outResult,
+                             QString *error) const;
   bool parseGroupSearchList(const QJsonObject &data,
                             QVector<GroupSearchItem> *outGroups,
                             QString *error) const;

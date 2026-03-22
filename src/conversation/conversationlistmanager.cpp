@@ -195,6 +195,35 @@ bool ConversationListManager::applyPeerPresenceUpdate(
   return false;
 }
 
+bool ConversationListManager::removeConversation(
+    const QString &conversationId, const QString &groupNumericId,
+    ConversationItem *removedConversation) {
+  const QString trimmedConversationId = conversationId.trimmed();
+  const QString trimmedGroupNumericId = groupNumericId.trimmed();
+
+  for (auto it = m_conversations.begin(); it != m_conversations.end(); ++it) {
+    const bool conversationIdMatched =
+        !trimmedConversationId.isEmpty() && it->conversationId == trimmedConversationId;
+    const bool groupNumericIdMatched =
+        !trimmedGroupNumericId.isEmpty() && it->groupNumericId == trimmedGroupNumericId;
+    if (!conversationIdMatched && !groupNumericIdMatched) {
+      continue;
+    }
+
+    if (removedConversation) {
+      *removedConversation = *it;
+    }
+
+    qInfo().noquote() << "[ConversationList] removed conversation_id="
+                      << it->conversationId << "group_numeric_id="
+                      << it->groupNumericId;
+    m_conversations.erase(it);
+    return true;
+  }
+
+  return false;
+}
+
 const QList<ConversationItem> &ConversationListManager::conversations() const {
   return m_conversations;
 }
