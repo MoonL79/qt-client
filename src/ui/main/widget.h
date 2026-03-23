@@ -39,6 +39,7 @@ class DeleteFriendDialog;
 class CreateGroupDialog;
 class SearchGroupDialog;
 class LeaveGroupDialog;
+class DismissGroupDialog;
 class SessionWindow;
 
 class Widget : public QWidget
@@ -97,6 +98,7 @@ private:
     void refreshGroupListUi();
     void refreshContactListUi();
     void handleLeaveGroupResult(const LeaveGroupResult &result);
+    void handleDismissGroupResult(const DismissGroupResult &result);
     void updateConversationListItem(
         const conversationlist::ConversationItem &conversationItem);
     void handleIncomingRealtimePayload(const QString &payload,
@@ -155,6 +157,7 @@ private:
     QPointer<CreateGroupDialog> m_createGroupDialog;
     QPointer<SearchGroupDialog> m_searchGroupDialog;
     QPointer<LeaveGroupDialog> m_leaveGroupDialog;
+    QPointer<DismissGroupDialog> m_dismissGroupDialog;
     conversationlist::ConversationListManager m_conversationListManager;
     friendlist::FriendListManager m_friendListManager;
     QString m_pendingConversationListRequestId;
@@ -183,6 +186,7 @@ private slots:
     void onOpenCreateGroup();
     void onOpenSearchGroup();
     void onOpenLeaveGroup();
+    void onOpenDismissGroup();
     void onAvatarReplyFinished(QNetworkReply *reply);
     void onConversationListPayloadReceived(const QString &requestId,
                                            const QJsonObject &data);
@@ -192,7 +196,12 @@ private slots:
                                      const QJsonObject &data);
     void onFriendListFailed(const QString &requestId, int code,
                             const QString &message);
+    void onProfileServerRequestReceived(const QString &requestId,
+                                        const QString &action,
+                                        const QJsonObject &data);
     void onLeaveGroupFinished(const QString &requestId,
                               const LeaveGroupResult &result);
+    void onDismissGroupFinished(const QString &requestId,
+                                const DismissGroupResult &result);
 };
 #endif // WIDGET_H

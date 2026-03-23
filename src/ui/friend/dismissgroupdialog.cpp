@@ -1,4 +1,4 @@
-#include "leavegroupdialog.h"
+#include "dismissgroupdialog.h"
 
 #include <QLabel>
 #include <QListWidget>
@@ -6,14 +6,14 @@
 #include <QMessageBox>
 #include <QVBoxLayout>
 
-LeaveGroupDialog::LeaveGroupDialog(
+DismissGroupDialog::DismissGroupDialog(
     const QString &currentUserId,
     const QList<conversationlist::ConversationItem> &conversations,
     ProfileApiClient *profileApiClient, QWidget *parent)
     : QDialog(parent), m_profileApiClient(profileApiClient),
       m_currentUserId(currentUserId.trimmed()), m_conversations(conversations) {
   setAttribute(Qt::WA_DeleteOnClose);
-  setWindowTitle(QStringLiteral("退出群聊"));
+  setWindowTitle(QStringLiteral("解散群聊"));
   setModal(true);
   resize(460, 540);
 
@@ -27,28 +27,28 @@ LeaveGroupDialog::LeaveGroupDialog(
   }
 
   connect(m_profileApiClient, &ProfileApiClient::groupsListed, this,
-          &LeaveGroupDialog::onGroupsListed);
-  connect(m_profileApiClient, &ProfileApiClient::leaveGroupFinished, this,
-          &LeaveGroupDialog::onLeaveGroupFinished);
+          &DismissGroupDialog::onGroupsListed);
+  connect(m_profileApiClient, &ProfileApiClient::dismissGroupFinished, this,
+          &DismissGroupDialog::onDismissGroupFinished);
   connect(m_profileApiClient, &ProfileApiClient::requestFailedDetailed, this,
-          &LeaveGroupDialog::onRequestFailedDetailed);
+          &DismissGroupDialog::onRequestFailedDetailed);
   requestOwnerInfoForGroups();
   refreshList();
 }
 
-void LeaveGroupDialog::setConversations(
+void DismissGroupDialog::setConversations(
     const QList<conversationlist::ConversationItem> &conversations) {
   m_conversations = conversations;
   requestOwnerInfoForGroups();
   refreshList();
 }
 
-void LeaveGroupDialog::buildUi() {
+void DismissGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
   layout->setSpacing(10);
 
-  m_tipLabel = new QLabel(QStringLiteral("双击群聊项即可退出"), this);
+  m_tipLabel = new QLabel(QStringLiteral("双击群聊项即可解散"), this);
   m_tipLabel->setStyleSheet(QStringLiteral("color:#000000;"));
   layout->addWidget(m_tipLabel);
 
@@ -63,10 +63,10 @@ void LeaveGroupDialog::buildUi() {
   layout->addWidget(m_groupListWidget, 1);
 
   connect(m_groupListWidget, &QListWidget::itemDoubleClicked, this,
-          &LeaveGroupDialog::onItemDoubleClicked);
+          &DismissGroupDialog::onItemDoubleClicked);
 }
 
-void LeaveGroupDialog::requestOwnerInfoForGroups() {
+void DismissGroupDialog::requestOwnerInfoForGroups() {
   if (!m_profileApiClient) {
     return;
   }
@@ -88,7 +88,7 @@ void LeaveGroupDialog::requestOwnerInfoForGroups() {
   }
 }
 
-void LeaveGroupDialog::refreshList() {
+void DismissGroupDialog::refreshList() {
   if (!m_groupListWidget) {
     return;
   }
@@ -108,29 +108,25 @@ void LeaveGroupDialog::refreshList() {
       ownerUserId = m_ownerUserIdByGroupNumericId.value(groupNumericId).trimmed();
     }
 
-    if (!m_currentUserId.isEmpty() && !ownerUserId.isEmpty() &&
-        ownerUserId == m_currentUserId) {
-      continue;
-    }
-
     if (!groupNumericId.isEmpty() && ownerUserId.isEmpty()) {
       continue;
     }
 
-    if (m_currentUserId.isEmpty() || ownerUserId != m_currentUserId) {
+    if (!m_currentUserId.isEmpty() && ownerUserId == m_currentUserId) {
       groups.push_back(conversation);
     }
   }
+
   if (groups.isEmpty()) {
     const QString emptyText = m_ownerLookupRequestIdToGroupNumericId.isEmpty()
-                                  ? QStringLiteral("暂无可退出的群聊")
+                                  ? QStringLiteral("暂无可解散的群聊")
                                   : QStringLiteral("群信息加载中...");
     auto *emptyItem = new QListWidgetItem(emptyText);
     emptyItem->setFlags(emptyItem->flags() & ~Qt::ItemIsSelectable &
                         ~Qt::ItemIsEnabled);
     m_groupListWidget->addItem(emptyItem);
     m_tipLabel->setText(m_ownerLookupRequestIdToGroupNumericId.isEmpty()
-                            ? QStringLiteral("当前没有可退出的群聊")
+                            ? QStringLiteral("当前没有可解散的群聊")
                             : QStringLiteral("正在加载群主信息..."));
     return;
   }
@@ -157,29 +153,29 @@ void LeaveGroupDialog::refreshList() {
     item->setData(Qt::UserRole + 1, conversation.groupNumericId.trimmed());
     item->setData(Qt::UserRole + 2, conversation.name.trimmed());
     item->setToolTip(conversation.groupNumericId.trimmed().isEmpty()
-                         ? QStringLiteral("双击退出群聊")
+                         ? QStringLiteral("双击解散群聊")
                          : QStringLiteral("群号: %1").arg(
                                conversation.groupNumericId.trimmed()));
     m_groupListWidget->addItem(item);
   }
 
-  m_tipLabel->setText(QStringLiteral("双击群聊项即可退出"));
+  m_tipLabel->setText(QStringLiteral("双击群聊项即可解散"));
 }
 
-QString LeaveGroupDialog::resolveLeaveErrorMessage(int code,
-                                                   const QString &error) const {
+QString DismissGroupDialog::resolveDismissErrorMessage(int code,
+                                                       const QString &error) const {
   if (code == 2001) {
     return QStringLiteral("当前登录状态无效，请重新登录后再试");
   }
   if (code == 2005) {
-    return QStringLiteral("群主不能直接退群");
+    return QStringLiteral("只有群主可以解散群聊");
   }
-  return error.trimmed().isEmpty() ? QStringLiteral("退出群聊失败，请稍后重试")
+  return error.trimmed().isEmpty() ? QStringLiteral("解散群聊失败，请稍后重试")
                                    : error.trimmed();
 }
 
-void LeaveGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
-  if (!item || !m_profileApiClient || !m_pendingLeaveRequestId.isEmpty()) {
+void DismissGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
+  if (!item || !m_profileApiClient || !m_pendingDismissRequestId.isEmpty()) {
     return;
   }
 
@@ -191,8 +187,8 @@ void LeaveGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
   }
 
   const int answer = QMessageBox::question(
-      this, QStringLiteral("确认退出群聊"),
-      QStringLiteral("确定退出群聊：%1 ?")
+      this, QStringLiteral("确认解散群聊"),
+      QStringLiteral("确定解散群聊：%1 ?")
           .arg(displayName.isEmpty() ? conversationId : displayName),
       QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
   if (answer != QMessageBox::Yes) {
@@ -200,13 +196,13 @@ void LeaveGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
   }
 
   m_groupListWidget->setEnabled(false);
-  m_tipLabel->setText(QStringLiteral("正在退出群聊..."));
-  m_pendingLeaveRequestId =
-      m_profileApiClient->leaveGroupByConversationId(conversationId);
+  m_tipLabel->setText(QStringLiteral("正在解散群聊..."));
+  m_pendingDismissRequestId =
+      m_profileApiClient->dismissGroupByConversationId(conversationId);
 }
 
-void LeaveGroupDialog::onGroupsListed(const QString &requestId,
-                                      const QVector<GroupSearchItem> &groups) {
+void DismissGroupDialog::onGroupsListed(const QString &requestId,
+                                        const QVector<GroupSearchItem> &groups) {
   const auto it = m_ownerLookupRequestIdToGroupNumericId.find(requestId);
   if (it == m_ownerLookupRequestIdToGroupNumericId.end()) {
     return;
@@ -226,18 +222,18 @@ void LeaveGroupDialog::onGroupsListed(const QString &requestId,
   refreshList();
 }
 
-void LeaveGroupDialog::onLeaveGroupFinished(const QString &requestId,
-                                            const LeaveGroupResult &result) {
-  if (requestId != m_pendingLeaveRequestId) {
+void DismissGroupDialog::onDismissGroupFinished(
+    const QString &requestId, const DismissGroupResult &result) {
+  if (requestId != m_pendingDismissRequestId) {
     return;
   }
 
-  m_pendingLeaveRequestId.clear();
+  m_pendingDismissRequestId.clear();
   m_groupListWidget->setEnabled(true);
 
   if (!result.ok) {
-    m_tipLabel->setText(resolveLeaveErrorMessage(result.code, result.message));
-    QMessageBox::warning(this, QStringLiteral("退出群聊失败"), m_tipLabel->text());
+    m_tipLabel->setText(resolveDismissErrorMessage(result.code, result.message));
+    QMessageBox::warning(this, QStringLiteral("解散群聊失败"), m_tipLabel->text());
     return;
   }
 
@@ -251,14 +247,13 @@ void LeaveGroupDialog::onLeaveGroupFinished(const QString &requestId,
 
   refreshList();
   m_tipLabel->setText(result.message.trimmed().isEmpty()
-                          ? QStringLiteral("退出群聊成功")
+                          ? QStringLiteral("解散群聊成功")
                           : result.message.trimmed());
-  emit groupLeft(result);
 }
 
-void LeaveGroupDialog::onRequestFailedDetailed(const QString &requestId,
-                                               const QString &action, int code,
-                                               const QString &error) {
+void DismissGroupDialog::onRequestFailedDetailed(const QString &requestId,
+                                                 const QString &action, int code,
+                                                 const QString &error) {
   if (action == QStringLiteral("LIST_GROUPS") &&
       m_ownerLookupRequestIdToGroupNumericId.contains(requestId)) {
     m_ownerLookupRequestIdToGroupNumericId.remove(requestId);
@@ -266,12 +261,12 @@ void LeaveGroupDialog::onRequestFailedDetailed(const QString &requestId,
     return;
   }
 
-  if (requestId != m_pendingLeaveRequestId ||
-      action != QStringLiteral("LEAVE_GROUP")) {
+  if (requestId != m_pendingDismissRequestId ||
+      action != QStringLiteral("DISMISS_GROUP")) {
     return;
   }
 
-  m_pendingLeaveRequestId.clear();
+  m_pendingDismissRequestId.clear();
   m_groupListWidget->setEnabled(true);
-  m_tipLabel->setText(resolveLeaveErrorMessage(code, error));
+  m_tipLabel->setText(resolveDismissErrorMessage(code, error));
 }
