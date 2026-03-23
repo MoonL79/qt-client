@@ -1,6 +1,7 @@
 #include "widget.h"
 
 #include "addfrienddialog.h"
+#include "chatfileservice.h"
 #include "creategroupdialog.h"
 #include "deletefrienddialog.h"
 #include "dismissgroupdialog.h"
@@ -14,6 +15,10 @@
 #include "websocketclient.h"
 
 #include <QDir>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMenu>
@@ -33,6 +38,7 @@
 namespace {
 constexpr int kDefaultStaticPort = 18080;
 constexpr int kConversationListRefreshIntervalMs = 10 * 1000;
+constexpr qint64 kMaxTransferFileSizeBytes = 20 * 1024 * 1024;
 constexpr const char *kStaticPortEnv = "QT_SERVER_STATIC_PORT";
 constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
 constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
@@ -98,12 +104,95 @@ constexpr int kRoleLastPreview = Qt::UserRole + 8;
 constexpr int kRoleUnreadCount = Qt::UserRole + 9;
 constexpr int kRoleAvatarUrl = Qt::UserRole + 10;
 constexpr int kRoleDisplayName = Qt::UserRole + 11;
+constexpr int kTransferRoleConversationId = Qt::UserRole + 100;
+constexpr int kTransferRoleConversationName = Qt::UserRole + 101;
+constexpr int kTransferRoleConversationType = Qt::UserRole + 102;
+
+QString filePreviewText(const QString &originalName) {
+  const QString trimmed = originalName.trimmed();
+  return trimmed.isEmpty() ? QStringLiteral("[文件]") :
+                             QStringLiteral("[文件] %1").arg(trimmed);
+}
 }
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent), ui(new Ui::Widget), m_isDragging(false) {
   initUI();
   initAvatarHttpClient();
+  m_chatFileService = new ChatFileService(websocketclient::instance(), this);
+
+  connect(m_chatFileService, &ChatFileService::uploadFinished, this,
+          [this](const QString &requestId, const ChatFileUploadResult &result) {
+            if (requestId != m_pendingFileTransfer.uploadRequestId) {
+              return;
+            }
+            m_pendingFileTransfer.uploadRequestId.clear();
+            if (!websocketclient::instance()->isConnected()) {
+              QMessageBox::warning(this, QStringLiteral("文件发送失败"),
+                                   QStringLiteral("文件已上传，但 WebSocket 未连接，无法发送文件消息。"));
+              m_pendingFileTransfer.clear();
+              return;
+            }
+            const QString sendRequestId =
+                m_chatFileService->sendFileMessage(result.conversationId, result);
+            if (sendRequestId.isEmpty()) {
+              m_pendingFileTransfer.clear();
+              QMessageBox::warning(this, QStringLiteral("文件发送失败"),
+                                   QStringLiteral("文件已上传，但文件消息发送失败。"));
+              return;
+            }
+            m_pendingFileTransfer.sendRequestId = sendRequestId;
+          });
+  connect(m_chatFileService, &ChatFileService::fileMessageSendSucceeded, this,
+          [this](const QString &requestId, const ChatMessage &message) {
+            if (requestId != m_pendingFileTransfer.sendRequestId) {
+              return;
+            }
+
+            ConversationListState state =
+                m_conversationStatesByConversationId.value(message.conversationId);
+            state.conversationId = message.conversationId;
+            if (state.displayName.isEmpty()) {
+              state.displayName = m_pendingFileTransfer.conversationName;
+            }
+            state.lastMessagePreview = filePreviewText(message.file.originalName);
+            state.unreadCount = 0;
+            m_conversationStatesByConversationId.insert(message.conversationId, state);
+            if (QListWidgetItem *item =
+                    findConversationItemByConversationId(message.conversationId)) {
+              applyConversationStateToItem(item, state, nullptr);
+            }
+
+            QMessageBox::information(
+                this, QStringLiteral("文件发送成功"),
+                QStringLiteral("文件已发送到 %1。")
+                    .arg(m_pendingFileTransfer.conversationName.isEmpty()
+                             ? message.conversationId
+                             : m_pendingFileTransfer.conversationName));
+            m_pendingFileTransfer.clear();
+          });
+  connect(m_chatFileService, &ChatFileService::requestFailed, this,
+          [this](const QString &requestId, const QString &action, int code,
+                 const QString &error) {
+            const bool matchesUpload =
+                requestId == m_pendingFileTransfer.uploadRequestId;
+            const bool matchesSend = requestId == m_pendingFileTransfer.sendRequestId;
+            if (!matchesUpload && !matchesSend) {
+              return;
+            }
+
+            const QString stage = matchesUpload ? QStringLiteral("上传")
+                                                : QStringLiteral("发送消息");
+            QMessageBox::warning(
+                this, QStringLiteral("文件传输失败"),
+                QStringLiteral("%1失败: %2 (code=%3)")
+                    .arg(stage, error.isEmpty() ? QStringLiteral("未知错误") : error,
+                         QString::number(code)));
+            qWarning() << "[MainWidget] file transfer failed action=" << action
+                       << "request_id=" << requestId << "code=" << code
+                       << "message=" << error;
+            m_pendingFileTransfer.clear();
+          });
 
   m_conversationListRefreshTimer = new QTimer(this);
   m_conversationListRefreshTimer->setInterval(kConversationListRefreshIntervalMs);
@@ -245,6 +334,9 @@ void Widget::initUI() {
       quickActionMenu->addAction(QStringLiteral("退出群聊"));
   QAction *dismissGroupAction =
       quickActionMenu->addAction(QStringLiteral("解散群聊"));
+  quickActionMenu->addSeparator();
+  QAction *fileTransferAction =
+      quickActionMenu->addAction(QStringLiteral("文件传输"));
   quickActionBtn->setMenu(quickActionMenu);
 
   connect(addFriendAction, &QAction::triggered, this, &Widget::onOpenAddFriend);
@@ -260,6 +352,8 @@ void Widget::initUI() {
           &Widget::onOpenLeaveGroup);
   connect(dismissGroupAction, &QAction::triggered, this,
           &Widget::onOpenDismissGroup);
+  connect(fileTransferAction, &QAction::triggered, this,
+          &Widget::onOpenFileTransfer);
 
   quickActionLayout->addWidget(quickActionBtn);
   rightBtnLayout->addLayout(quickActionLayout);
@@ -1011,6 +1105,188 @@ void Widget::onOpenDismissGroup() {
   m_dismissGroupDialog->activateWindow();
 }
 
+void Widget::onOpenFileTransfer() {
+  if (!m_chatFileService) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("文件传输服务未初始化。"));
+    return;
+  }
+  if (!m_pendingFileTransfer.uploadRequestId.isEmpty() ||
+      !m_pendingFileTransfer.sendRequestId.isEmpty()) {
+    QMessageBox::information(this, QStringLiteral("文件传输中"),
+                             QStringLiteral("当前已有文件在传输，请稍后再试。"));
+    return;
+  }
+  if (!UserSession::instance().isLoggedIn()) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("请先登录。"));
+    return;
+  }
+  if (!UserSession::instance().hasValidUploadToken()) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("上传凭证无效或已过期，请重新登录。"));
+    return;
+  }
+
+  struct TransferTarget {
+    QString conversationId;
+    QString displayName;
+    int conversationType = 0;
+  };
+
+  QList<TransferTarget> targets;
+  QSet<QString> seenConversationIds;
+  const QList<conversationlist::ConversationItem> conversations =
+      m_conversationListManager.conversations();
+  for (const conversationlist::ConversationItem &conversation : conversations) {
+    const QString conversationId = conversation.conversationId.trimmed();
+    if (conversationId.isEmpty() || seenConversationIds.contains(conversationId)) {
+      continue;
+    }
+    seenConversationIds.insert(conversationId);
+
+    TransferTarget target;
+    target.conversationId = conversationId;
+    target.conversationType = conversation.conversationType;
+    target.displayName = conversation.name.trimmed();
+    if (target.displayName.isEmpty()) {
+      target.displayName = conversation.peerNickname.trimmed();
+    }
+    if (target.displayName.isEmpty()) {
+      target.displayName = conversation.peerUsername.trimmed();
+    }
+    if (target.displayName.isEmpty()) {
+      target.displayName = conversation.peerNumericId.trimmed();
+    }
+    if (target.displayName.isEmpty()) {
+      target.displayName = conversationId;
+    }
+    targets.push_back(target);
+  }
+
+  for (const friendlist::FriendItem &friendItem : m_friendListManager.friends()) {
+    const QString conversationId = friendItem.conversationId.trimmed();
+    if (conversationId.isEmpty() || seenConversationIds.contains(conversationId)) {
+      continue;
+    }
+    seenConversationIds.insert(conversationId);
+
+    TransferTarget target;
+    target.conversationId = conversationId;
+    target.conversationType = 1;
+    target.displayName = friendItem.displayName.trimmed().isEmpty()
+                             ? friendItem.numericId.trimmed()
+                             : friendItem.displayName.trimmed();
+    if (target.displayName.isEmpty()) {
+      target.displayName = conversationId;
+    }
+    targets.push_back(target);
+  }
+
+  if (targets.isEmpty()) {
+    QMessageBox::information(this, QStringLiteral("暂无可发送对象"),
+                             QStringLiteral("当前没有可用于文件传输的好友或群聊。"));
+    return;
+  }
+
+  QDialog dialog(this);
+  dialog.setWindowTitle(QStringLiteral("文件传输"));
+  dialog.resize(420, 520);
+
+  auto *layout = new QVBoxLayout(&dialog);
+  auto *hintLabel =
+      new QLabel(QStringLiteral("选择一个好友或群聊，然后选择单个文件发送。文件大小上限 20MB。"),
+                 &dialog);
+  hintLabel->setWordWrap(true);
+  layout->addWidget(hintLabel);
+
+  auto *listWidget = new QListWidget(&dialog);
+  for (const TransferTarget &target : targets) {
+    const QString prefix = target.conversationType == 2 ? QStringLiteral("[群聊] ")
+                                                        : QStringLiteral("[好友] ");
+    auto *item = new QListWidgetItem(prefix + target.displayName, listWidget);
+    item->setData(kTransferRoleConversationId, target.conversationId);
+    item->setData(kTransferRoleConversationName, target.displayName);
+    item->setData(kTransferRoleConversationType, target.conversationType);
+  }
+  listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
+  layout->addWidget(listWidget);
+
+  auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                         &dialog);
+  buttonBox->button(QDialogButtonBox::Ok)->setText(QStringLiteral("选择文件"));
+  buttonBox->button(QDialogButtonBox::Ok)->setEnabled(false);
+  layout->addWidget(buttonBox);
+
+  connect(listWidget, &QListWidget::itemSelectionChanged, &dialog, [&]() {
+    buttonBox->button(QDialogButtonBox::Ok)
+        ->setEnabled(listWidget->currentItem() != nullptr);
+  });
+  connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+  if (dialog.exec() != QDialog::Accepted || !listWidget->currentItem()) {
+    return;
+  }
+
+  QListWidgetItem *selectedItem = listWidget->currentItem();
+  const QString conversationId =
+      selectedItem->data(kTransferRoleConversationId).toString().trimmed();
+  const QString conversationName =
+      selectedItem->data(kTransferRoleConversationName).toString().trimmed();
+  if (conversationId.isEmpty()) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("选中的会话无效。"));
+    return;
+  }
+
+  const QString filePath = QFileDialog::getOpenFileName(
+      this, QStringLiteral("选择要发送的文件"), QString(),
+      QStringLiteral("All Files (*.*)"));
+  if (filePath.isEmpty()) {
+    return;
+  }
+
+  QFileInfo fileInfo(filePath);
+  if (!fileInfo.exists() || !fileInfo.isFile()) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("文件不存在。"));
+    return;
+  }
+  if (!fileInfo.isReadable()) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("文件不可读。"));
+    return;
+  }
+  if (fileInfo.size() > kMaxTransferFileSizeBytes) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("当前仅支持单文件且大小不超过 20MB。"));
+    return;
+  }
+
+  const QString currentUserId = m_currentUserId.trimmed().isEmpty()
+                                    ? UserSession::instance().userId().trimmed()
+                                    : m_currentUserId.trimmed();
+  if (currentUserId.isEmpty()) {
+    QMessageBox::warning(this, QStringLiteral("无法发送文件"),
+                         QStringLiteral("当前用户信息无效，请重新登录。"));
+    return;
+  }
+
+  m_pendingFileTransfer.clear();
+  m_pendingFileTransfer.conversationId = conversationId;
+  m_pendingFileTransfer.conversationName = conversationName;
+  m_pendingFileTransfer.localFilePath = filePath;
+  m_pendingFileTransfer.uploadRequestId =
+      m_chatFileService->uploadFile(conversationId, filePath, currentUserId);
+
+  QMessageBox::information(
+      this, QStringLiteral("开始传输"),
+      QStringLiteral("已开始向 %1 发送文件：%2")
+          .arg(conversationName.isEmpty() ? conversationId : conversationName,
+               fileInfo.fileName()));
+}
+
 void Widget::requestConversationList(bool force) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
@@ -1362,9 +1638,16 @@ void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
 
   const QString conversationId =
       envelope.data.value(QStringLiteral("conversation_id")).toString().trimmed();
-  const QString content =
+  const QString messageKind =
+      envelope.data.value(QStringLiteral("message_kind")).toString().trimmed().toLower();
+  QString previewText =
       envelope.data.value(QStringLiteral("content")).toString().trimmed();
-  if (conversationId.isEmpty() || content.isEmpty()) {
+  if (messageKind == QStringLiteral("file")) {
+    const QJsonObject fileObj = envelope.data.value(QStringLiteral("file")).toObject();
+    previewText = filePreviewText(
+        fileObj.value(QStringLiteral("original_name")).toString().trimmed());
+  }
+  if (conversationId.isEmpty() || previewText.isEmpty()) {
     qWarning() << "[MainWidget] ignore MESSAGE/SEND push with invalid data"
                << QString::fromUtf8(
                       QJsonDocument(envelope.data).toJson(QJsonDocument::Compact));
@@ -1389,7 +1672,7 @@ void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
     state.peerNumericId =
         envelope.data.value(QStringLiteral("from_numeric_id")).toString().trimmed();
   }
-  state.lastMessagePreview = content;
+  state.lastMessagePreview = previewText;
   state.placeholder = false;
 
   SessionWindow *openWindow = m_sessionWindowsByConversationId.value(conversationId);
