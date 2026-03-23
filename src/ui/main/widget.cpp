@@ -3,6 +3,7 @@
 #include "addfrienddialog.h"
 #include "creategroupdialog.h"
 #include "deletefrienddialog.h"
+#include "dismissgroupdialog.h"
 #include "leavegroupdialog.h"
 #include "protocol.h"
 #include "searchgroupdialog.h"
@@ -242,6 +243,8 @@ void Widget::initUI() {
   QAction *joinGroupAction = quickActionMenu->addAction(QStringLiteral("加入群聊"));
   QAction *leaveGroupAction =
       quickActionMenu->addAction(QStringLiteral("退出群聊"));
+  QAction *dismissGroupAction =
+      quickActionMenu->addAction(QStringLiteral("解散群聊"));
   quickActionBtn->setMenu(quickActionMenu);
 
   connect(addFriendAction, &QAction::triggered, this, &Widget::onOpenAddFriend);
@@ -255,6 +258,8 @@ void Widget::initUI() {
   });
   connect(leaveGroupAction, &QAction::triggered, this,
           &Widget::onOpenLeaveGroup);
+  connect(dismissGroupAction, &QAction::triggered, this,
+          &Widget::onOpenDismissGroup);
 
   quickActionLayout->addWidget(quickActionBtn);
   rightBtnLayout->addLayout(quickActionLayout);
@@ -535,8 +540,12 @@ void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
           &Widget::onFriendListPayloadReceived, Qt::UniqueConnection);
   connect(m_profileApiClient, &ProfileApiClient::friendListFailed, this,
           &Widget::onFriendListFailed, Qt::UniqueConnection);
+  connect(m_profileApiClient, &ProfileApiClient::serverRequestReceived, this,
+          &Widget::onProfileServerRequestReceived, Qt::UniqueConnection);
   connect(m_profileApiClient, &ProfileApiClient::leaveGroupFinished, this,
           &Widget::onLeaveGroupFinished, Qt::UniqueConnection);
+  connect(m_profileApiClient, &ProfileApiClient::dismissGroupFinished, this,
+          &Widget::onDismissGroupFinished, Qt::UniqueConnection);
   if (m_conversationListRefreshTimer &&
       !m_currentUserNumericId.trimmed().isEmpty() &&
       !m_conversationListRefreshTimer->isActive()) {
@@ -712,6 +721,9 @@ void Widget::onOpenSettings() {
     }
     if (m_leaveGroupDialog) {
       m_leaveGroupDialog->close();
+    }
+    if (m_dismissGroupDialog) {
+      m_dismissGroupDialog->close();
     }
     m_currentUserId.clear();
     m_currentUserNumericId.clear();
@@ -959,15 +971,44 @@ void Widget::onOpenLeaveGroup() {
     return;
   }
 
-  m_leaveGroupDialog = new LeaveGroupDialog(m_conversationListManager.conversations(),
-                                            m_profileApiClient, this);
-  connect(m_leaveGroupDialog, &LeaveGroupDialog::groupLeft, this,
-          [this](const LeaveGroupResult &result) { handleLeaveGroupResult(result); });
+  m_leaveGroupDialog =
+      new LeaveGroupDialog(m_currentUserId, m_conversationListManager.conversations(),
+                           m_profileApiClient, this);
   connect(m_leaveGroupDialog, &QObject::destroyed, this,
           [this]() { m_leaveGroupDialog = nullptr; });
   m_leaveGroupDialog->show();
   m_leaveGroupDialog->raise();
   m_leaveGroupDialog->activateWindow();
+}
+
+void Widget::onOpenDismissGroup() {
+  if (!m_profileApiClient) {
+    QMessageBox::warning(this, QStringLiteral("无法解散群聊"),
+                         QStringLiteral("Profile 服务未初始化。"));
+    return;
+  }
+
+  if (m_dismissGroupDialog) {
+    m_dismissGroupDialog->setConversations(
+        m_conversationListManager.conversations());
+    if (m_dismissGroupDialog->isMinimized()) {
+      m_dismissGroupDialog->showNormal();
+    } else {
+      m_dismissGroupDialog->show();
+    }
+    m_dismissGroupDialog->raise();
+    m_dismissGroupDialog->activateWindow();
+    return;
+  }
+
+  m_dismissGroupDialog = new DismissGroupDialog(
+      m_currentUserId, m_conversationListManager.conversations(), m_profileApiClient,
+      this);
+  connect(m_dismissGroupDialog, &QObject::destroyed, this,
+          [this]() { m_dismissGroupDialog = nullptr; });
+  m_dismissGroupDialog->show();
+  m_dismissGroupDialog->raise();
+  m_dismissGroupDialog->activateWindow();
 }
 
 void Widget::requestConversationList(bool force) {
@@ -1131,6 +1172,9 @@ void Widget::refreshGroupListUi() {
   if (m_leaveGroupDialog) {
     m_leaveGroupDialog->setConversations(conversations);
   }
+  if (m_dismissGroupDialog) {
+    m_dismissGroupDialog->setConversations(conversations);
+  }
 
 }
 
@@ -1235,10 +1279,55 @@ void Widget::handleLeaveGroupResult(const LeaveGroupResult &result) {
                            QStringLiteral("已退出群聊“%1”").arg(groupName));
 }
 
+void Widget::handleDismissGroupResult(const DismissGroupResult &result) {
+  const QString conversationId = result.conversationId.trimmed();
+  const QString groupNumericId = result.groupNumericId.trimmed();
+
+  if (!result.ok) {
+    QMessageBox::warning(this, QStringLiteral("解散群聊失败"),
+                         QStringLiteral("%1\n错误码: %2")
+                             .arg(result.message.isEmpty()
+                                      ? QStringLiteral("解散群聊失败")
+                                      : result.message,
+                                  QString::number(result.code)));
+    return;
+  }
+
+  conversationlist::ConversationItem removedConversation;
+  m_conversationListManager.removeConversation(conversationId, groupNumericId,
+                                               &removedConversation);
+  m_conversationStatesByConversationId.remove(conversationId);
+
+  if (!conversationId.isEmpty()) {
+    if (QPointer<SessionWindow> sessionWindow =
+            m_sessionWindowsByConversationId.value(conversationId)) {
+      sessionWindow->close();
+    }
+  }
+
+  refreshConversationListUi();
+  refreshGroupListUi();
+  requestConversationList(true);
+
+  const QString groupName = !result.name.trimmed().isEmpty()
+                                ? result.name.trimmed()
+                                : (!removedConversation.name.trimmed().isEmpty()
+                                       ? removedConversation.name.trimmed()
+                                       : conversationId);
+  QMessageBox::information(this, QStringLiteral("已解散群聊"),
+                           QStringLiteral("已解散群聊“%1”").arg(groupName));
+}
+
 void Widget::onLeaveGroupFinished(const QString &requestId,
                                   const LeaveGroupResult &result) {
   Q_UNUSED(requestId);
   handleLeaveGroupResult(result);
+}
+
+void Widget::onDismissGroupFinished(const QString &requestId,
+                                    const DismissGroupResult &result) {
+  Q_UNUSED(requestId);
+  handleDismissGroupResult(result);
 }
 
 void Widget::handleIncomingRealtimePayload(const QString &payload,
@@ -1439,6 +1528,22 @@ void Widget::onFriendListFailed(const QString &requestId, int code,
   m_friendListManager.clear();
   refreshContactListUi();
   syncFriendListToDeleteDialog();
+}
+
+void Widget::onProfileServerRequestReceived(const QString &requestId,
+                                            const QString &action,
+                                            const QJsonObject &data) {
+  Q_UNUSED(requestId);
+  Q_UNUSED(data);
+
+  if (action != QStringLiteral("CREATE_GROUP") &&
+      action != QStringLiteral("DISMISS_GROUP")) {
+    return;
+  }
+
+  qInfo().noquote() << "[MainWidget] refresh conversation list for server PROFILE action="
+                    << action;
+  requestConversationList(true);
 }
 
 QListWidget *Widget::listWidgetForConversationType(int conversationType) const {

@@ -158,6 +158,26 @@ struct LeaveGroupResult {
 };
 Q_DECLARE_METATYPE(LeaveGroupResult)
 
+struct DismissGroupResult {
+  bool ok = false;
+  int code = -1;
+  QString message;
+  QString requestId;
+  QString conversationId;
+  QString conversationUuid;
+  QString groupNumericId;
+  int conversationType = 0;
+  QString name;
+  QString ownerUserId;
+  int memberCount = 0;
+  bool dismissed = false;
+  QString dismissedByUserId;
+  QString dismissedByNumericId;
+  int deletedMemberRows = 0;
+  int deletedConversationRows = 0;
+};
+Q_DECLARE_METATYPE(DismissGroupResult)
+
 class ProfileApiClient : public QObject {
   Q_OBJECT
 
@@ -183,6 +203,10 @@ public:
                      const QString &groupNumericId = QString());
   QString leaveGroupByConversationId(const QString &conversationId);
   QString leaveGroupByGroupNumericId(const QString &groupNumericId);
+  QString dismissGroup(const QString &conversationId = QString(),
+                       const QString &groupNumericId = QString());
+  QString dismissGroupByConversationId(const QString &conversationId);
+  QString dismissGroupByGroupNumericId(const QString &groupNumericId);
   QString listGroups(const QString &keyword,
                      const QString &groupNumericId = QString());
 
@@ -206,8 +230,12 @@ signals:
   void joinGroupSucceeded(const QString &requestId, const JoinGroupResult &result);
   void leaveGroupFinished(const QString &requestId,
                           const LeaveGroupResult &result);
+  void dismissGroupFinished(const QString &requestId,
+                            const DismissGroupResult &result);
   void groupsListed(const QString &requestId,
                     const QVector<GroupSearchItem> &groups);
+  void serverRequestReceived(const QString &requestId, const QString &action,
+                             const QJsonObject &data);
   void conversationListPayloadReceived(const QString &requestId,
                                        const QJsonObject &data);
   void conversationListFailed(const QString &requestId, int code,
@@ -254,6 +282,9 @@ private:
   bool validateLeaveGroup(const QString &conversationId,
                           const QString &groupNumericId,
                           QString *error) const;
+  bool validateDismissGroup(const QString &conversationId,
+                            const QString &groupNumericId,
+                            QString *error) const;
   bool validateListGroups(const QString &keyword,
                           const QString &groupNumericId,
                           QString *error) const;
@@ -286,6 +317,9 @@ private:
   bool parseLeaveGroupResult(const QJsonObject &data,
                              LeaveGroupResult *outResult,
                              QString *error) const;
+  bool parseDismissGroupResult(const QJsonObject &data,
+                               DismissGroupResult *outResult,
+                               QString *error) const;
   bool parseGroupSearchList(const QJsonObject &data,
                             QVector<GroupSearchItem> *outGroups,
                             QString *error) const;

@@ -34,6 +34,8 @@ qt_add_executable(qt-client
     src/ui/friend/searchgroupdialog.cpp
     src/ui/friend/leavegroupdialog.h
     src/ui/friend/leavegroupdialog.cpp
+    src/ui/friend/dismissgroupdialog.h
+    src/ui/friend/dismissgroupdialog.cpp
     resources/resources.qrc
     src/network/websocketclient.h
     src/network/websocketclient.cpp
