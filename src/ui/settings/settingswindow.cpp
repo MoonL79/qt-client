@@ -359,9 +359,10 @@ SettingsWindow::SettingsWindow(const QString &userId,
       m_authApiClient(websocketclient::instance(), this) {
   setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
   setAttribute(Qt::WA_DeleteOnClose);
+  setAttribute(Qt::WA_TranslucentBackground);
   setObjectName(QStringLiteral("settingsWindow"));
   setWindowTitle("设置");
-  setStyleSheet(QStringLiteral("#settingsWindow { background: #ffffff; }"));
+  setStyleSheet(QStringLiteral("#settingsWindow { background: transparent; }"));
   resize(560, 420);
 
   buildUi();
@@ -460,10 +461,20 @@ bool SettingsWindow::eventFilter(QObject *watched, QEvent *event) {
 
 void SettingsWindow::buildUi() {
   auto *rootLayout = new QVBoxLayout(this);
-  rootLayout->setContentsMargins(20, 14, 20, 20);
-  rootLayout->setSpacing(12);
+  rootLayout->setContentsMargins(6, 6, 6, 6);
+  rootLayout->setSpacing(0);
 
-  m_titleBar = new QWidget(this);
+  auto *panel = new QWidget(this);
+  panel->setObjectName(QStringLiteral("settingsPanel"));
+  panel->setStyleSheet(QStringLiteral(
+      "#settingsPanel { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; }"));
+  rootLayout->addWidget(panel);
+
+  auto *panelLayout = new QVBoxLayout(panel);
+  panelLayout->setContentsMargins(20, 14, 20, 20);
+  panelLayout->setSpacing(12);
+
+  m_titleBar = new QWidget(panel);
   m_titleBar->setFixedHeight(40);
   m_titleBar->setCursor(Qt::OpenHandCursor);
   m_titleBar->installEventFilter(this);
@@ -487,22 +498,38 @@ void SettingsWindow::buildUi() {
   connect(m_titleCloseButton, &QPushButton::clicked, this, &QWidget::close);
   titleBarLayout->addWidget(m_titleCloseButton);
 
-  rootLayout->addWidget(m_titleBar);
+  panelLayout->addWidget(m_titleBar);
 
-  m_tabWidget = new CurrentTabSizeHintWidget(this);
+  m_tabWidget = new CurrentTabSizeHintWidget(panel);
   m_tabWidget->setDocumentMode(true);
   m_tabWidget->tabBar()->setDrawBase(false);
-  rootLayout->addWidget(m_tabWidget);
+  panelLayout->addWidget(m_tabWidget);
 
   auto *userTab = new QWidget(m_tabWidget);
   auto *userLayout = new QVBoxLayout(userTab);
   userLayout->setContentsMargins(0, 8, 0, 0);
   userLayout->setSpacing(12);
 
-  auto *formLayout = new QFormLayout();
-  formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  formLayout->setHorizontalSpacing(12);
-  formLayout->setVerticalSpacing(12);
+  auto *formLayout = new QVBoxLayout();
+  formLayout->setContentsMargins(0, 0, 0, 0);
+  formLayout->setSpacing(12);
+
+  const auto createUserFormRow = [userTab](const QString &title,
+                                           QWidget *fieldWidget) {
+    auto *rowWidget = new QWidget(userTab);
+    auto *rowLayout = new QHBoxLayout(rowWidget);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(12);
+
+    auto *titleLabel = new QLabel(title, rowWidget);
+    titleLabel->setFixedWidth(72);
+    titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    titleLabel->setStyleSheet("color: #111827; font-weight: 500; padding-top: 8px;");
+
+    rowLayout->addWidget(titleLabel, 0, Qt::AlignTop);
+    rowLayout->addWidget(fieldWidget, 1);
+    return rowWidget;
+  };
 
   auto *avatarBox = new QWidget(userTab);
   auto *avatarLayout = new QHBoxLayout(avatarBox);
@@ -527,14 +554,14 @@ void SettingsWindow::buildUi() {
 
   avatarLayout->addWidget(m_avatarPreviewLabel, 0, Qt::AlignVCenter);
   avatarLayout->addLayout(avatarBtnLayout);
-  formLayout->addRow("头像上传", avatarBox);
+  formLayout->addWidget(createUserFormRow(QStringLiteral("头像"), avatarBox));
 
   m_nicknameEdit = new QLineEdit(userTab);
   m_nicknameEdit->setPlaceholderText("请输入昵称");
   m_nicknameEdit->setStyleSheet(
       "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
       "QLineEdit:focus { border-color: #93c5fd; }");
-  formLayout->addRow("昵称", m_nicknameEdit);
+  formLayout->addWidget(createUserFormRow(QStringLiteral("昵称"), m_nicknameEdit));
 
   m_signatureEdit = new QTextEdit(userTab);
   m_signatureEdit->setPlaceholderText("请输入个人签名");
@@ -542,7 +569,7 @@ void SettingsWindow::buildUi() {
   m_signatureEdit->setStyleSheet(
       "QTextEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
       "QTextEdit:focus { border-color: #93c5fd; }");
-  formLayout->addRow("个人签名", m_signatureEdit);
+  formLayout->addWidget(createUserFormRow(QStringLiteral("个签"), m_signatureEdit));
 
   userLayout->addLayout(formLayout);
   userLayout->addStretch();
@@ -745,22 +772,22 @@ void SettingsWindow::buildUi() {
   m_tabWidget->addTab(appearanceTab, QStringLiteral("界面"));
   m_tabWidget->addTab(downloadTab, QStringLiteral("下载"));
 
-  m_statusLabel = new QLabel("就绪", this);
+  m_statusLabel = new QLabel("就绪", panel);
   m_statusLabel->setStyleSheet("color: #666;");
-  rootLayout->addWidget(m_statusLabel);
+  panelLayout->addWidget(m_statusLabel);
 
   auto *buttonLayout = new QHBoxLayout();
-  m_logoutButton = new QPushButton("登出", this);
+  m_logoutButton = new QPushButton("登出", panel);
   buttonLayout->addWidget(m_logoutButton);
   buttonLayout->addStretch();
 
-  m_refreshButton = new QPushButton("刷新", this);
-  m_saveButton = new QPushButton("保存", this);
+  m_refreshButton = new QPushButton("刷新", panel);
+  m_saveButton = new QPushButton("保存", panel);
   m_saveButton->setDefault(true);
 
   buttonLayout->addWidget(m_refreshButton);
   buttonLayout->addWidget(m_saveButton);
-  rootLayout->addLayout(buttonLayout);
+  panelLayout->addLayout(buttonLayout);
 
   connect(m_refreshButton, &QPushButton::clicked, this,
           &SettingsWindow::onRefreshClicked);
@@ -784,24 +811,29 @@ void SettingsWindow::buildUi() {
 }
 
 int SettingsWindow::targetWindowHeightForTab(int tabIndex) const {
-  if (!layout() || !m_tabWidget || tabIndex < 0 || tabIndex >= m_tabWidget->count()) {
+  if (!m_tabWidget || tabIndex < 0 || tabIndex >= m_tabWidget->count()) {
     return height();
   }
 
-  const QMargins rootMargins = layout()->contentsMargins();
-  const int spacing = static_cast<QVBoxLayout *>(layout())->spacing();
   QWidget *page = m_tabWidget->widget(tabIndex);
+  if (!page) {
+    return height();
+  }
+
   const QMargins tabMargins = m_tabWidget->contentsMargins();
   const int tabBarHeight = m_tabWidget->tabBar() ? m_tabWidget->tabBar()->sizeHint().height() : 0;
   const int pageHeight = page ? page->sizeHint().height() : 0;
-  const int statusHeight = m_statusLabel ? m_statusLabel->sizeHint().height() : 0;
-  const int buttonHeight = m_logoutButton ? m_logoutButton->sizeHint().height() : 0;
-  const int frameExtra = m_tabWidget->height() - m_tabWidget->contentsRect().height();
+  const int frameExtra =
+      m_tabWidget->frameGeometry().height() - m_tabWidget->contentsRect().height();
+  const int targetTabHeight = tabMargins.top() + tabMargins.bottom() + frameExtra +
+                              tabBarHeight + pageHeight;
 
-  const int totalHeight = rootMargins.top() + rootMargins.bottom() + tabMargins.top() +
-                          tabMargins.bottom() + frameExtra + tabBarHeight + pageHeight +
-                          statusHeight + buttonHeight + spacing * 2;
-  return qMax(totalHeight, minimumSizeHint().height());
+  // Preserve the current non-tab chrome height so size animation stays correct
+  // even if the window layout hierarchy changes.
+  const int chromeHeight = qMax(0, height() - m_tabWidget->height());
+  const int totalHeight = chromeHeight + targetTabHeight;
+  const int minHeightFloor = m_defaultMinimumHeight > 0 ? m_defaultMinimumHeight : 0;
+  return qMax(totalHeight, minHeightFloor);
 }
 
 void SettingsWindow::adjustWindowSizeForCurrentTab(bool animated) {
