@@ -1,6 +1,7 @@
 #ifndef SESSIONWINDOW_H
 #define SESSIONWINDOW_H
 
+#include "framelesswindowbase.h"
 #include "protocol.h"
 #include "session.h"
 #include "usersession.h"
@@ -9,17 +10,14 @@
 #include <QByteArray>
 #include <QHash>
 #include <QLabel>
-#include <QLineEdit>
-#include <QMouseEvent>
-#include <QPoint>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QString>
+#include <QTextEdit>
 #include <QVector>
 #include <QVBoxLayout>
-#include <QWidget>
 
-class SessionWindow : public QWidget {
+class SessionWindow : public FramelessWindowBase {
   Q_OBJECT
 public:
   enum class MessageStatus { Pending, Sent, Failed, Received };
@@ -47,12 +45,6 @@ signals:
                                 const QString &previewText);
 
 protected:
-  bool eventFilter(QObject *obj, QEvent *event) override;
-  void mousePressEvent(QMouseEvent *event) override;
-  void mouseMoveEvent(QMouseEvent *event) override;
-  void mouseReleaseEvent(QMouseEvent *event) override;
-
-private:
   void initUI();
   void appendStatusLine(const QString &message);
   QLabel *appendChatBubble(const QString &message, bool outgoing = false,
@@ -66,35 +58,11 @@ private:
   void markPendingMessageFailed(int index, const QString &reason);
   Session m_session;
 
-  // Dragging support
-  bool m_isDragging;
-  QPoint m_dragPosition;
-
-  // Resize support
-  enum Direction {
-    None,
-    Top,
-    Bottom,
-    Left,
-    Right,
-    TopLeft,
-    TopRight,
-    BottomLeft,
-    BottomRight
-  };
-  Direction m_resizeDir;
-  void checkCursorShape(const QPoint &globalPos);
-
-  // Unified mouse handling
-  void handleMousePress(QMouseEvent *event);
-  void handleMouseMove(QMouseEvent *event);
-  void handleMouseRelease(QMouseEvent *event);
-
   // Network & UI helpers
   QScrollArea *m_chatScroll;
   QWidget *m_chatContainer;
   QVBoxLayout *m_chatLayout;
-  QLineEdit *m_inputLine;
+  QTextEdit *m_inputLine;
   QPushButton *m_sendBtn;
   QLabel *m_presenceLabel;
   QString m_pendingMessage;
