@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QTextEdit>
+#include <QTabWidget>
 #include <QUrl>
 #include <QWidget>
 
