@@ -13,6 +13,7 @@
 #include <QListWidget>
 #include <QPointer>
 #include <QJsonObject>
+#include <QSet>
 #include <QPoint>
 #include <QMouseEvent>
 #include <QHBoxLayout>
@@ -41,6 +42,7 @@ class SearchGroupDialog;
 class LeaveGroupDialog;
 class DismissGroupDialog;
 class SessionWindow;
+class ChatFileService;
 
 class Widget : public QWidget
 {
@@ -87,6 +89,28 @@ private:
         QString lastMessagePreview;
         int unreadCount = 0;
         bool placeholder = false;
+    };
+
+    struct PendingFileTransferState {
+        QString uploadRequestId;
+        QString sendRequestId;
+        QString conversationId;
+        QString conversationName;
+        QString localFilePath;
+
+        void clear() {
+            uploadRequestId.clear();
+            sendRequestId.clear();
+            conversationId.clear();
+            conversationName.clear();
+            localFilePath.clear();
+        }
+    };
+
+    struct PendingFileDownloadState {
+        QString conversationId;
+        QString originalName;
+        QString savePath;
     };
 
     void initUI();
@@ -173,6 +197,10 @@ private:
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByNumericId;
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByConversationId;
     QHash<QString, ConversationListState> m_conversationStatesByConversationId;
+    ChatFileService* m_chatFileService = nullptr;
+    PendingFileTransferState m_pendingFileTransfer;
+    QHash<QString, PendingFileDownloadState> m_pendingFileDownloads;
+    QSet<QString> m_seenIncomingFileMessageKeys;
     
     // Dragging support
     bool m_isDragging;
@@ -187,6 +215,7 @@ private slots:
     void onOpenSearchGroup();
     void onOpenLeaveGroup();
     void onOpenDismissGroup();
+    void onOpenFileTransfer();
     void onAvatarReplyFinished(QNetworkReply *reply);
     void onConversationListPayloadReceived(const QString &requestId,
                                            const QJsonObject &data);

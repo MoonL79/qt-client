@@ -72,6 +72,17 @@ bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
   return true;
 }
 
+QString readTrimmedString(const QJsonObject &obj, const char *key) {
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (value.isString()) {
+    return value.toString().trimmed();
+  }
+  if (value.isDouble()) {
+    return QString::number(static_cast<qint64>(value.toDouble()));
+  }
+  return QString();
+}
+
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -303,11 +314,20 @@ bool AuthApiClient::parseLoginResult(const protocol::Envelope &envelope,
   outResult->requestId = envelope.requestId;
   outResult->code = envelope.hasCode ? envelope.code : 0;
   outResult->user = user;
-  outResult->uploadToken = data.value(QStringLiteral("upload_token")).toString().trimmed();
-  outResult->uploadTokenType =
-      data.value(QStringLiteral("upload_token_type")).toString().trimmed();
+  outResult->uploadToken = readTrimmedString(data, "chat_file_upload_token");
+  if (outResult->uploadToken.isEmpty()) {
+    outResult->uploadToken = readTrimmedString(data, "upload_token");
+  }
+  outResult->uploadTokenType = readTrimmedString(data, "chat_file_upload_token_type");
+  if (outResult->uploadTokenType.isEmpty()) {
+    outResult->uploadTokenType = readTrimmedString(data, "upload_token_type");
+  }
   outResult->uploadTokenExpiresAtUtc =
-      data.value(QStringLiteral("upload_token_expires_at")).toString().trimmed();
+      readTrimmedString(data, "chat_file_upload_token_expires_at");
+  if (outResult->uploadTokenExpiresAtUtc.isEmpty()) {
+    outResult->uploadTokenExpiresAtUtc =
+        readTrimmedString(data, "upload_token_expires_at");
+  }
   outResult->uploadTokenExpiresAt =
       parseUtcIsoTime(outResult->uploadTokenExpiresAtUtc);
   outResult->presence = presence;

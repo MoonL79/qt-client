@@ -45,6 +45,9 @@ qt_add_executable(qt-client
     src/network/authapiclient.cpp
     src/network/profileapiclient.h
     src/network/profileapiclient.cpp
+    src/chat/chatmessage.h
+    src/chat/chatfileservice.h
+    src/chat/chatfileservice.cpp
     src/auth/registerutils.h
     src/auth/registerutils.cpp
     src/session/session.h
@@ -66,6 +69,7 @@ target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/settings
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/friend
     ${CMAKE_CURRENT_SOURCE_DIR}/src/network
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/chat
     ${CMAKE_CURRENT_SOURCE_DIR}/src/auth
     ${CMAKE_CURRENT_SOURCE_DIR}/src/session
     ${CMAKE_CURRENT_SOURCE_DIR}/src/conversation
@@ -103,6 +107,37 @@ target_link_libraries(registerutils_test
 )
 
 add_test(NAME registerutils_test COMMAND registerutils_test)
+
+qt_add_executable(chatfileservice_test
+    test/chatfileservice_test.cpp
+    src/network/protocol.cpp
+    src/network/protocol.h
+    src/network/authapiclient.cpp
+    src/network/authapiclient.h
+    src/network/websocketclient.cpp
+    src/network/websocketclient.h
+    src/chat/chatfileservice.cpp
+    src/chat/chatfileservice.h
+    src/chat/chatmessage.h
+    src/session/usersession.cpp
+    src/session/usersession.h
+)
+
+target_include_directories(chatfileservice_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/network
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/chat
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/session
+)
+
+target_link_libraries(chatfileservice_test
+    PRIVATE
+        Qt::Core
+        Qt::Test
+        Qt6::Network
+        Qt6::WebSockets
+)
+
+add_test(NAME chatfileservice_test COMMAND chatfileservice_test)
 
 include(GNUInstallDirs)
 
