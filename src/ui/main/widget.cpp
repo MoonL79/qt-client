@@ -113,6 +113,33 @@ QString filePreviewText(const QString &originalName) {
   return trimmed.isEmpty() ? QStringLiteral("[文件]") :
                              QStringLiteral("[文件] %1").arg(trimmed);
 }
+
+QString incomingFileMessageKey(const ChatMessage &message) {
+  if (!message.messageId.trimmed().isEmpty()) {
+    return message.messageId.trimmed();
+  }
+  return QStringLiteral("%1|%2|%3")
+      .arg(message.conversationId.trimmed(), message.file.fileId.trimmed(),
+           message.sentAt.trimmed());
+}
+
+QString humanReadableFileSize(qint64 sizeBytes) {
+  if (sizeBytes < 0) {
+    return QStringLiteral("未知大小");
+  }
+
+  static const char *kUnits[] = {"B", "KB", "MB", "GB"};
+  double size = static_cast<double>(sizeBytes);
+  int unitIndex = 0;
+  while (size >= 1024.0 && unitIndex < 3) {
+    size /= 1024.0;
+    ++unitIndex;
+  }
+
+  const int precision = unitIndex == 0 ? 0 : (size < 10.0 ? 1 : 0);
+  return QStringLiteral("%1 %2")
+      .arg(QString::number(size, 'f', precision), QString::fromLatin1(kUnits[unitIndex]));
+}
 }
 
 Widget::Widget(QWidget *parent)
@@ -171,27 +198,127 @@ Widget::Widget(QWidget *parent)
                              : m_pendingFileTransfer.conversationName));
             m_pendingFileTransfer.clear();
           });
+  connect(m_chatFileService, &ChatFileService::fileMessageReceived, this,
+          [this](const ChatMessage &message) {
+            if (message.senderUserId.trimmed() == m_currentUserId.trimmed() ||
+                message.senderUserId.trimmed() ==
+                    UserSession::instance().userId().trimmed()) {
+              return;
+            }
+
+            const QString messageKey = incomingFileMessageKey(message);
+            if (messageKey.isEmpty() ||
+                m_seenIncomingFileMessageKeys.contains(messageKey)) {
+              return;
+            }
+            m_seenIncomingFileMessageKeys.insert(messageKey);
+
+            const QString senderName =
+                message.senderUsername.trimmed().isEmpty()
+                    ? QStringLiteral("对方")
+                    : message.senderUsername.trimmed();
+            const QString conversationName =
+                m_conversationStatesByConversationId
+                    .value(message.conversationId)
+                    .displayName
+                    .trimmed();
+            const QString defaultDir = QStandardPaths::writableLocation(
+                QStandardPaths::DownloadLocation);
+            const QString defaultSavePath =
+                QDir(defaultDir.isEmpty() ? QDir::homePath() : defaultDir)
+                    .filePath(message.file.originalName.trimmed());
+            const QString acceptText =
+                QStringLiteral("%1 向你发送了文件：\n%2\n大小：%3\n\n是否接收并保存？")
+                    .arg(senderName, message.file.originalName,
+                         humanReadableFileSize(message.file.sizeBytes));
+            if (QMessageBox::question(this, QStringLiteral("接收文件"), acceptText,
+                                      QMessageBox::Yes | QMessageBox::No,
+                                      QMessageBox::Yes) != QMessageBox::Yes) {
+              return;
+            }
+
+            const QString savePath = QFileDialog::getSaveFileName(
+                this,
+                conversationName.isEmpty()
+                    ? QStringLiteral("选择文件保存位置")
+                    : QStringLiteral("保存来自 %1 的文件").arg(conversationName),
+                defaultSavePath, QStringLiteral("All Files (*.*)"));
+            if (savePath.trimmed().isEmpty()) {
+              return;
+            }
+            if (!UserSession::instance().hasValidUploadToken()) {
+              QMessageBox::warning(
+                  this, QStringLiteral("无法接收文件"),
+                  QStringLiteral("当前下载凭证无效或已过期，请重新登录后再试。"));
+              return;
+            }
+
+            const QString requestId =
+                m_chatFileService->downloadFile(message.file.fileId, savePath);
+            PendingFileDownloadState pending;
+            pending.conversationId = message.conversationId;
+            pending.originalName = message.file.originalName;
+            pending.savePath = savePath;
+            m_pendingFileDownloads.insert(requestId, pending);
+          });
+  connect(m_chatFileService, &ChatFileService::downloadFinished, this,
+          [this](const QString &requestId, const ChatFileDownloadTask &task) {
+            auto it = m_pendingFileDownloads.find(requestId);
+            const QString savePath =
+                it == m_pendingFileDownloads.end() ? task.savePath : it->savePath;
+            const QString originalName =
+                it == m_pendingFileDownloads.end() ? QString() : it->originalName;
+            if (it != m_pendingFileDownloads.end()) {
+              m_pendingFileDownloads.erase(it);
+            }
+
+            QMessageBox::information(
+                this, QStringLiteral("文件已保存"),
+                QStringLiteral("%1已保存到：\n%2")
+                    .arg(originalName.trimmed().isEmpty()
+                             ? QString()
+                             : QStringLiteral("文件“%1”").arg(originalName),
+                         savePath));
+          });
   connect(m_chatFileService, &ChatFileService::requestFailed, this,
           [this](const QString &requestId, const QString &action, int code,
                  const QString &error) {
             const bool matchesUpload =
                 requestId == m_pendingFileTransfer.uploadRequestId;
             const bool matchesSend = requestId == m_pendingFileTransfer.sendRequestId;
-            if (!matchesUpload && !matchesSend) {
+            const auto downloadIt = m_pendingFileDownloads.find(requestId);
+            const bool matchesDownload = downloadIt != m_pendingFileDownloads.end();
+            if (!matchesUpload && !matchesSend && !matchesDownload) {
               return;
             }
 
-            const QString stage = matchesUpload ? QStringLiteral("上传")
-                                                : QStringLiteral("发送消息");
-            QMessageBox::warning(
-                this, QStringLiteral("文件传输失败"),
-                QStringLiteral("%1失败: %2 (code=%3)")
-                    .arg(stage, error.isEmpty() ? QStringLiteral("未知错误") : error,
-                         QString::number(code)));
+            const QString stage =
+                matchesUpload ? QStringLiteral("上传")
+                              : (matchesSend ? QStringLiteral("发送消息")
+                                             : QStringLiteral("下载"));
+            const QString title =
+                matchesDownload ? QStringLiteral("文件下载失败")
+                                : QStringLiteral("文件传输失败");
+            const QString detail =
+                matchesDownload && downloadIt != m_pendingFileDownloads.end() &&
+                        !downloadIt->savePath.trimmed().isEmpty()
+                    ? QStringLiteral("%1失败: %2 (code=%3)\n保存路径：%4")
+                          .arg(stage,
+                               error.isEmpty() ? QStringLiteral("未知错误") : error,
+                               QString::number(code), downloadIt->savePath)
+                    : QStringLiteral("%1失败: %2 (code=%3)")
+                          .arg(stage,
+                               error.isEmpty() ? QStringLiteral("未知错误") : error,
+                               QString::number(code));
+            QMessageBox::warning(this, title, detail);
             qWarning() << "[MainWidget] file transfer failed action=" << action
                        << "request_id=" << requestId << "code=" << code
                        << "message=" << error;
-            m_pendingFileTransfer.clear();
+            if (matchesDownload) {
+              m_pendingFileDownloads.erase(downloadIt);
+            } else {
+              m_pendingFileTransfer.clear();
+            }
           });
 
   m_conversationListRefreshTimer = new QTimer(this);

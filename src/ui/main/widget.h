@@ -13,6 +13,7 @@
 #include <QListWidget>
 #include <QPointer>
 #include <QJsonObject>
+#include <QSet>
 #include <QPoint>
 #include <QMouseEvent>
 #include <QHBoxLayout>
@@ -106,6 +107,12 @@ private:
         }
     };
 
+    struct PendingFileDownloadState {
+        QString conversationId;
+        QString originalName;
+        QString savePath;
+    };
+
     void initUI();
     void initAvatarHttpClient();
     void addSessionItem(const Session &session);
@@ -192,6 +199,8 @@ private:
     QHash<QString, ConversationListState> m_conversationStatesByConversationId;
     ChatFileService* m_chatFileService = nullptr;
     PendingFileTransferState m_pendingFileTransfer;
+    QHash<QString, PendingFileDownloadState> m_pendingFileDownloads;
+    QSet<QString> m_seenIncomingFileMessageKeys;
     
     // Dragging support
     bool m_isDragging;
