@@ -144,7 +144,9 @@ QString humanReadableFileSize(qint64 sizeBytes) {
 QString topPanelStyleSheetForColor(const QColor &color) {
   const QColor resolved = color.isValid() ? color : QColor(QStringLiteral("#ffffff"));
   const QColor border = resolved.darker(112);
-  return QStringLiteral("background-color: %1; border-bottom: 1px solid %2;")
+  return QStringLiteral(
+             "background-color: %1; border-bottom: 1px solid %2; "
+             "border-top-left-radius: 8px; border-top-right-radius: 8px;")
       .arg(resolved.name(QColor::HexRgb), border.name(QColor::HexRgb));
 }
 
@@ -428,7 +430,7 @@ void Widget::initUI() {
   container->setObjectName("MainContainer");
   // 1. 容器底色设为浅灰 (#f0f2f5)
   container->setStyleSheet("#MainContainer { background-color: #f0f2f5; "
-                           "border: 1px solid #dcdcdc; }");
+                           "border: 1px solid #dcdcdc; border-radius: 8px; }");
   mainLayout->addWidget(container);
 
   QVBoxLayout *containerLayout = new QVBoxLayout(container);
