@@ -14,6 +14,7 @@
 #include "usersession.h"
 #include "websocketclient.h"
 
+#include <QAbstractButton>
 #include <QDir>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -191,9 +192,18 @@ QString topButtonStyleSheetForColor(const QColor &color, bool closeButton = fals
   return QStringLiteral(
              "QPushButton { border: none; font-weight: bold; color: %1; font-size: 16px; "
              "background: transparent; }"
-             "QPushButton:hover { background-color: %2; color: %3; }")
+             "QPushButton:hover { background-color: %2; color: %3; %4 }")
       .arg(text.name(QColor::HexRgb), hover.name(QColor::HexRgb),
-           closeButton ? QStringLiteral("#ffffff") : QStringLiteral("#111827"));
+           closeButton ? QStringLiteral("#ffffff") : QStringLiteral("#111827"),
+           closeButton ? QStringLiteral("border-radius: 6px;")
+                       : QStringLiteral(""));
+}
+
+QString minButtonStyleSheet() {
+  return QStringLiteral(
+      "QPushButton { border: none; font-weight: bold; color: #374151; font-size: 16px; "
+      "background: transparent; }"
+      "QPushButton:hover { background-color: #eef2f7; color: #111827; border-radius: 6px; }");
 }
 
 QString quickActionButtonStyleSheetForColor(const QColor &color) {
@@ -762,7 +772,7 @@ void Widget::applyMainThemeColor(const QColor &color) {
     m_settingsButton->setStyleSheet(topButtonStyleSheetForColor(m_topPanelThemeColor));
   }
   if (m_minButton) {
-    m_minButton->setStyleSheet(topButtonStyleSheetForColor(m_topPanelThemeColor));
+    m_minButton->setStyleSheet(minButtonStyleSheet());
   }
   if (m_closeButton) {
     m_closeButton->setStyleSheet(topButtonStyleSheetForColor(m_topPanelThemeColor, true));
@@ -835,25 +845,52 @@ void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
 // --- 拖拽窗口支持 ---
 void Widget::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
-    m_isDragging = true;
-    m_dragPosition =
-        event->globalPosition().toPoint() - frameGeometry().topLeft();
-    event->accept();
+    QWidget *target = childAt(event->position().toPoint());
+    const bool inTopPanel =
+        target && m_topPanel && (target == m_topPanel || m_topPanel->isAncestorOf(target));
+
+    if (inTopPanel) {
+      QWidget *walk = target;
+      bool overButton = false;
+      while (walk) {
+        if (qobject_cast<QAbstractButton *>(walk)) {
+          overButton = true;
+          break;
+        }
+        if (walk == m_topPanel) {
+          break;
+        }
+        walk = walk->parentWidget();
+      }
+
+      if (!overButton) {
+        m_isDragging = true;
+        m_dragPosition =
+            event->globalPosition().toPoint() - frameGeometry().topLeft();
+        event->accept();
+        return;
+      }
+    }
   }
+  QWidget::mousePressEvent(event);
 }
 
 void Widget::mouseMoveEvent(QMouseEvent *event) {
   if (m_isDragging && (event->buttons() & Qt::LeftButton)) {
     move(event->globalPosition().toPoint() - m_dragPosition);
     event->accept();
+    return;
   }
+  QWidget::mouseMoveEvent(event);
 }
 
 void Widget::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = false;
     event->accept();
+    return;
   }
+  QWidget::mouseReleaseEvent(event);
 }
 
 void Widget::onSessionDoubleClicked(QListWidgetItem *item) {

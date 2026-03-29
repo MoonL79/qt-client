@@ -3,10 +3,13 @@
 #include <QAbstractSocket>
 #include <QDateTime>
 #include <QDebug>
+#include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScrollBar>
+#include <QSizePolicy>
 #include <QTimer>
 #include <QUuid>
 
@@ -101,13 +104,14 @@ QString messageErrorText(int code, const QString &fallback) {
 } // namespace
 
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
-    : QWidget(parent), m_session(session), m_isDragging(false),
-      m_resizeDir(None), m_chatScroll(nullptr), m_chatContainer(nullptr),
-      m_chatLayout(nullptr), m_inputLine(nullptr), m_sendBtn(nullptr),
-      m_presenceLabel(nullptr),
+    : FramelessWindowBase(parent), m_session(session), m_chatScroll(nullptr),
+      m_chatContainer(nullptr), m_chatLayout(nullptr), m_inputLine(nullptr),
+      m_sendBtn(nullptr), m_presenceLabel(nullptr),
       m_websocket(websocketclient::instance()) {
   setAttribute(Qt::WA_DeleteOnClose);
-  setMouseTracking(true); // Enable mouse tracking for resize cursor feedback
+  setAttribute(Qt::WA_TranslucentBackground);
+  setStandardTitleBarVisible(false);
+  setResizeBorderWidth(8);
   initUI();
 }
 
@@ -132,22 +136,16 @@ void SessionWindow::initUI() {
   setWindowTitle(m_session.displayName());
   resize(600, 400);
 
-  // 1. 去除系统标题栏
-  setWindowFlags(Qt::FramelessWindowHint | Qt::WindowMinMaxButtonsHint);
-  setAttribute(Qt::WA_TranslucentBackground);
-
-  // 2. 主容器与样式
-  QVBoxLayout *mainLayout = new QVBoxLayout(this);
-  // 设置 5px
-  // 的边距，这部分区域实际上是透明的，专门用于捕获鼠标移动事件来实现调整大小
-  // 只有鼠标位于这 5px 的边缘区域时，事件才会直接发送给
-  // SessionWindow，而不是被子控件遮挡
-  mainLayout->setContentsMargins(2, 2, 2, 2);
+  QWidget *root = contentWidget();
+  root->setAttribute(Qt::WA_TranslucentBackground);
+  root->setStyleSheet("background: transparent;");
+  QVBoxLayout *mainLayout = new QVBoxLayout(root);
+  mainLayout->setContentsMargins(0, 0, 0, 0);
   mainLayout->setSpacing(0);
 
-  QWidget *container = new QWidget(this);
+  QWidget *container = new QWidget(root);
   container->setObjectName("SessionContainer");
-  container->setStyleSheet("#SessionContainer { background-color: #f5f5f5; "
+  container->setStyleSheet("#SessionContainer { background-color: #ffffff; "
                            "border: 1px solid #dcdcdc; border-radius: 4px; }");
   mainLayout->addWidget(container);
 
@@ -201,20 +199,11 @@ void SessionWindow::initUI() {
   headerLayout->addWidget(closeBtn);
 
   containerLayout->addWidget(header);
-
-  // Enable mouse tracking
-  container->setMouseTracking(true);
-  header->setMouseTracking(true);
-
-  // Install event filter
-  container->installEventFilter(this);
-  header->installEventFilter(this);
+  addDragRegion(header);
 
   // 内容区域
   QWidget *contentArea = new QWidget(container);
   contentArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-  contentArea->setMouseTracking(true);   // Enable for content too
-  contentArea->installEventFilter(this); // Filter for content too
 
   QVBoxLayout *contentLayout = new QVBoxLayout(contentArea);
   contentLayout->setContentsMargins(12, 12, 12, 12);
@@ -225,8 +214,10 @@ void SessionWindow::initUI() {
   m_chatScroll->setFrameShape(QFrame::NoFrame);
   m_chatScroll->setStyleSheet("QScrollArea { background-color: #ffffff; border: "
                               "1px solid #dcdcdc; border-radius: 8px; }");
+  m_chatScroll->viewport()->setStyleSheet("background-color: #ffffff;");
 
   m_chatContainer = new QWidget(m_chatScroll);
+  m_chatContainer->setStyleSheet("background-color: #ffffff;");
   m_chatLayout = new QVBoxLayout(m_chatContainer);
   m_chatLayout->setContentsMargins(0, 10, 10, 10);
   m_chatLayout->setSpacing(8);
@@ -235,28 +226,36 @@ void SessionWindow::initUI() {
   m_chatScroll->setWidget(m_chatContainer);
   contentLayout->addWidget(m_chatScroll);
 
-  QHBoxLayout *inputLayout = new QHBoxLayout();
-  inputLayout->setSpacing(8);
+  QWidget *inputWrapper = new QWidget(contentArea);
+  inputWrapper->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-  m_inputLine = new QLineEdit(contentArea);
+  QGridLayout *inputLayout = new QGridLayout(inputWrapper);
+  inputLayout->setContentsMargins(0, 0, 0, 0);
+  inputLayout->setHorizontalSpacing(0);
+  inputLayout->setVerticalSpacing(0);
+
+  m_inputLine = new QTextEdit(inputWrapper);
   m_inputLine->setPlaceholderText("输入测试消息");
+  m_inputLine->setAcceptRichText(false);
+  m_inputLine->setMinimumHeight(96);
+  m_inputLine->setMaximumHeight(140);
   m_inputLine->setStyleSheet(
-      "border: 1px solid #dcdcdc; border-radius: 4px; padding: 4px;");
-  inputLayout->addWidget(m_inputLine);
+      "QTextEdit { border: 1px solid #dcdcdc; border-radius: 8px; "
+      "padding: 8px 88px 40px 8px; background: #ffffff; }");
+  inputLayout->addWidget(m_inputLine, 0, 0);
 
-  m_sendBtn = new QPushButton("发送", contentArea);
+  m_sendBtn = new QPushButton("发送", inputWrapper);
   m_sendBtn->setCursor(Qt::PointingHandCursor);
+  m_sendBtn->setFixedHeight(32);
+  m_sendBtn->setMinimumWidth(68);
   m_sendBtn->setStyleSheet(
       "QPushButton { background-color: #4a90e2; color: white; border: none; "
-      "border-radius: 4px; padding: 6px 16px; }"
+      "border-radius: 6px; padding: 6px 16px; }"
       "QPushButton:hover { background-color: #3a78d6; }");
-  inputLayout->addWidget(m_sendBtn);
+  inputLayout->addWidget(m_sendBtn, 0, 0, Qt::AlignRight | Qt::AlignBottom);
 
   connect(m_sendBtn, &QPushButton::clicked, this,
           &SessionWindow::onSendClicked);
-
-  connect(m_inputLine, &QLineEdit::returnPressed, m_sendBtn,
-          &QPushButton::click);
   connect(m_sendBtn, &QPushButton::clicked, this,
           &SessionWindow::sendPendingMessage);
   connect(m_websocket, &websocketclient::textMessageReceived, this,
@@ -275,7 +274,7 @@ void SessionWindow::initUI() {
             appendStatusLine("连接错误: " + message);
           });
 
-  contentLayout->addLayout(inputLayout);
+  contentLayout->addWidget(inputWrapper);
 
   containerLayout->addWidget(contentArea);
   refreshPresenceLabel();
@@ -287,7 +286,7 @@ void SessionWindow::sendPendingMessage() {
 
   QString message = m_pendingMessage;
   if (message.isEmpty())
-    message = m_inputLine->text().trimmed();
+    message = m_inputLine->toPlainText().trimmed();
   if (message.isEmpty())
     return;
 
@@ -334,7 +333,7 @@ void SessionWindow::sendPendingMessage() {
 void SessionWindow::onSendClicked() {
   if (!m_inputLine)
     return;
-  m_pendingMessage = m_inputLine->text().trimmed();
+  m_pendingMessage = m_inputLine->toPlainText().trimmed();
 }
 
 void SessionWindow::appendStatusLine(const QString &message) {
@@ -567,140 +566,4 @@ void SessionWindow::markPendingMessageFailed(int index, const QString &reason) {
   updateMessageBubble(index);
   qWarning() << "[SessionWindow] pending message failed request_id="
              << message.requestId << "reason=" << reason;
-}
-
-bool SessionWindow::eventFilter(QObject *obj, QEvent *event) {
-  if (event->type() == QEvent::MouseMove ||
-      event->type() == QEvent::MouseButtonPress ||
-      event->type() == QEvent::MouseButtonRelease) {
-
-    QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
-    if (event->type() == QEvent::MouseMove)
-      handleMouseMove(mouseEvent);
-    else if (event->type() == QEvent::MouseButtonPress)
-      handleMousePress(mouseEvent);
-    else if (event->type() == QEvent::MouseButtonRelease)
-      handleMouseRelease(mouseEvent);
-
-    return false;
-  }
-  return QWidget::eventFilter(obj, event);
-}
-
-// --- 拖拽与缩放支持 ---
-void SessionWindow::checkCursorShape(const QPoint &globalPos) {
-  const int margin = 8;
-  QPoint pos = mapFromGlobal(globalPos);
-
-  int w = width();
-  int h = height();
-  int x = pos.x();
-  int y = pos.y();
-
-  bool left = x < margin;
-  bool right = x > w - margin;
-  bool top = y < margin;
-  bool bottom = y > h - margin;
-
-  if (top && left)
-    m_resizeDir = TopLeft;
-  else if (top && right)
-    m_resizeDir = TopRight;
-  else if (bottom && left)
-    m_resizeDir = BottomLeft;
-  else if (bottom && right)
-    m_resizeDir = BottomRight;
-  else if (top)
-    m_resizeDir = Top;
-  else if (bottom)
-    m_resizeDir = Bottom;
-  else if (left)
-    m_resizeDir = Left;
-  else if (right)
-    m_resizeDir = Right;
-  else
-    m_resizeDir = None;
-
-  if (m_resizeDir == TopLeft || m_resizeDir == BottomRight)
-    setCursor(Qt::SizeFDiagCursor);
-  else if (m_resizeDir == TopRight || m_resizeDir == BottomLeft)
-    setCursor(Qt::SizeBDiagCursor);
-  else if (m_resizeDir == Left || m_resizeDir == Right)
-    setCursor(Qt::SizeHorCursor);
-  else if (m_resizeDir == Top || m_resizeDir == Bottom)
-    setCursor(Qt::SizeVerCursor);
-  else
-    setCursor(Qt::ArrowCursor);
-}
-
-void SessionWindow::handleMousePress(QMouseEvent *event) {
-  if (event->button() == Qt::LeftButton) {
-    if (m_resizeDir != None) {
-      // Resize mode started
-    } else {
-      // Move mode
-      m_isDragging = true;
-      m_dragPosition =
-          event->globalPosition().toPoint() - frameGeometry().topLeft();
-    }
-  }
-}
-
-void SessionWindow::handleMouseMove(QMouseEvent *event) {
-  if (event->buttons() & Qt::LeftButton) {
-    if (m_resizeDir != None) {
-      // Handle resizing
-      QPoint globalPos = event->globalPosition().toPoint();
-      QRect rect = geometry();
-      int minW = minimumWidth();
-      int minH = minimumHeight();
-
-      if (m_resizeDir == Left || m_resizeDir == TopLeft ||
-          m_resizeDir == BottomLeft) {
-        int newW = rect.right() - globalPos.x();
-        if (newW > minW)
-          rect.setLeft(globalPos.x());
-      }
-      if (m_resizeDir == Right || m_resizeDir == TopRight ||
-          m_resizeDir == BottomRight) {
-        rect.setRight(globalPos.x());
-      }
-      if (m_resizeDir == Top || m_resizeDir == TopLeft ||
-          m_resizeDir == TopRight) {
-        int newH = rect.bottom() - globalPos.y();
-        if (newH > minH)
-          rect.setTop(globalPos.y());
-      }
-      if (m_resizeDir == Bottom || m_resizeDir == BottomLeft ||
-          m_resizeDir == BottomRight) {
-        rect.setBottom(globalPos.y());
-      }
-      setGeometry(rect);
-    } else if (m_isDragging) {
-      move(event->globalPosition().toPoint() - m_dragPosition);
-    }
-  } else {
-    checkCursorShape(event->globalPosition().toPoint());
-  }
-}
-
-void SessionWindow::handleMouseRelease(QMouseEvent *event) {
-  if (event->button() == Qt::LeftButton) {
-    m_isDragging = false;
-  }
-}
-
-void SessionWindow::mousePressEvent(QMouseEvent *event) {
-  handleMousePress(event);
-  event->accept();
-}
-
-void SessionWindow::mouseMoveEvent(QMouseEvent *event) {
-  handleMouseMove(event);
-  event->accept();
-}
-
-void SessionWindow::mouseReleaseEvent(QMouseEvent *event) {
-  handleMouseRelease(event);
-  event->accept();
 }
