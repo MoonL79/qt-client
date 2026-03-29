@@ -5,9 +5,11 @@
 #include "profileapiclient.h"
 
 #include <QJsonObject>
+#include <QColor>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
+#include <QPropertyAnimation>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -28,6 +30,7 @@ signals:
   void profileApplied(const QString &displayName, const QString &avatarUrl,
                       const QString &signature);
   void logoutRequested();
+  void themeColorChanged(const QString &colorHex);
 
 private slots:
   void onRefreshClicked();
@@ -47,6 +50,9 @@ private slots:
 
 private:
   void buildUi();
+  void adjustWindowSizeForCurrentTab(bool animated);
+  int targetWindowHeightForTab(int tabIndex) const;
+  void applyThemeColor(const QColor &color);
   void applyProfileToUi(const ProfileInfo &info);
   bool validateInput(QString *error) const;
   bool validateProfileTextInput(QString *error) const;
@@ -71,6 +77,7 @@ private:
   QString m_pendingLogoutRequestId;
   QString m_avatarUrl;
   QString m_selectedAvatarFilePath;
+  QColor m_themeColor;
   bool m_loading = false;
   bool m_saving = false;
   bool m_uploading = false;
@@ -89,6 +96,10 @@ private:
   QPushButton *m_saveButton = nullptr;
   QPushButton *m_logoutButton = nullptr;
   QLabel *m_statusLabel = nullptr;
+  QTabWidget *m_tabWidget = nullptr;
+  QPropertyAnimation *m_resizeAnimation = nullptr;
+  int m_defaultMinimumHeight = 0;
+  int m_defaultMaximumHeight = QWIDGETSIZE_MAX;
 };
 
 #endif // SETTINGSWINDOW_H

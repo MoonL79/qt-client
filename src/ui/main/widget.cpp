@@ -140,10 +140,86 @@ QString humanReadableFileSize(qint64 sizeBytes) {
   return QStringLiteral("%1 %2")
       .arg(QString::number(size, 'f', precision), QString::fromLatin1(kUnits[unitIndex]));
 }
+
+QString topPanelStyleSheetForColor(const QColor &color) {
+  const QColor resolved = color.isValid() ? color : QColor(QStringLiteral("#ffffff"));
+  const QColor border = resolved.darker(112);
+  return QStringLiteral("background-color: %1; border-bottom: 1px solid %2;")
+      .arg(resolved.name(QColor::HexRgb), border.name(QColor::HexRgb));
+}
+
+QString listWidgetStyleSheetForColor(const QColor &color) {
+  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
+  const QColor selected = accent.lighter(145);
+  const QColor hover = accent.lighter(180);
+  return QStringLiteral(
+             "QListWidget { background-color: #ffffff; color: #000000; border: none; "
+             "margin: 10px; border-radius: 1px; outline: none; }"
+             "QListWidget::item { height: 70px; border-bottom: 1px solid #e0e0e0; "
+             "padding: 10px; color: #000000; outline: none; }"
+             "QListWidget::item:selected { background-color: %1; color: #111827; }"
+             "QListWidget::item:hover { background-color: %2; color: #111827; }"
+             "QScrollBar:vertical { border: none; background: #f7f7f7; width: 12px; "
+             "margin: 0px; border-radius: 6px; }"
+             "QScrollBar::handle:vertical { background: #c1c1c1; border-radius: 6px; "
+             "min-height: 20px; }"
+             "QScrollBar::handle:vertical:hover { background: #a8a8a8; }"
+             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }")
+      .arg(selected.name(QColor::HexRgb), hover.name(QColor::HexRgb));
+}
+
+QString mainTabsStyleSheetForColor(const QColor &color) {
+  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
+  const QColor selected = accent.lighter(150);
+  const QColor hover = accent.lighter(185);
+  return QStringLiteral(
+             "QTabWidget::pane { border: none; background: transparent; }"
+             "QTabBar::tab { background: #e9ecef; color: #333333; padding: 8px 0; "
+             "margin: 10px 0 0 0; border-top-left-radius: 6px; border-top-right-radius: 6px; }"
+             "QTabBar::tab:selected { background: %1; color: #111827; font-weight: bold; }"
+             "QTabBar::tab:hover { background: %2; }")
+      .arg(selected.name(QColor::HexRgb), hover.name(QColor::HexRgb));
+}
+
+QString topButtonStyleSheetForColor(const QColor &color, bool closeButton = false) {
+  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
+  const QColor hover = closeButton ? QColor(QStringLiteral("#ff4d4d")) : accent.lighter(150);
+  const QColor text = closeButton ? QColor(QStringLiteral("#555555")) : accent.darker(185);
+  return QStringLiteral(
+             "QPushButton { border: none; font-weight: bold; color: %1; font-size: 16px; "
+             "background: transparent; }"
+             "QPushButton:hover { background-color: %2; color: %3; }")
+      .arg(text.name(QColor::HexRgb), hover.name(QColor::HexRgb),
+           closeButton ? QStringLiteral("#ffffff") : QStringLiteral("#111827"));
+}
+
+QString quickActionButtonStyleSheetForColor(const QColor &color) {
+  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
+  const QColor border = accent.darker(110);
+  const QColor hover = accent.lighter(165);
+  return QStringLiteral(
+             "QToolButton { border: 1px solid %1; border-radius: 14px; background-color: #ffffff; "
+             "color: %2; font-size: 18px; font-weight: bold; }"
+             "QToolButton:hover { background-color: %3; }"
+             "QToolButton::menu-indicator { image: none; width: 0px; }")
+      .arg(border.name(QColor::HexRgb), accent.darker(180).name(QColor::HexRgb),
+           hover.name(QColor::HexRgb));
+}
+
+QString quickActionMenuStyleSheetForColor(const QColor &color) {
+  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
+  return QStringLiteral(
+             "QMenu { background: #ffffff; border: 1px solid #d9d9d9; padding: 6px 0; }"
+             "QMenu::item { padding: 8px 18px; color: #222222; }"
+             "QMenu::item:selected { background: %1; }")
+      .arg(accent.lighter(175).name(QColor::HexRgb));
+}
 }
 
 Widget::Widget(QWidget *parent)
-    : QWidget(parent), ui(new Ui::Widget), m_isDragging(false) {
+    : QWidget(parent), ui(new Ui::Widget), m_topPanelThemeColor(QStringLiteral("#ffffff")),
+      m_isDragging(false) {
   initUI();
   initAvatarHttpClient();
   m_chatFileService = new ChatFileService(websocketclient::instance(), this);
@@ -363,8 +439,7 @@ void Widget::initUI() {
   m_topPanel = new QWidget(container);
   m_topPanel->setFixedHeight(120);
   // 2. 顶部面板保持白色，以便与灰色的底板区分
-  m_topPanel->setStyleSheet(
-      "background-color: #ffffff; border-bottom: 1px solid #dcdcdc;");
+  applyTopPanelThemeColor(m_topPanelThemeColor);
 
   QHBoxLayout *mainTopLayout = new QHBoxLayout(m_topPanel);
   mainTopLayout->setContentsMargins(0, 0, 0, 0);
@@ -417,13 +492,13 @@ void Widget::initUI() {
   btnRowLayout->setSpacing(0);
 
   // 设置、最小化和关闭按钮
-  QPushButton *settingsBtn = new QPushButton("设", m_topPanel);
-  QPushButton *minBtn = new QPushButton("-", m_topPanel);
-  QPushButton *closeBtn = new QPushButton("x", m_topPanel);
+  m_settingsButton = new QPushButton("设", m_topPanel);
+  m_minButton = new QPushButton("-", m_topPanel);
+  m_closeButton = new QPushButton("x", m_topPanel);
 
-  btnRowLayout->addWidget(settingsBtn);
-  btnRowLayout->addWidget(minBtn);
-  btnRowLayout->addWidget(closeBtn);
+  btnRowLayout->addWidget(m_settingsButton);
+  btnRowLayout->addWidget(m_minButton);
+  btnRowLayout->addWidget(m_closeButton);
 
   rightBtnLayout->addLayout(btnRowLayout);
   rightBtnLayout->addStretch();
@@ -433,38 +508,28 @@ void Widget::initUI() {
   quickActionLayout->setSpacing(8);
   quickActionLayout->addStretch();
 
-  auto *quickActionBtn = new QToolButton(m_topPanel);
-  quickActionBtn->setText("+");
-  quickActionBtn->setFixedSize(28, 28);
-  quickActionBtn->setPopupMode(QToolButton::InstantPopup);
-  quickActionBtn->setCursor(Qt::ArrowCursor);
-  quickActionBtn->setStyleSheet(
-      "QToolButton { border: 1px solid #d0d0d0; border-radius: 14px; "
-      "background-color: #ffffff; color: #333333; font-size: 18px; "
-      "font-weight: bold; }"
-      "QToolButton:hover { background-color: #f5f5f5; }"
-      "QToolButton::menu-indicator { image: none; width: 0px; }");
+  m_quickActionButton = new QToolButton(m_topPanel);
+  m_quickActionButton->setText("+");
+  m_quickActionButton->setFixedSize(28, 28);
+  m_quickActionButton->setPopupMode(QToolButton::InstantPopup);
+  m_quickActionButton->setCursor(Qt::ArrowCursor);
 
-  auto *quickActionMenu = new QMenu(quickActionBtn);
-  quickActionMenu->setStyleSheet(
-      "QMenu { background: #ffffff; border: 1px solid #d9d9d9; padding: 6px 0; }"
-      "QMenu::item { padding: 8px 18px; color: #222222; }"
-      "QMenu::item:selected { background: #f0f0f0; }");
-  QAction *addFriendAction = quickActionMenu->addAction(QStringLiteral("添加好友"));
+  m_quickActionMenu = new QMenu(m_quickActionButton);
+  QAction *addFriendAction = m_quickActionMenu->addAction(QStringLiteral("添加好友"));
   QAction *deleteFriendAction =
-      quickActionMenu->addAction(QStringLiteral("删除好友"));
-  quickActionMenu->addSeparator();
+      m_quickActionMenu->addAction(QStringLiteral("删除好友"));
+  m_quickActionMenu->addSeparator();
   QAction *createGroupAction =
-      quickActionMenu->addAction(QStringLiteral("创建群聊"));
-  QAction *joinGroupAction = quickActionMenu->addAction(QStringLiteral("加入群聊"));
+      m_quickActionMenu->addAction(QStringLiteral("创建群聊"));
+  QAction *joinGroupAction = m_quickActionMenu->addAction(QStringLiteral("加入群聊"));
   QAction *leaveGroupAction =
-      quickActionMenu->addAction(QStringLiteral("退出群聊"));
+      m_quickActionMenu->addAction(QStringLiteral("退出群聊"));
   QAction *dismissGroupAction =
-      quickActionMenu->addAction(QStringLiteral("解散群聊"));
-  quickActionMenu->addSeparator();
+      m_quickActionMenu->addAction(QStringLiteral("解散群聊"));
+  m_quickActionMenu->addSeparator();
   QAction *fileTransferAction =
-      quickActionMenu->addAction(QStringLiteral("文件传输"));
-  quickActionBtn->setMenu(quickActionMenu);
+      m_quickActionMenu->addAction(QStringLiteral("文件传输"));
+  m_quickActionButton->setMenu(m_quickActionMenu);
 
   connect(addFriendAction, &QAction::triggered, this, &Widget::onOpenAddFriend);
   connect(deleteFriendAction, &QAction::triggered, this,
@@ -482,92 +547,41 @@ void Widget::initUI() {
   connect(fileTransferAction, &QAction::triggered, this,
           &Widget::onOpenFileTransfer);
 
-  quickActionLayout->addWidget(quickActionBtn);
+  quickActionLayout->addWidget(m_quickActionButton);
   rightBtnLayout->addLayout(quickActionLayout);
   mainTopLayout->addLayout(rightBtnLayout);
 
   // 样式：悬浮时背景变灰/红
-  QString baseBtnStyle =
-      "QPushButton { border: none; font-weight: bold; color: #555; font-size: "
-      "16px; background: transparent; }";
+  m_settingsButton->setFixedSize(40, 30);
+  m_settingsButton->setCursor(Qt::ArrowCursor);
+  m_minButton->setFixedSize(40, 30);
+  m_minButton->setCursor(Qt::ArrowCursor);
+  m_closeButton->setFixedSize(40, 30);
+  m_closeButton->setCursor(Qt::ArrowCursor);
 
-  settingsBtn->setFixedSize(40, 30);
-  settingsBtn->setStyleSheet(
-      baseBtnStyle +
-      "QPushButton:hover { background-color: #e0e0e0; color: #000; }");
-  settingsBtn->setCursor(Qt::ArrowCursor);
-
-  minBtn->setFixedSize(40, 30); // 稍微宽一点
-  minBtn->setStyleSheet(
-      baseBtnStyle +
-      "QPushButton:hover { background-color: #e0e0e0; color: #000; }");
-  minBtn->setCursor(Qt::ArrowCursor); // 标题栏按钮通常是箭头光标
-
-  closeBtn->setFixedSize(40, 30);
-  closeBtn->setStyleSheet(baseBtnStyle +
-                          "QPushButton:hover { background-color: #ff4d4d; "
-                          "color: white; }"); // 关闭按钮悬浮通常变红
-  closeBtn->setCursor(Qt::ArrowCursor);
-
-  connect(settingsBtn, &QPushButton::clicked, this, &Widget::onOpenSettings);
-  connect(minBtn, &QPushButton::clicked, this, &QWidget::showMinimized);
-  connect(closeBtn, &QPushButton::clicked, this, &QWidget::close);
+  connect(m_settingsButton, &QPushButton::clicked, this, &Widget::onOpenSettings);
+  connect(m_minButton, &QPushButton::clicked, this, &QWidget::showMinimized);
+  connect(m_closeButton, &QPushButton::clicked, this, &QWidget::close);
 
   // --- 中下部：标签页 ---
   m_tabWidget = new QTabWidget(container);
   m_tabWidget->setDocumentMode(true);
   m_tabWidget->tabBar()->setExpanding(true);
   m_tabWidget->tabBar()->setUsesScrollButtons(false);
-  m_tabWidget->setStyleSheet(
-      "QTabWidget::pane { border: none; background: transparent; }"
-      "QTabBar::tab { background: #e9ecef; color: #333333; padding: 8px 0; "
-      "margin: 10px 0 0 0; border-top-left-radius: 6px; "
-      "border-top-right-radius: 6px; }"
-      "QTabBar::tab:selected { background: #ffffff; font-weight: bold; }"
-      "QTabBar::tab:hover { background: #f5f5f5; }");
-
-  const QString listWidgetStyle =
-      "QListWidget { background-color: #ffffff; color: #000000; border: "
-      "none; "
-      "margin: 10px; border-radius: 1px; outline: none; }"
-      "QListWidget::item { height: 70px; border-bottom: 1px solid #e0e0e0; "
-      "padding: 10px; color: #000000; outline: none; }"
-      "QListWidget::item:selected { background-color: #d0d0d0; color: "
-      "#000000; "
-      "}"
-      "QListWidget::item:hover { background-color: #f0f0f0; color: "
-      "#000000; "
-      "}"
-      "QScrollBar:vertical { border: none; background: #f7f7f7; width: "
-      "12px; "
-      "margin: 0px; border-radius: 6px; }"
-      "QScrollBar::handle:vertical { background: #c1c1c1; border-radius: "
-      "6px; "
-      "min-height: 20px; }"
-      "QScrollBar::handle:vertical:hover { background: #a8a8a8; }"
-      "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { "
-      "height: "
-      "0px; }"
-      "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { "
-      "background: none; }";
-
   m_sessionList = new QListWidget(m_tabWidget);
   m_sessionList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   m_sessionList->setFrameShape(QFrame::NoFrame);
   m_sessionList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-  m_sessionList->setStyleSheet(listWidgetStyle);
 
   m_contactList = new QListWidget(m_tabWidget);
   m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   m_contactList->setFrameShape(QFrame::NoFrame);
   m_contactList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-  m_contactList->setStyleSheet(listWidgetStyle);
 
   m_groupList = new QListWidget(m_tabWidget);
   m_groupList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
   m_groupList->setFrameShape(QFrame::NoFrame);
   m_groupList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-  m_groupList->setStyleSheet(listWidgetStyle);
 
   m_tabWidget->addTab(m_sessionList, QStringLiteral("会话"));
   m_tabWidget->addTab(m_contactList, QStringLiteral("联系人"));
@@ -591,6 +605,7 @@ void Widget::initUI() {
             handleIncomingRealtimePayload(QString::fromUtf8(data),
                                           QStringLiteral("二进制"));
           });
+  applyMainThemeColor(m_topPanelThemeColor);
 }
 
 void Widget::initAvatarHttpClient() {
@@ -730,6 +745,45 @@ void Widget::setUserInfo(const QString &username, const QString &avatarPath,
     return;
   }
   requestAvatarImage(m_currentAvatarUrl);
+}
+
+void Widget::applyTopPanelThemeColor(const QColor &color) {
+  m_topPanelThemeColor = color.isValid() ? color : QColor(QStringLiteral("#ffffff"));
+  if (m_topPanel) {
+    m_topPanel->setStyleSheet(topPanelStyleSheetForColor(m_topPanelThemeColor));
+  }
+}
+
+void Widget::applyMainThemeColor(const QColor &color) {
+  applyTopPanelThemeColor(color);
+  if (m_settingsButton) {
+    m_settingsButton->setStyleSheet(topButtonStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_minButton) {
+    m_minButton->setStyleSheet(topButtonStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_closeButton) {
+    m_closeButton->setStyleSheet(topButtonStyleSheetForColor(m_topPanelThemeColor, true));
+  }
+  if (m_quickActionButton) {
+    m_quickActionButton->setStyleSheet(
+        quickActionButtonStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_quickActionMenu) {
+    m_quickActionMenu->setStyleSheet(quickActionMenuStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_tabWidget) {
+    m_tabWidget->setStyleSheet(mainTabsStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_sessionList) {
+    m_sessionList->setStyleSheet(listWidgetStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_contactList) {
+    m_contactList->setStyleSheet(listWidgetStyleSheetForColor(m_topPanelThemeColor));
+  }
+  if (m_groupList) {
+    m_groupList->setStyleSheet(listWidgetStyleSheetForColor(m_topPanelThemeColor));
+  }
 }
 
 void Widget::setCurrentUserId(const QString &userId) { m_currentUserId = userId; }
@@ -926,6 +980,10 @@ void Widget::onOpenSettings() {
             qInfo() << "[MainWidget] apply profile from settings, display_name="
                     << displayName << "avatar_url=" << avatarUrl;
             setUserInfo(displayName, avatarUrl, signature);
+          });
+  connect(m_settingsWindow, &SettingsWindow::themeColorChanged, this,
+          [this](const QString &colorHex) {
+            applyMainThemeColor(QColor(colorHex.trimmed()));
           });
   connect(m_settingsWindow, &SettingsWindow::logoutRequested, this, [this]() {
     if (m_addFriendDialog) {

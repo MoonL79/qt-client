@@ -13,6 +13,7 @@
 #include <QListWidget>
 #include <QPointer>
 #include <QJsonObject>
+#include <QColor>
 #include <QSet>
 #include <QPoint>
 #include <QMouseEvent>
@@ -22,6 +23,7 @@
 #include <QPushButton>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QTimer>
 #include <QUrl>
 #include <QWidget>
@@ -159,6 +161,8 @@ private:
                                  bool preferGroupMeta,
                                  int unreadCount) const;
     QString elidePreview(const QString &preview) const;
+    void applyTopPanelThemeColor(const QColor &color);
+    void applyMainThemeColor(const QColor &color);
 
     Ui::Widget *ui;
     
@@ -167,6 +171,11 @@ private:
     QLabel* m_avatarLabel;
     QLabel* m_nameLabel;
     QLabel* m_signatureLabel;
+    QPushButton* m_settingsButton = nullptr;
+    QPushButton* m_minButton = nullptr;
+    QPushButton* m_closeButton = nullptr;
+    QToolButton* m_quickActionButton = nullptr;
+    QMenu* m_quickActionMenu = nullptr;
     QNetworkAccessManager* m_avatarNetworkManager = nullptr;
     QNetworkDiskCache* m_avatarDiskCache = nullptr;
     QString m_currentUserId;
@@ -174,6 +183,7 @@ private:
     QString m_currentDisplayName;
     QString m_currentSignature;
     QString m_currentAvatarUrl;
+    QColor m_topPanelThemeColor;
     ProfileApiClient* m_profileApiClient = nullptr;
     QPointer<SettingsWindow> m_settingsWindow;
     QPointer<AddFriendDialog> m_addFriendDialog;
