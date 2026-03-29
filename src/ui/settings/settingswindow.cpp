@@ -148,20 +148,20 @@ void SettingsWindow::buildUi() {
   rootLayout->setContentsMargins(20, 20, 20, 20);
   rootLayout->setSpacing(14);
 
-  auto *titleLabel = new QLabel("个人资料设置", this);
-  titleLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;");
-  rootLayout->addWidget(titleLabel);
+  auto *tabs = new QTabWidget(this);
+  tabs->setDocumentMode(true);
 
-  auto *hintLabel = new QLabel("可编辑头像 URL、昵称、个人签名。", this);
-  hintLabel->setStyleSheet("color: #555;");
-  rootLayout->addWidget(hintLabel);
+  auto *userTab = new QWidget(tabs);
+  auto *userLayout = new QVBoxLayout(userTab);
+  userLayout->setContentsMargins(0, 8, 0, 0);
+  userLayout->setSpacing(12);
 
   auto *formLayout = new QFormLayout();
   formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
   formLayout->setHorizontalSpacing(12);
   formLayout->setVerticalSpacing(12);
 
-  auto *avatarBox = new QWidget(this);
+  auto *avatarBox = new QWidget(userTab);
   auto *avatarLayout = new QHBoxLayout(avatarBox);
   avatarLayout->setContentsMargins(0, 0, 0, 0);
   avatarLayout->setSpacing(10);
@@ -186,16 +186,32 @@ void SettingsWindow::buildUi() {
   avatarLayout->addLayout(avatarBtnLayout);
   formLayout->addRow("头像上传", avatarBox);
 
-  m_nicknameEdit = new QLineEdit(this);
+  m_nicknameEdit = new QLineEdit(userTab);
   m_nicknameEdit->setPlaceholderText("请输入昵称");
   formLayout->addRow("昵称", m_nicknameEdit);
 
-  m_signatureEdit = new QTextEdit(this);
+  m_signatureEdit = new QTextEdit(userTab);
   m_signatureEdit->setPlaceholderText("请输入个人签名");
   m_signatureEdit->setFixedHeight(120);
   formLayout->addRow("个人签名", m_signatureEdit);
 
-  rootLayout->addLayout(formLayout);
+  userLayout->addLayout(formLayout);
+  userLayout->addStretch();
+
+  auto *appearanceTab = new QWidget(tabs);
+  auto *appearanceLayout = new QVBoxLayout(appearanceTab);
+  appearanceLayout->setContentsMargins(0, 8, 0, 0);
+  appearanceLayout->addStretch();
+
+  auto *downloadTab = new QWidget(tabs);
+  auto *downloadLayout = new QVBoxLayout(downloadTab);
+  downloadLayout->setContentsMargins(0, 8, 0, 0);
+  downloadLayout->addStretch();
+
+  tabs->addTab(userTab, QStringLiteral("用户"));
+  tabs->addTab(appearanceTab, QStringLiteral("界面"));
+  tabs->addTab(downloadTab, QStringLiteral("下载"));
+  rootLayout->addWidget(tabs);
 
   m_statusLabel = new QLabel("就绪", this);
   m_statusLabel->setStyleSheet("color: #666;");
