@@ -15,6 +15,8 @@ qt_add_executable(qt-client
     src/ui/login/loginwindow.cpp
     src/ui/login/loginwindow.h
     src/ui/login/loginwindow.ui
+    src/ui/common/framelesswindowbase.h
+    src/ui/common/framelesswindowbase.cpp
     src/ui/session/sessionwindow.h
     src/ui/session/sessionwindow.cpp
     src/ui/register/registerwindow.h
@@ -62,6 +64,7 @@ qt_add_executable(qt-client
 
 target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/login
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/common
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/main
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/session
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/register

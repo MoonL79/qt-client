@@ -9,6 +9,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QPointer>
+#include <QPoint>
 #include <QPropertyAnimation>
 #include <QLabel>
 #include <QLineEdit>
@@ -18,6 +19,8 @@
 #include <QUrl>
 #include <QWidget>
 
+class QEvent;
+
 class SettingsWindow : public QWidget {
   Q_OBJECT
 
@@ -25,6 +28,9 @@ public:
   explicit SettingsWindow(const QString &userId, ProfileApiClient *profileApiClient,
                           QWidget *parent = nullptr);
   ~SettingsWindow() override;
+
+protected:
+  bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
   void profileApplied(const QString &displayName, const QString &avatarUrl,
@@ -95,11 +101,16 @@ private:
   QPushButton *m_refreshButton = nullptr;
   QPushButton *m_saveButton = nullptr;
   QPushButton *m_logoutButton = nullptr;
+  QWidget *m_titleBar = nullptr;
+  QLabel *m_titleBarLabel = nullptr;
+  QPushButton *m_titleCloseButton = nullptr;
   QLabel *m_statusLabel = nullptr;
   QTabWidget *m_tabWidget = nullptr;
   QPropertyAnimation *m_resizeAnimation = nullptr;
   int m_defaultMinimumHeight = 0;
   int m_defaultMaximumHeight = QWIDGETSIZE_MAX;
+  bool m_dragging = false;
+  QPoint m_dragOffset;
 };
 
 #endif // SETTINGSWINDOW_H

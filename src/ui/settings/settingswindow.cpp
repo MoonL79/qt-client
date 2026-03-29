@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QEvent>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -303,12 +304,12 @@ int resolveStaticPort() {
 QString settingsTabsStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   return QStringLiteral(
-             "QTabWidget::pane { border: none; background: transparent; }"
-             "QTabBar::tab { background: #e5e7eb; color: #374151; padding: 8px 18px; "
-             "margin-right: 6px; border-radius: 8px; }"
-             "QTabBar::tab:selected { background: %1; color: #111827; font-weight: 600; }"
-             "QTabBar::tab:hover { background: %2; }")
-      .arg(accent.lighter(150).name(QColor::HexRgb),
+             "QTabWidget::pane { border: none; background: #ffffff; }"
+             "QTabBar::tab { background: #f8fafc; color: #374151; padding: 8px 18px; "
+             "margin-right: 6px; border: 1px solid #e5e7eb; border-radius: 8px; }"
+             "QTabBar::tab:selected { background: %1; color: #111827; font-weight: 600; border-color: %2; }"
+             "QTabBar::tab:hover { background: %3; }")
+      .arg(accent.lighter(150).name(QColor::HexRgb), accent.lighter(135).name(QColor::HexRgb),
            accent.lighter(180).name(QColor::HexRgb));
 }
 
@@ -322,6 +323,15 @@ QString primaryButtonStyleSheetForColor(const QColor &color) {
              "QPushButton:disabled { background: #cbd5e1; color: #f8fafc; }")
       .arg(accent.name(QColor::HexRgb), accent.lighter(110).name(QColor::HexRgb),
            accent.darker(110).name(QColor::HexRgb));
+}
+
+QString secondaryButtonStyleSheet() {
+  return QStringLiteral(
+      "QPushButton { background: #f8fafc; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; "
+      "padding: 8px 16px; font-weight: 600; }"
+      "QPushButton:hover { background: #eef2f7; color: #111827; border-color: #cbd5e1; }"
+      "QPushButton:pressed { background: #e5e7eb; }"
+      "QPushButton:disabled { background: #f8fafc; color: #9ca3af; border-color: #e5e7eb; }");
 }
 
 QString contentTypeFromSuffix(const QString &suffixLower) {
@@ -347,8 +357,11 @@ SettingsWindow::SettingsWindow(const QString &userId,
     : QWidget(parent), m_profileApiClient(profileApiClient), m_userId(userId),
       m_themeColor(QStringLiteral("#3B82F6")),
       m_authApiClient(websocketclient::instance(), this) {
+  setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
   setAttribute(Qt::WA_DeleteOnClose);
+  setObjectName(QStringLiteral("settingsWindow"));
   setWindowTitle("设置");
+  setStyleSheet(QStringLiteral("#settingsWindow { background: #ffffff; }"));
   resize(560, 420);
 
   buildUi();
@@ -404,13 +417,82 @@ SettingsWindow::~SettingsWindow() {
   }
 }
 
+bool SettingsWindow::eventFilter(QObject *watched, QEvent *event) {
+  if (watched == m_titleBar) {
+    switch (event->type()) {
+    case QEvent::MouseButtonPress: {
+      auto *mouseEvent = static_cast<QMouseEvent *>(event);
+      if (mouseEvent->button() == Qt::LeftButton) {
+        QWidget *child = m_titleBar->childAt(mouseEvent->position().toPoint());
+        if (child != m_titleCloseButton) {
+          m_dragging = true;
+          m_dragOffset = mouseEvent->globalPosition().toPoint() - frameGeometry().topLeft();
+          m_titleBar->setCursor(Qt::ClosedHandCursor);
+          return true;
+        }
+      }
+      break;
+    }
+    case QEvent::MouseMove: {
+      auto *mouseEvent = static_cast<QMouseEvent *>(event);
+      if (m_dragging && (mouseEvent->buttons() & Qt::LeftButton)) {
+        move(mouseEvent->globalPosition().toPoint() - m_dragOffset);
+        return true;
+      }
+      break;
+    }
+    case QEvent::MouseButtonRelease: {
+      auto *mouseEvent = static_cast<QMouseEvent *>(event);
+      if (mouseEvent->button() == Qt::LeftButton) {
+        m_dragging = false;
+        m_titleBar->setCursor(Qt::OpenHandCursor);
+        return true;
+      }
+      break;
+    }
+    default:
+      break;
+    }
+  }
+
+  return QWidget::eventFilter(watched, event);
+}
+
 void SettingsWindow::buildUi() {
   auto *rootLayout = new QVBoxLayout(this);
-  rootLayout->setContentsMargins(20, 20, 20, 20);
-  rootLayout->setSpacing(14);
+  rootLayout->setContentsMargins(20, 14, 20, 20);
+  rootLayout->setSpacing(12);
+
+  m_titleBar = new QWidget(this);
+  m_titleBar->setFixedHeight(40);
+  m_titleBar->setCursor(Qt::OpenHandCursor);
+  m_titleBar->installEventFilter(this);
+
+  auto *titleBarLayout = new QHBoxLayout(m_titleBar);
+  titleBarLayout->setContentsMargins(0, 0, 0, 0);
+  titleBarLayout->setSpacing(8);
+
+  m_titleBarLabel = new QLabel(windowTitle(), m_titleBar);
+  m_titleBarLabel->setStyleSheet(
+      "font-size: 15px; font-weight: 600; color: #111827;");
+  titleBarLayout->addWidget(m_titleBarLabel);
+  titleBarLayout->addStretch();
+
+  m_titleCloseButton = new QPushButton(QStringLiteral("×"), m_titleBar);
+  m_titleCloseButton->setCursor(Qt::ArrowCursor);
+  m_titleCloseButton->setFixedSize(30, 30);
+  m_titleCloseButton->setStyleSheet(
+      "QPushButton { border: none; color: #4b5563; font-size: 18px; background: transparent; border-radius: 6px; }"
+      "QPushButton:hover { background: #ef4444; color: #ffffff; }");
+  connect(m_titleCloseButton, &QPushButton::clicked, this, &QWidget::close);
+  titleBarLayout->addWidget(m_titleCloseButton);
+
+  rootLayout->addWidget(m_titleBar);
 
   m_tabWidget = new CurrentTabSizeHintWidget(this);
   m_tabWidget->setDocumentMode(true);
+  m_tabWidget->tabBar()->setDrawBase(false);
+  rootLayout->addWidget(m_tabWidget);
 
   auto *userTab = new QWidget(m_tabWidget);
   auto *userLayout = new QVBoxLayout(userTab);
@@ -449,11 +531,17 @@ void SettingsWindow::buildUi() {
 
   m_nicknameEdit = new QLineEdit(userTab);
   m_nicknameEdit->setPlaceholderText("请输入昵称");
+  m_nicknameEdit->setStyleSheet(
+      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QLineEdit:focus { border-color: #93c5fd; }");
   formLayout->addRow("昵称", m_nicknameEdit);
 
   m_signatureEdit = new QTextEdit(userTab);
   m_signatureEdit->setPlaceholderText("请输入个人签名");
   m_signatureEdit->setFixedHeight(120);
+  m_signatureEdit->setStyleSheet(
+      "QTextEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QTextEdit:focus { border-color: #93c5fd; }");
   formLayout->addRow("个人签名", m_signatureEdit);
 
   userLayout->addLayout(formLayout);
@@ -466,18 +554,18 @@ void SettingsWindow::buildUi() {
 
   auto *appearanceTitle = new QLabel(QStringLiteral("主题颜色"), appearanceTab);
   appearanceTitle->setStyleSheet(
-      "font-size: 16px; font-weight: 600; color: #f3f4f6;");
+      "font-size: 16px; font-weight: 600; color: #111827;");
   appearanceLayout->addWidget(appearanceTitle);
 
   auto *appearanceHint =
       new QLabel(QStringLiteral("调整主题颜色，实时影响界面中的关键高亮区域。"),
                  appearanceTab);
-  appearanceHint->setStyleSheet("color: #8b95a7;");
+  appearanceHint->setStyleSheet("color: #6b7280;");
   appearanceLayout->addWidget(appearanceHint);
 
   auto *paletteCard = new QWidget(appearanceTab);
   paletteCard->setStyleSheet(
-      "background: #111827; border: 1px solid #1f2937; border-radius: 14px;");
+      "background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px;");
   auto *paletteCardLayout = new QVBoxLayout(paletteCard);
   paletteCardLayout->setContentsMargins(18, 18, 18, 18);
   paletteCardLayout->setSpacing(16);
@@ -492,7 +580,7 @@ void SettingsWindow::buildUi() {
 
   auto *controlPanel = new QFrame(paletteCard);
   controlPanel->setStyleSheet(
-      "background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); "
+      "background: #ffffff; border: 1px solid #e5e7eb; "
       "border-radius: 12px;");
   controlPanel->setMinimumWidth(220);
   auto *controlLayout = new QVBoxLayout(controlPanel);
@@ -506,19 +594,22 @@ void SettingsWindow::buildUi() {
   controlLayout->addWidget(previewSwatch);
 
   auto *previewName = new QLabel(QStringLiteral("当前颜色"), controlPanel);
-  previewName->setStyleSheet("color: #f9fafb; font-size: 14px; font-weight: 600;");
+  previewName->setStyleSheet("color: #111827; font-size: 14px; font-weight: 600;");
   controlLayout->addWidget(previewName);
 
   auto *hexLabel = new QLabel(QStringLiteral("Hex"), controlPanel);
-  hexLabel->setStyleSheet("color: #9ca3af;");
+  hexLabel->setStyleSheet("color: #6b7280;");
   controlLayout->addWidget(hexLabel);
 
   auto *hexEdit = new QLineEdit(controlPanel);
   hexEdit->setPlaceholderText(QStringLiteral("#3B82F6"));
+  hexEdit->setStyleSheet(
+      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QLineEdit:focus { border-color: #93c5fd; }");
   controlLayout->addWidget(hexEdit);
 
   auto *rgbLabel = new QLabel(QStringLiteral("RGB"), controlPanel);
-  rgbLabel->setStyleSheet("color: #9ca3af;");
+  rgbLabel->setStyleSheet("color: #6b7280;");
   controlLayout->addWidget(rgbLabel);
 
   auto *rgbRow = new QHBoxLayout();
@@ -529,6 +620,12 @@ void SettingsWindow::buildUi() {
   rEdit->setPlaceholderText(QStringLiteral("R"));
   gEdit->setPlaceholderText(QStringLiteral("G"));
   bEdit->setPlaceholderText(QStringLiteral("B"));
+  const QString channelEditStyle =
+      QStringLiteral("QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+                     "QLineEdit:focus { border-color: #93c5fd; }");
+  rEdit->setStyleSheet(channelEditStyle);
+  gEdit->setStyleSheet(channelEditStyle);
+  bEdit->setStyleSheet(channelEditStyle);
   rgbRow->addWidget(rEdit);
   rgbRow->addWidget(gEdit);
   rgbRow->addWidget(bEdit);
@@ -647,7 +744,6 @@ void SettingsWindow::buildUi() {
   m_tabWidget->addTab(userTab, QStringLiteral("用户"));
   m_tabWidget->addTab(appearanceTab, QStringLiteral("界面"));
   m_tabWidget->addTab(downloadTab, QStringLiteral("下载"));
-  rootLayout->addWidget(m_tabWidget);
 
   m_statusLabel = new QLabel("就绪", this);
   m_statusLabel->setStyleSheet("color: #666;");
@@ -761,6 +857,15 @@ void SettingsWindow::applyThemeColor(const QColor &color) {
   m_themeColor = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   if (m_tabWidget) {
     m_tabWidget->setStyleSheet(settingsTabsStyleSheetForColor(m_themeColor));
+  }
+  if (m_chooseAvatarButton) {
+    m_chooseAvatarButton->setStyleSheet(secondaryButtonStyleSheet());
+  }
+  if (m_refreshButton) {
+    m_refreshButton->setStyleSheet(secondaryButtonStyleSheet());
+  }
+  if (m_logoutButton) {
+    m_logoutButton->setStyleSheet(secondaryButtonStyleSheet());
   }
   if (m_saveButton) {
     m_saveButton->setStyleSheet(primaryButtonStyleSheetForColor(m_themeColor));
