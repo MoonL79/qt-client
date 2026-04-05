@@ -6,6 +6,7 @@
 #include "deletefrienddialog.h"
 #include "dismissgroupdialog.h"
 #include "leavegroupdialog.h"
+#include "localchatstore.h"
 #include "protocol.h"
 #include "searchgroupdialog.h"
 #include "settingswindow.h"
@@ -235,6 +236,7 @@ Widget::Widget(QWidget *parent)
   initUI();
   initAvatarHttpClient();
   m_chatFileService = new ChatFileService(websocketclient::instance(), this);
+  m_localChatStore = new LocalChatStore();
 
   connect(m_chatFileService, &ChatFileService::uploadFinished, this,
           [this](const QString &requestId, const ChatFileUploadResult &result) {
@@ -264,6 +266,14 @@ Widget::Widget(QWidget *parent)
               return;
             }
 
+            if (m_localChatStore) {
+              QString error;
+              if (!m_localChatStore->saveMessage(message, &error)) {
+                qWarning() << "[MainWidget] failed to persist outgoing file message:"
+                           << error;
+              }
+            }
+
             ConversationListState state =
                 m_conversationStatesByConversationId.value(message.conversationId);
             state.conversationId = message.conversationId;
@@ -284,10 +294,27 @@ Widget::Widget(QWidget *parent)
                     .arg(m_pendingFileTransfer.conversationName.isEmpty()
                              ? message.conversationId
                              : m_pendingFileTransfer.conversationName));
+            if (SessionWindow *sessionWindow =
+                    m_sessionWindowsByConversationId.value(message.conversationId)) {
+              sessionWindow->appendPersistedMessage(message);
+            }
             m_pendingFileTransfer.clear();
           });
   connect(m_chatFileService, &ChatFileService::fileMessageReceived, this,
           [this](const ChatMessage &message) {
+            if (m_localChatStore) {
+              QString error;
+              if (!m_localChatStore->saveMessage(message, &error)) {
+                qWarning() << "[MainWidget] failed to persist incoming file message:"
+                           << error;
+              }
+            }
+
+            if (SessionWindow *sessionWindow =
+                    m_sessionWindowsByConversationId.value(message.conversationId)) {
+              sessionWindow->appendPersistedMessage(message);
+            }
+
             if (message.senderUserId.trimmed() == m_currentUserId.trimmed() ||
                 message.senderUserId.trimmed() ==
                     UserSession::instance().userId().trimmed()) {
@@ -415,7 +442,10 @@ Widget::Widget(QWidget *parent)
           [this]() { requestConversationList(false); });
 }
 
-Widget::~Widget() { delete ui; }
+Widget::~Widget() {
+  delete m_localChatStore;
+  delete ui;
+}
 
 void Widget::initUI() {
   this->resize(300, 700);
@@ -798,7 +828,21 @@ void Widget::applyMainThemeColor(const QColor &color) {
   }
 }
 
-void Widget::setCurrentUserId(const QString &userId) { m_currentUserId = userId; }
+void Widget::setCurrentUserId(const QString &userId) {
+  m_currentUserId = userId.trimmed();
+  if (!m_localChatStore) {
+    return;
+  }
+  if (m_currentUserId.isEmpty()) {
+    m_localChatStore->clearCurrentUser();
+    return;
+  }
+
+  QString error;
+  if (!m_localChatStore->setCurrentUser(m_currentUserId, &error)) {
+    qWarning() << "[MainWidget] failed to initialize local chat store:" << error;
+  }
+}
 
 void Widget::setCurrentUserNumericId(const QString &numericId) {
   m_currentUserNumericId = numericId.trimmed();
@@ -933,6 +977,19 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   sessionWindow->setPeerIdentity(peerUserId, peerNumericId);
   sessionWindow->updatePeerPresence(item->data(kRoleIsOnline).toBool(),
                                     item->data(kRoleLastSeenAtUtc).toString());
+  if (m_localChatStore && !conversationId.isEmpty()) {
+    QString error;
+    const QVector<ChatMessage> history =
+        m_localChatStore->loadMessages(conversationId, 200, &error);
+    if (!error.isEmpty()) {
+      qWarning() << "[MainWidget] failed to load local history conversation_id="
+                 << conversationId << "error=" << error;
+    } else {
+      qInfo().noquote() << "[MainWidget] replay local history conversation_id="
+                        << conversationId << "count=" << history.size();
+      sessionWindow->loadHistory(history);
+    }
+  }
   if (!peerUserId.isEmpty()) {
     m_sessionWindowsByUserId.insert(peerUserId, sessionWindow);
   }
@@ -956,6 +1013,25 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
             if (QListWidgetItem *listItem =
                     findConversationItemByConversationId(conversationId)) {
               applyConversationStateToItem(listItem, state, nullptr);
+            }
+          });
+  connect(sessionWindow, &SessionWindow::messageReadyForPersistence, this,
+          [this](const ChatMessage &message) {
+            if (!m_localChatStore) {
+              qWarning() << "[MainWidget] skip persist: local chat store missing";
+              return;
+            }
+            qInfo().noquote() << "[MainWidget] persist message"
+                              << "conversation_id=" << message.conversationId
+                              << "request_id=" << message.requestId
+                              << "message_id=" << message.messageId
+                              << "kind="
+                              << (message.kind == ChatMessageKind::File ? "file"
+                                                                        : "text");
+            QString error;
+            if (!m_localChatStore->saveMessage(message, &error)) {
+              qWarning() << "[MainWidget] failed to persist text message:"
+                         << error;
             }
           });
   connect(sessionWindow, &QObject::destroyed, this,
@@ -1060,6 +1136,9 @@ void Widget::onOpenSettings() {
     m_sessionWindowsByNumericId.clear();
     m_sessionWindowsByConversationId.clear();
     m_conversationStatesByConversationId.clear();
+    if (m_localChatStore) {
+      m_localChatStore->clearCurrentUser();
+    }
     refreshConversationListUi();
     refreshGroupListUi();
     refreshContactListUi();
@@ -1878,6 +1957,32 @@ void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
     return;
   }
 
+  if (messageKind != QStringLiteral("file") && m_localChatStore) {
+    ChatMessage message;
+    message.localId = envelope.data.value(QStringLiteral("message_id")).toString().trimmed();
+    message.conversationId = conversationId;
+    message.messageId =
+        envelope.data.value(QStringLiteral("message_id")).toString().trimmed();
+    message.seq =
+        static_cast<qint64>(envelope.data.value(QStringLiteral("seq")).toDouble());
+    message.sentAt =
+        envelope.data.value(QStringLiteral("sent_at")).toString().trimmed();
+    message.senderUserId =
+        envelope.data.value(QStringLiteral("from_user_id")).toString().trimmed();
+    message.senderNumericId =
+        envelope.data.value(QStringLiteral("from_numeric_id")).toString().trimmed();
+    message.senderUsername =
+        envelope.data.value(QStringLiteral("from_username")).toString().trimmed();
+    message.kind = ChatMessageKind::Text;
+    message.text = previewText;
+
+    QString error;
+    if (!m_localChatStore->saveMessage(message, &error)) {
+      qWarning() << "[MainWidget] failed to persist incoming text message:"
+                 << error;
+    }
+  }
+
   ConversationListState state =
       m_conversationStatesByConversationId.value(conversationId);
   state.conversationId = conversationId;
@@ -2288,4 +2393,5 @@ QString Widget::elidePreview(const QString &preview) const {
   }
   return singleLine;
 }
+
 

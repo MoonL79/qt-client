@@ -7,7 +7,6 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QMetaObject>
-#include <QRegularExpression>
 #include <QtGlobal>
 #include <cstdlib>
 #include <cstdio>
@@ -124,22 +123,21 @@ int main(int argc, char *argv[])
     // 登录成功后显示主窗口
     QObject::connect(&loginWindow, &LoginWindow::loginSuccess,
                      [&](const QString &username, const QString &userId) {
-        static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
         currentUserId.clear();
         loginWindow.close();
         mainWidget.setUserInfo(username); // 设置用户信息
         mainWidget.setWindowTitle("IM聊天 - " + username);
         mainWidget.show();
         mainWidget.setCurrentUserNumericId(UserSession::instance().numericId());
-        const QString normalizedUserId = userId.trimmed();
-        if (kUnsignedIntRe.match(normalizedUserId).hasMatch()) {
-          currentUserId = normalizedUserId;
+        currentUserId = userId.trimmed();
+        if (currentUserId.isEmpty()) {
+          currentUserId = UserSession::instance().userId().trimmed();
         }
         mainWidget.setCurrentUserId(currentUserId);
         if (!currentUserId.isEmpty()) {
           profileApiClient.requestProfileInfo(currentUserId);
         } else {
-          qWarning() << "Skip PROFILE GET_INFO: missing numeric user_id from login response";
+          qWarning() << "Skip PROFILE GET_INFO: missing user_id from login response";
         }
     });
     

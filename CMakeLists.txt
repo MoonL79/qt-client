@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(qt-client LANGUAGES CXX)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets Test Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets Test Network Sql)
 find_package(Qt6 REQUIRED COMPONENTS Core)
 
 qt_standard_project_setup()
@@ -60,6 +60,8 @@ qt_add_executable(qt-client
     src/conversation/conversationlistmanager.cpp
     src/friend/friendlistmanager.h
     src/friend/friendlistmanager.cpp
+    src/storage/localchatstore.h
+    src/storage/localchatstore.cpp
 )
 
 target_include_directories(qt-client PRIVATE
@@ -77,6 +79,7 @@ target_include_directories(qt-client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/session
     ${CMAKE_CURRENT_SOURCE_DIR}/src/conversation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/friend
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/storage
 )
 
 target_link_libraries(qt-client
@@ -85,6 +88,7 @@ target_link_libraries(qt-client
         Qt::Widgets
         Qt6::Network
         Qt6::WebSockets
+        Qt6::Sql
 )
 target_link_libraries(qt-client PRIVATE Qt6::Core)
 
