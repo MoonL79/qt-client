@@ -115,6 +115,12 @@ SessionWindow::SessionWindow(const Session &session, QWidget *parent)
   initUI();
 }
 
+void SessionWindow::loadHistory(const QVector<ChatMessage> &messages) {
+  for (const ChatMessage &message : messages) {
+    appendPersistedMessage(message);
+  }
+}
+
 void SessionWindow::setPeerIdentity(const QString &userId,
                                     const QString &numericId) {
   m_peerUserId = userId.trimmed();
@@ -304,13 +310,15 @@ void SessionWindow::sendPendingMessage() {
   localMessage.localId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   localMessage.requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   localMessage.conversationId = conversationId;
-  localMessage.content = message;
+  localMessage.kind = ChatMessageKind::Text;
+  localMessage.text = message;
   localMessage.sentAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
   localMessage.senderUserId = UserSession::instance().userId().trimmed();
+  localMessage.senderNumericId = UserSession::instance().numericId().trimmed();
   localMessage.senderUsername = UserSession::instance().username().trimmed();
-  localMessage.status = MessageStatus::Pending;
-  const int messageIndex = appendMessage(localMessage);
+  const int messageIndex = appendMessage(localMessage, MessageStatus::Pending);
   m_pendingMessageIndexesByRequestId.insert(localMessage.requestId, messageIndex);
+  emit messageReadyForPersistence(localMessage);
 
   QJsonObject data;
   data.insert("conversation_id", conversationId);
@@ -418,11 +426,22 @@ void SessionWindow::handleIncomingPayload(const QString &payload,
              << parseError << "payload:" << payload;
 }
 
-int SessionWindow::appendMessage(const ChatMessage &message) {
-  m_messages.push_back(message);
+void SessionWindow::appendPersistedMessage(const ChatMessage &message) {
+  if (!message.isValid()) {
+    return;
+  }
+  appendMessage(message, isOutgoingMessage(message) ? MessageStatus::Sent
+                                                    : MessageStatus::Received);
+}
+
+int SessionWindow::appendMessage(const ChatMessage &message, MessageStatus status) {
+  DisplayMessage displayMessage;
+  displayMessage.message = message;
+  displayMessage.status = status;
+  m_messages.push_back(displayMessage);
   const int index = m_messages.size() - 1;
   m_messages[index].bubbleLabel =
-      appendChatBubble(QString(), message.status != MessageStatus::Received, false);
+      appendChatBubble(QString(), status != MessageStatus::Received, false);
   updateMessageBubble(index);
   return index;
 }
@@ -432,24 +451,26 @@ void SessionWindow::updateMessageBubble(int index) {
     return;
   }
 
-  ChatMessage &message = m_messages[index];
+  DisplayMessage &message = m_messages[index];
   if (!message.bubbleLabel) {
     return;
   }
 
-  const QString timeText = formatMessageTime(message.sentAt);
+  const QString timeText = formatMessageTime(message.message.sentAt);
   QString bubbleText;
   if (message.status == MessageStatus::Received) {
     const QString sender =
-        message.senderUsername.trimmed().isEmpty() ? QStringLiteral("对方")
-                                                   : message.senderUsername.trimmed();
+        message.message.senderUsername.trimmed().isEmpty()
+            ? QStringLiteral("对方")
+            : message.message.senderUsername.trimmed();
     bubbleText = QStringLiteral("%1 %2: %3")
-                     .arg(timeText, sender, message.content);
+                     .arg(timeText, sender, renderMessageBody(message.message));
   } else {
     bubbleText = QStringLiteral("%1 我: %2 [%3]")
-                     .arg(timeText, message.content, messageStatusText(message.status));
-    if (message.status == MessageStatus::Sent && message.seq > 0) {
-      bubbleText += QStringLiteral(" (#%1)").arg(message.seq);
+                     .arg(timeText, renderMessageBody(message.message),
+                          messageStatusText(message.status));
+    if (message.status == MessageStatus::Sent && message.message.seq > 0) {
+      bubbleText += QStringLiteral(" (#%1)").arg(message.message.seq);
     }
   }
   message.bubbleLabel->setText(bubbleText);
@@ -472,7 +493,7 @@ void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope
     return;
   }
 
-  ChatMessage &message = m_messages[index];
+  DisplayMessage &message = m_messages[index];
   const QString responseConversationId =
       jsonStringValue(envelope.data, "conversation_id");
   if (!responseConversationId.isEmpty() &&
@@ -504,25 +525,27 @@ void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope
     return;
   }
 
-  message.conversationId = responseConversationId.isEmpty() ? message.conversationId
-                                                            : responseConversationId;
-  message.messageId = jsonStringValue(envelope.data, "message_id");
-  message.seq = jsonIntegerValue(envelope.data, "seq");
+  message.message.conversationId =
+      responseConversationId.isEmpty() ? message.message.conversationId
+                                       : responseConversationId;
+  message.message.messageId = jsonStringValue(envelope.data, "message_id");
+  message.message.seq = jsonIntegerValue(envelope.data, "seq");
   const QString sentAt = jsonStringValue(envelope.data, "sent_at");
   if (!sentAt.isEmpty()) {
-    message.sentAt = sentAt;
+    message.message.sentAt = sentAt;
   }
   const QString content = jsonStringValue(envelope.data, "content");
   if (!content.isEmpty()) {
-    message.content = content;
+    message.message.text = content;
   }
   message.status = MessageStatus::Sent;
   updateMessageBubble(index);
   m_pendingMessageIndexesByRequestId.remove(requestId);
+  emit messageReadyForPersistence(message.message);
 
   qInfo() << "[SessionWindow] MESSAGE/SEND ack request_id=" << requestId
-          << "message_id=" << message.messageId << "seq=" << message.seq
-          << "sent_at=" << message.sentAt;
+          << "message_id=" << message.message.messageId
+          << "seq=" << message.message.seq << "sent_at=" << message.message.sentAt;
 }
 
 void SessionWindow::handleIncomingMessagePush(const protocol::Envelope &envelope) {
@@ -537,20 +560,21 @@ void SessionWindow::handleIncomingMessagePush(const protocol::Envelope &envelope
   incoming.conversationId = conversationId;
   incoming.messageId = jsonStringValue(envelope.data, "message_id");
   incoming.seq = jsonIntegerValue(envelope.data, "seq");
-  incoming.content = jsonStringValue(envelope.data, "content");
+  incoming.kind = ChatMessageKind::Text;
+  incoming.text = jsonStringValue(envelope.data, "content");
   incoming.sentAt = jsonStringValue(envelope.data, "sent_at");
   incoming.senderUserId = jsonStringValue(envelope.data, "from_user_id");
   incoming.senderUsername = jsonStringValue(envelope.data, "from_username");
-  incoming.status = MessageStatus::Received;
 
-  if (incoming.content.isEmpty()) {
+  if (incoming.text.isEmpty()) {
     qWarning() << "[SessionWindow] ignore incoming MESSAGE/SEND without content "
                   "conversation_id="
                << conversationId;
     return;
   }
 
-  appendMessage(incoming);
+  appendMessage(incoming, MessageStatus::Received);
+  emit messageReadyForPersistence(incoming);
   qInfo() << "[SessionWindow] received incoming MESSAGE/SEND conversation_id="
           << conversationId << "message_id=" << incoming.messageId
           << "from_user_id=" << incoming.senderUserId;
@@ -561,9 +585,26 @@ void SessionWindow::markPendingMessageFailed(int index, const QString &reason) {
     return;
   }
 
-  ChatMessage &message = m_messages[index];
+  DisplayMessage &message = m_messages[index];
   message.status = MessageStatus::Failed;
   updateMessageBubble(index);
   qWarning() << "[SessionWindow] pending message failed request_id="
-             << message.requestId << "reason=" << reason;
+             << message.message.requestId << "reason=" << reason;
 }
+
+bool SessionWindow::isOutgoingMessage(const ChatMessage &message) const {
+  const QString currentUserId = UserSession::instance().userId().trimmed();
+  return !currentUserId.isEmpty() &&
+         message.senderUserId.trimmed() == currentUserId;
+}
+
+QString SessionWindow::renderMessageBody(const ChatMessage &message) const {
+  if (message.kind == ChatMessageKind::File) {
+    const QString fileName = message.file.originalName.trimmed();
+    return fileName.isEmpty() ? QStringLiteral("[文件]")
+                              : QStringLiteral("[文件] %1").arg(fileName);
+  }
+  return message.text;
+}
+
+

@@ -45,6 +45,7 @@ class LeaveGroupDialog;
 class DismissGroupDialog;
 class SessionWindow;
 class ChatFileService;
+class LocalChatStore;
 
 class Widget : public QWidget
 {
@@ -208,6 +209,7 @@ private:
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByConversationId;
     QHash<QString, ConversationListState> m_conversationStatesByConversationId;
     ChatFileService* m_chatFileService = nullptr;
+    LocalChatStore* m_localChatStore = nullptr;
     PendingFileTransferState m_pendingFileTransfer;
     QHash<QString, PendingFileDownloadState> m_pendingFileDownloads;
     QSet<QString> m_seenIncomingFileMessageKeys;

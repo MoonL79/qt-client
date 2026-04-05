@@ -2,6 +2,7 @@
 #define SESSIONWINDOW_H
 
 #include "framelesswindowbase.h"
+#include "chatmessage.h"
 #include "protocol.h"
 #include "session.h"
 #include "usersession.h"
@@ -22,16 +23,8 @@ class SessionWindow : public FramelessWindowBase {
 public:
   enum class MessageStatus { Pending, Sent, Failed, Received };
 
-  struct ChatMessage {
-    QString localId;
-    QString requestId;
-    QString conversationId;
-    QString messageId;
-    qint64 seq = 0;
-    QString content;
-    QString sentAt;
-    QString senderUserId;
-    QString senderUsername;
+  struct DisplayMessage {
+    ChatMessage message;
     MessageStatus status = MessageStatus::Received;
     QLabel *bubbleLabel = nullptr;
   };
@@ -39,10 +32,13 @@ public:
   explicit SessionWindow(const Session &session, QWidget *parent = nullptr);
   void setPeerIdentity(const QString &userId, const QString &numericId);
   void updatePeerPresence(bool isOnline, const QString &lastSeenAtUtc);
+  void loadHistory(const QVector<ChatMessage> &messages);
+  void appendPersistedMessage(const ChatMessage &message);
 
 signals:
   void outgoingMessageSubmitted(const QString &conversationId,
                                 const QString &previewText);
+  void messageReadyForPersistence(const ChatMessage &message);
 
 protected:
   void initUI();
@@ -51,11 +47,13 @@ protected:
                            bool status = false);
   void refreshPresenceLabel();
   void handleIncomingPayload(const QString &payload, const QString &sourceTag);
-  int appendMessage(const ChatMessage &message);
+  int appendMessage(const ChatMessage &message, MessageStatus status);
   void updateMessageBubble(int index);
   void handleMessageSendResponse(const protocol::Envelope &envelope);
   void handleIncomingMessagePush(const protocol::Envelope &envelope);
   void markPendingMessageFailed(int index, const QString &reason);
+  bool isOutgoingMessage(const ChatMessage &message) const;
+  QString renderMessageBody(const ChatMessage &message) const;
   Session m_session;
 
   // Network & UI helpers
@@ -70,7 +68,7 @@ protected:
   QString m_peerNumericId;
   QString m_peerLastSeenAtUtc;
   bool m_peerIsOnline = false;
-  QVector<ChatMessage> m_messages;
+  QVector<DisplayMessage> m_messages;
   QHash<QString, int> m_pendingMessageIndexesByRequestId;
   void onSendClicked();
   void sendPendingMessage();
