@@ -1590,7 +1590,7 @@ void Widget::onOpenFileTransfer() {
                fileInfo.fileName()));
 }
 
-void Widget::requestConversationList(bool force) {
+void Widget::requestConversationList(bool force, bool silent) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
   if (!kUnsignedIntRe.match(numericId).hasMatch()) {
@@ -1608,11 +1608,14 @@ void Widget::requestConversationList(bool force) {
       !kUnsignedIntRe.match(numericId).hasMatch()) {
     return;
   }
-  m_pendingConversationListRequestId =
-      m_profileApiClient->fetchConversationList(numericId);
+  const QString requestId = m_profileApiClient->fetchConversationList(numericId);
+  m_pendingConversationListRequestId = requestId;
+  if (silent && !requestId.isEmpty()) {
+    m_silentConversationListRequestIds.insert(requestId);
+  }
 }
 
-void Widget::requestFriendListForContacts(bool force) {
+void Widget::requestFriendListForContacts(bool force, bool silent) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
   if (!kUnsignedIntRe.match(numericId).hasMatch()) {
@@ -1629,7 +1632,11 @@ void Widget::requestFriendListForContacts(bool force) {
       !kUnsignedIntRe.match(numericId).hasMatch()) {
     return;
   }
-  m_pendingFriendListRequestId = m_profileApiClient->fetchFriendList(numericId);
+  const QString requestId = m_profileApiClient->fetchFriendList(numericId);
+  m_pendingFriendListRequestId = requestId;
+  if (silent && !requestId.isEmpty()) {
+    m_silentFriendListRequestIds.insert(requestId);
+  }
 }
 
 void Widget::refreshConversationListUi() {
@@ -2076,6 +2083,7 @@ void Widget::handlePresenceEnvelope(const QJsonObject &data) {
 
 void Widget::onConversationListPayloadReceived(const QString &requestId,
                                                const QJsonObject &data) {
+  m_silentConversationListRequestIds.remove(requestId);
   if (!m_pendingConversationListRequestId.isEmpty() &&
       requestId != m_pendingConversationListRequestId) {
     return;
@@ -2101,6 +2109,7 @@ void Widget::onConversationListPayloadReceived(const QString &requestId,
 
 void Widget::onConversationListFailed(const QString &requestId, int code,
                                       const QString &message) {
+  const bool silentFailure = m_silentConversationListRequestIds.remove(requestId);
   if (!m_pendingConversationListRequestId.isEmpty() &&
       requestId != m_pendingConversationListRequestId) {
     return;
@@ -2108,6 +2117,9 @@ void Widget::onConversationListFailed(const QString &requestId, int code,
   m_pendingConversationListRequestId.clear();
   qWarning() << "[MainWidget] conversation list request failed, code=" << code
              << "message=" << message;
+  if (silentFailure) {
+    return;
+  }
   m_conversationListManager.clear();
   refreshConversationListUi();
   refreshGroupListUi();
@@ -2115,6 +2127,7 @@ void Widget::onConversationListFailed(const QString &requestId, int code,
 
 void Widget::onFriendListPayloadReceived(const QString &requestId,
                                          const QJsonObject &data) {
+  m_silentFriendListRequestIds.remove(requestId);
   if (!m_pendingFriendListRequestId.isEmpty() &&
       requestId != m_pendingFriendListRequestId) {
     return;
@@ -2130,6 +2143,7 @@ void Widget::onFriendListPayloadReceived(const QString &requestId,
 
 void Widget::onFriendListFailed(const QString &requestId, int code,
                                 const QString &message) {
+  const bool silentFailure = m_silentFriendListRequestIds.remove(requestId);
   if (!m_pendingFriendListRequestId.isEmpty() &&
       requestId != m_pendingFriendListRequestId) {
     return;
@@ -2137,6 +2151,9 @@ void Widget::onFriendListFailed(const QString &requestId, int code,
   m_pendingFriendListRequestId.clear();
   qWarning() << "[MainWidget] friend list request failed, code=" << code
              << "message=" << message;
+  if (silentFailure) {
+    return;
+  }
   m_friendListManager.clear();
   refreshContactListUi();
   syncFriendListToDeleteDialog();
@@ -2146,16 +2163,43 @@ void Widget::onProfileServerRequestReceived(const QString &requestId,
                                             const QString &action,
                                             const QJsonObject &data) {
   Q_UNUSED(requestId);
-  Q_UNUSED(data);
 
-  if (action != QStringLiteral("CREATE_GROUP") &&
-      action != QStringLiteral("DISMISS_GROUP")) {
+  if (action == QStringLiteral("ADD_FRIEND") ||
+      action == QStringLiteral("DELETE_FRIEND")) {
+    const QString friendEvent =
+        data.value(QStringLiteral("friend_event")).toString().trimmed().toLower();
+    const QString refreshHint =
+        data.value(QStringLiteral("refresh_hint")).toString().trimmed();
+    const bool isAddEvent =
+        action == QStringLiteral("ADD_FRIEND") &&
+        friendEvent == QStringLiteral("added");
+    const bool isDeleteEvent =
+        action == QStringLiteral("DELETE_FRIEND") &&
+        friendEvent == QStringLiteral("deleted");
+
+    if (!isAddEvent && !isDeleteEvent) {
+      qInfo().noquote()
+          << "[MainWidget] ignore PROFILE friend broadcast action=" << action
+          << "friend_event=" << friendEvent;
+      return;
+    }
+
+    qInfo().noquote()
+        << "[MainWidget] refresh friend/conversation lists for PROFILE action="
+        << action << "friend_event=" << friendEvent
+        << "refresh_hint=" << refreshHint;
+    requestFriendListForContacts(true, true);
+    requestConversationList(true, true);
     return;
   }
 
-  qInfo().noquote() << "[MainWidget] refresh conversation list for server PROFILE action="
-                    << action;
-  requestConversationList(true);
+  if (action == QStringLiteral("CREATE_GROUP") ||
+      action == QStringLiteral("DISMISS_GROUP")) {
+    qInfo().noquote()
+        << "[MainWidget] refresh conversation list for server PROFILE action="
+        << action;
+    requestConversationList(true, true);
+  }
 }
 
 QListWidget *Widget::listWidgetForConversationType(int conversationType) const {
