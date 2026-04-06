@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QColor>
 #include <QRegularExpression>
 #include <QSet>
 #include <QThread>
@@ -207,12 +208,14 @@ QString ProfileApiClient::setProfileInfo(const QString &userId,
                                          const QString &avatarUrl,
                                          const QString &nickname,
                                          const QString &signature,
-                                         const QString &theme) {
+                                         const QString &theme,
+                                         const QString &themeColor) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionSetInfo);
 
   QString error;
-  if (!validateSetInfo(userId, avatarUrl, nickname, signature, theme, &error)) {
+  if (!validateSetInfo(userId, avatarUrl, nickname, signature, theme,
+                       themeColor, &error)) {
     failRequest(requestId, action, error);
     return requestId;
   }
@@ -223,6 +226,7 @@ QString ProfileApiClient::setProfileInfo(const QString &userId,
   data.insert("nickname", nickname.trimmed());
   data.insert("signature", signature.trimmed());
   data.insert("theme", normalizeTheme(theme));
+  data.insert("theme_color", themeColor.trimmed().toUpper());
   sendProfileRequest(action, requestId, data, 0, false);
   return requestId;
 }
@@ -684,12 +688,14 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
                                        const QString &nickname,
                                        const QString &signature,
                                        const QString &theme,
+                                       const QString &themeColor,
                                        QString *error) const {
   const QString uid = userId.trimmed();
   const QString avatar = avatarUrl.trimmed();
   const QString name = nickname.trimmed();
   const QString sign = signature.trimmed();
   const QString th = theme.trimmed();
+  const QString colorHex = themeColor.trimmed();
 
   if (uid.isEmpty()) {
     if (error) {
@@ -732,6 +738,15 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
       *error = QStringLiteral("theme length must be <= 32");
     }
     return false;
+  }
+  if (!colorHex.isEmpty()) {
+    const QColor color(colorHex);
+    if (!color.isValid() || color.name(QColor::HexRgb).compare(colorHex, Qt::CaseInsensitive) != 0) {
+      if (error) {
+        *error = QStringLiteral("theme_color must be a hex RGB color like #3B82F6");
+      }
+      return false;
+    }
   }
 
   return true;
@@ -1134,6 +1149,7 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
   QString bio;
   QString signature;
   QString theme;
+  QString themeColor;
   if (strict) {
     if (!readRequiredString(profileObj, "user_id", &userId, true) ||
         !readRequiredString(profileObj, "numeric_id", &numericId, true) ||
@@ -1152,6 +1168,7 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
       }
       return false;
     }
+    themeColor = profileObj.value("theme_color").toString().trimmed();
   } else {
     if (!readRequiredString(profileObj, "avatar_url", &avatarUrl) ||
         !readRequiredString(profileObj, "nickname", &nickname) ||
@@ -1171,6 +1188,7 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
     bio = profileObj.value("bio").toString();
     readRequiredInt(profileObj, "status", &statusValue);
     theme = profileObj.value("theme").toString();
+    themeColor = profileObj.value("theme_color").toString().trimmed();
   }
 
   outInfo->userId = userId;
@@ -1186,6 +1204,16 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
   outInfo->signature = signature;
   outInfo->theme =
       theme.trimmed().isEmpty() ? QStringLiteral("default") : normalizeTheme(theme);
+  if (!themeColor.isEmpty()) {
+    const QColor color(themeColor);
+    if (color.isValid()) {
+      outInfo->themeColor = color.name(QColor::HexRgb).toUpper();
+    } else {
+      outInfo->themeColor.clear();
+    }
+  } else {
+    outInfo->themeColor.clear();
+  }
   return true;
 }
 
