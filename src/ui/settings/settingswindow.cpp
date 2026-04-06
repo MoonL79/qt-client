@@ -1077,10 +1077,12 @@ void SettingsWindow::onSaveClicked() {
   const QString avatarUrl = m_avatarUrl.trimmed();
   const QString nickname = m_nicknameEdit->text().trimmed();
   const QString signature = m_signatureEdit->toPlainText().trimmed();
+  const QString themeColor = m_themeColor.name(QColor::HexRgb).toUpper();
 
   setSaving(true, "保存中...");
   m_pendingSetRequestId = m_profileApiClient->setProfileInfo(
-      m_userId.trimmed(), avatarUrl, nickname, signature);
+      m_userId.trimmed(), avatarUrl, nickname, signature, QString(),
+      themeColor);
 }
 
 void SettingsWindow::onChooseAvatarClicked() {
@@ -1254,6 +1256,12 @@ void SettingsWindow::applyProfileToUi(const ProfileInfo &info) {
   m_avatarUrl = info.avatarUrl.trimmed();
   m_nicknameEdit->setText(info.nickname);
   m_signatureEdit->setPlainText(info.signature);
+  const QColor themeColor(info.themeColor.trimmed());
+  if (themeColor.isValid()) {
+    const QString colorHex = themeColor.name(QColor::HexRgb).toUpper();
+    applyThemeColor(themeColor);
+    emit themeColorChanged(colorHex);
+  }
   updateAvatarPreviewFromUrl(info.avatarUrl);
 }
 
@@ -1427,6 +1435,7 @@ void SettingsWindow::onUploadReplyFinished() {
 
   const QString nickname = m_nicknameEdit->text().trimmed();
   const QString signature = m_signatureEdit->toPlainText().trimmed();
+  const QString themeColor = m_themeColor.name(QColor::HexRgb).toUpper();
   if (!m_profileApiClient) {
     setUploading(false, "保存失败: Profile 服务未初始化");
     QMessageBox::warning(this, "保存失败", "Profile 服务未初始化");
@@ -1435,7 +1444,8 @@ void SettingsWindow::onUploadReplyFinished() {
   }
   setSaving(true, "保存中...");
   m_pendingSetRequestId = m_profileApiClient->setProfileInfo(
-      m_userId.trimmed(), avatarUrl, nickname, signature);
+      m_userId.trimmed(), avatarUrl, nickname, signature, QString(),
+      themeColor);
   reply->deleteLater();
 }
 

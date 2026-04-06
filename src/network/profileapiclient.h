@@ -26,6 +26,7 @@ struct ProfileInfo {
   QString bio;
   QString signature;
   QString theme;
+  QString themeColor;
 };
 Q_DECLARE_METATYPE(ProfileInfo)
 
@@ -188,7 +189,8 @@ public:
   QString requestProfileInfo(const QString &userId);
   QString setProfileInfo(const QString &userId, const QString &avatarUrl,
                          const QString &nickname, const QString &signature,
-                         const QString &theme = QString());
+                         const QString &theme = QString(),
+                         const QString &themeColor = QString());
   QString queryUserProfile(const QString &numericId);
   QString addFriend(const QString &userNumericId, const QString &friendNumericId,
                     const QString &remark = QString());
@@ -262,7 +264,8 @@ private:
   bool validateGetInfo(const QString &userId, QString *error) const;
   bool validateSetInfo(const QString &userId, const QString &avatarUrl,
                        const QString &nickname, const QString &signature,
-                       const QString &theme, QString *error) const;
+                       const QString &theme, const QString &themeColor,
+                       QString *error) const;
   bool validateQueryUserProfile(const QString &numericId, QString *error) const;
   bool validateAddFriend(const QString &userNumericId,
                          const QString &friendNumericId, const QString &remark,
