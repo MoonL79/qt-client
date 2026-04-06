@@ -119,8 +119,8 @@ private:
     void initUI();
     void initAvatarHttpClient();
     void addSessionItem(const Session &session);
-    void requestConversationList(bool force = false);
-    void requestFriendListForContacts(bool force = false);
+    void requestConversationList(bool force = false, bool silent = false);
+    void requestFriendListForContacts(bool force = false, bool silent = false);
     void refreshConversationListUi();
     void refreshGroupListUi();
     void refreshContactListUi();
@@ -197,6 +197,8 @@ private:
     friendlist::FriendListManager m_friendListManager;
     QString m_pendingConversationListRequestId;
     QString m_pendingFriendListRequestId;
+    QSet<QString> m_silentConversationListRequestIds;
+    QSet<QString> m_silentFriendListRequestIds;
     QString m_pendingOpenConversationId;
     QTimer* m_conversationListRefreshTimer = nullptr;
     QTabWidget* m_tabWidget = nullptr;

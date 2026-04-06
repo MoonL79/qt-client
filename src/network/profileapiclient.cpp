@@ -469,10 +469,6 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
   }
 
   const QString requestId = envelope.requestId;
-  if (requestId.isEmpty()) {
-    qWarning() << "[PROFILE] drop response: missing request_id";
-    return;
-  }
 
   if (!m_pendingRequests.contains(requestId)) {
     qInfo().noquote() << "[PROFILE] incoming server request action="
