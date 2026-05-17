@@ -10,12 +10,16 @@
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
 #include <QScrollBar>
 #include <QSizePolicy>
 #include <QTimer>
+#include <QtGlobal>
 #include <QUrl>
 #include <QUuid>
 
@@ -26,6 +30,75 @@ constexpr int kMinimumSessionWindowWidth = 780;
 constexpr int kMinimumSessionWindowHeight = 620;
 constexpr int kMessageContentMaximumWidth = 520;
 constexpr int kFileCardMinimumWidth = 320;
+constexpr int kMessageAvatarSide = 36;
+constexpr int kDefaultStaticPort = 18080;
+constexpr const char *kStaticPortEnv = "QT_SERVER_STATIC_PORT";
+constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
+constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
+constexpr const char *kDefaultServerHost = "192.168.14.133";
+
+bool isLoopbackHost(const QString &host) {
+  const QString lower = host.trimmed().toLower();
+  return lower == "127.0.0.1" || lower == "localhost" || lower == "::1";
+}
+
+QString resolveServerHost() {
+  QString host = qEnvironmentVariable(kStaticHostEnv).trimmed();
+  if (host.isEmpty()) {
+    const QUrl wsUrl = websocketclient::instance()->url();
+    if (wsUrl.isValid() && !wsUrl.host().trimmed().isEmpty()) {
+      host = wsUrl.host().trimmed();
+    }
+  }
+  if (host.isEmpty()) {
+    host = qEnvironmentVariable(kWebSocketHostEnv).trimmed();
+  }
+  if (host.isEmpty()) {
+    host = QString::fromLatin1(kDefaultServerHost);
+  }
+  return host;
+}
+
+QUrl resolveAvatarUrl(const QString &avatarSource) {
+  const QString trimmed = avatarSource.trimmed();
+  if (trimmed.isEmpty()) {
+    return QUrl();
+  }
+
+  if (trimmed.startsWith(QStringLiteral("http://")) ||
+      trimmed.startsWith(QStringLiteral("https://"))) {
+    QUrl absolute(trimmed);
+    if (!absolute.isValid()) {
+      return QUrl();
+    }
+    if (isLoopbackHost(absolute.host())) {
+      absolute.setHost(resolveServerHost());
+    }
+    return absolute;
+  }
+
+  QString staticPath = trimmed;
+  if (staticPath.startsWith(QStringLiteral("/static/"))) {
+    // Use as-is.
+  } else if (staticPath.startsWith(QStringLiteral("static/"))) {
+    staticPath.prepend(QLatin1Char('/'));
+  } else {
+    return QUrl();
+  }
+
+  bool ok = false;
+  int staticPort = qEnvironmentVariableIntValue(kStaticPortEnv, &ok);
+  if (!ok || staticPort <= 0 || staticPort > 65535) {
+    staticPort = kDefaultStaticPort;
+  }
+
+  QUrl url;
+  url.setScheme(QStringLiteral("http"));
+  url.setHost(resolveServerHost());
+  url.setPort(staticPort);
+  url.setPath(staticPath);
+  return url;
+}
 
 QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
   if (isOnline) {
@@ -220,6 +293,53 @@ SessionWindow::SessionWindow(const Session &session, QWidget *parent)
   setAttribute(Qt::WA_TranslucentBackground);
   setStandardTitleBarVisible(false);
   setResizeBorderWidth(8);
+  m_avatarNetworkManager = new QNetworkAccessManager(this);
+  connect(m_avatarNetworkManager, &QNetworkAccessManager::finished, this,
+          [this](QNetworkReply *reply) {
+            if (!reply) {
+              return;
+            }
+
+            const QString avatarSource =
+                reply->property("avatar_source").toString().trimmed();
+            if (!avatarSource.isEmpty()) {
+              m_pendingAvatarSources.remove(avatarSource);
+            }
+
+            const auto finalizeFailure = [this, &avatarSource]() {
+              if (!avatarSource.isEmpty()) {
+                m_failedAvatarSources.insert(avatarSource);
+              }
+            };
+
+            if (reply->error() != QNetworkReply::NoError) {
+              finalizeFailure();
+              reply->deleteLater();
+              return;
+            }
+
+            QPixmap pixmap;
+            const QByteArray body = reply->readAll();
+            if (body.isEmpty() || !pixmap.loadFromData(body)) {
+              finalizeFailure();
+              reply->deleteLater();
+              return;
+            }
+
+            const QPixmap circular = circularAvatarPixmap(pixmap, kMessageAvatarSide);
+            if (circular.isNull()) {
+              finalizeFailure();
+              reply->deleteLater();
+              return;
+            }
+
+            if (!avatarSource.isEmpty()) {
+              m_failedAvatarSources.remove(avatarSource);
+              m_avatarPixmapsBySource.insert(avatarSource, circular);
+              refreshMessagesForAvatarSource(avatarSource);
+            }
+            reply->deleteLater();
+          });
   initUI();
 }
 
@@ -727,14 +847,31 @@ QWidget *SessionWindow::createMessageAvatarWidget(int index, bool outgoing) {
   }
 
   auto *avatarLabel = new QLabel(displayMessage.rowWidget);
-  avatarLabel->setFixedSize(36, 36);
+  avatarLabel->setFixedSize(kMessageAvatarSide, kMessageAvatarSide);
   avatarLabel->setAlignment(Qt::AlignCenter);
   avatarLabel->setTextInteractionFlags(Qt::NoTextInteraction);
 
-  const QPixmap avatarPixmap = loadAvatarPixmap(avatarSource, avatarLabel->width());
+  const QString trimmedAvatarSource = avatarSource.trimmed();
+  QPixmap avatarPixmap;
+  if (!trimmedAvatarSource.isEmpty()) {
+    const auto cachedIt = m_avatarPixmapsBySource.constFind(trimmedAvatarSource);
+    if (cachedIt != m_avatarPixmapsBySource.cend()) {
+      avatarPixmap = cachedIt.value();
+    } else {
+      avatarPixmap =
+          loadAvatarPixmap(trimmedAvatarSource, avatarLabel->width());
+      if (!avatarPixmap.isNull()) {
+        m_avatarPixmapsBySource.insert(trimmedAvatarSource, avatarPixmap);
+      } else {
+        requestAvatarIfNeeded(trimmedAvatarSource);
+      }
+    }
+  }
+
   if (!avatarPixmap.isNull()) {
     avatarLabel->setPixmap(avatarPixmap);
-    avatarLabel->setStyleSheet(QStringLiteral("QLabel { background: transparent; }"));
+    avatarLabel->setStyleSheet(
+        QStringLiteral("QLabel { background: transparent; }"));
     return avatarLabel;
   }
 
@@ -1100,6 +1237,69 @@ QString SessionWindow::renderMessageBody(const ChatMessage &message) const {
                               : QStringLiteral("[文件] %1").arg(fileName);
   }
   return message.text;
+}
+
+void SessionWindow::requestAvatarIfNeeded(const QString &avatarSource) {
+  const QString trimmedSource = avatarSource.trimmed();
+  if (trimmedSource.isEmpty() || !m_avatarNetworkManager ||
+      m_avatarPixmapsBySource.contains(trimmedSource) ||
+      m_pendingAvatarSources.contains(trimmedSource) ||
+      m_failedAvatarSources.contains(trimmedSource)) {
+    return;
+  }
+
+  QString localPath = trimmedSource;
+  if (!trimmedSource.startsWith(QLatin1Char(':'))) {
+    const QUrl avatarUrl(trimmedSource);
+    if (avatarUrl.isValid() && avatarUrl.isLocalFile()) {
+      localPath = avatarUrl.toLocalFile();
+    }
+  }
+  if (trimmedSource.startsWith(QLatin1Char(':')) || QFileInfo::exists(localPath)) {
+    return;
+  }
+
+  const QUrl url = resolveAvatarUrl(trimmedSource);
+  if (!url.isValid()) {
+    m_failedAvatarSources.insert(trimmedSource);
+    return;
+  }
+
+  QNetworkRequest request(url);
+  request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                       QNetworkRequest::NoLessSafeRedirectPolicy);
+  request.setTransferTimeout(8000);
+  QNetworkReply *reply = m_avatarNetworkManager->get(request);
+  reply->setProperty("avatar_source", trimmedSource);
+  m_pendingAvatarSources.insert(trimmedSource);
+}
+
+void SessionWindow::refreshMessagesForAvatarSource(const QString &avatarSource) {
+  const QString trimmedSource = avatarSource.trimmed();
+  if (trimmedSource.isEmpty()) {
+    return;
+  }
+
+  const bool refreshOutgoing =
+      m_currentAvatarSource.trimmed() == trimmedSource;
+  const bool refreshIncomingDirect =
+      m_peerAvatarSource.trimmed() == trimmedSource &&
+      m_session.type() != Session::Type::Group;
+  if (!refreshOutgoing && !refreshIncomingDirect) {
+    return;
+  }
+
+  for (int index = 0; index < m_messages.size(); ++index) {
+    const ChatMessage &message = m_messages[index].message;
+    const bool outgoing = isOutgoingMessage(message) ||
+                          m_messages[index].status == MessageStatus::Pending ||
+                          m_messages[index].status == MessageStatus::Sent ||
+                          m_messages[index].status == MessageStatus::Failed;
+    if ((refreshOutgoing && outgoing) ||
+        (refreshIncomingDirect && !outgoing)) {
+      updateMessageBubble(index);
+    }
+  }
 }
 
 void SessionWindow::scrollChatToBottom() {

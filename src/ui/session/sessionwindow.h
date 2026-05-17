@@ -12,12 +12,17 @@
 #include <QHBoxLayout>
 #include <QHash>
 #include <QLabel>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSet>
 #include <QString>
 #include <QTextEdit>
 #include <QVector>
 #include <QVBoxLayout>
+
+class QNetworkAccessManager;
+class QNetworkReply;
 
 class SessionWindow : public FramelessWindowBase {
   Q_OBJECT
@@ -67,6 +72,8 @@ protected:
   void markPendingMessageFailed(int index, const QString &reason);
   bool isOutgoingMessage(const ChatMessage &message) const;
   QString renderMessageBody(const ChatMessage &message) const;
+  void requestAvatarIfNeeded(const QString &avatarSource);
+  void refreshMessagesForAvatarSource(const QString &avatarSource);
   QWidget *createMessageAvatarWidget(int index, bool outgoing);
   QWidget *createMessageContentWidget(int index);
   QWidget *createFileCardWidget(int index, bool outgoing);
@@ -91,6 +98,10 @@ protected:
   bool m_peerIsOnline = false;
   QVector<DisplayMessage> m_messages;
   QHash<QString, int> m_pendingMessageIndexesByRequestId;
+  QNetworkAccessManager *m_avatarNetworkManager = nullptr;
+  QHash<QString, QPixmap> m_avatarPixmapsBySource;
+  QSet<QString> m_pendingAvatarSources;
+  QSet<QString> m_failedAvatarSources;
   void onSendClicked();
   void sendPendingMessage();
   void requestAttachment(bool imageOnly);
