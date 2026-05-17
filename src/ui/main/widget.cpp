@@ -1246,6 +1246,24 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   const QString peerNumericId = item->data(kRoleNumericId).toString().trimmed();
   const QString conversationId =
       item->data(kRoleConversationId).toString().trimmed();
+  const ConversationListState conversationState =
+      m_conversationStatesByConversationId.value(conversationId);
+  const QString currentDisplayName =
+      m_currentDisplayName.trimmed().isEmpty()
+          ? UserSession::instance().username().trimmed()
+          : m_currentDisplayName.trimmed();
+  const QString currentAvatarSource = m_currentAvatarUrl.trimmed();
+  QString peerDisplayName = item->data(kRoleDisplayName).toString().trimmed();
+  if (peerDisplayName.isEmpty()) {
+    peerDisplayName = conversationState.displayName.trimmed();
+  }
+  if (peerDisplayName.isEmpty()) {
+    peerDisplayName = session.displayName().trimmed();
+  }
+  QString peerAvatarSource = conversationState.peerAvatarUrl.trimmed();
+  if (peerAvatarSource.isEmpty()) {
+    peerAvatarSource = item->data(kRoleAvatarUrl).toString().trimmed();
+  }
   SessionWindow *sessionWindow = nullptr;
   if (!conversationId.isEmpty()) {
     sessionWindow = m_sessionWindowsByConversationId.value(conversationId);
@@ -1258,6 +1276,11 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   }
 
   if (sessionWindow) {
+    sessionWindow->setCurrentProfile(currentDisplayName, currentAvatarSource);
+    sessionWindow->setPeerProfile(peerDisplayName, peerAvatarSource);
+    sessionWindow->setPeerIdentity(peerUserId, peerNumericId);
+    sessionWindow->updatePeerPresence(item->data(kRoleIsOnline).toBool(),
+                                      item->data(kRoleLastSeenAtUtc).toString());
     if (sessionWindow->isMinimized()) {
       sessionWindow->showNormal();
     } else {
@@ -1272,6 +1295,8 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   }
 
   sessionWindow = new SessionWindow(session);
+  sessionWindow->setCurrentProfile(currentDisplayName, currentAvatarSource);
+  sessionWindow->setPeerProfile(peerDisplayName, peerAvatarSource);
   sessionWindow->setPeerIdentity(peerUserId, peerNumericId);
   sessionWindow->updatePeerPresence(item->data(kRoleIsOnline).toBool(),
                                     item->data(kRoleLastSeenAtUtc).toString());

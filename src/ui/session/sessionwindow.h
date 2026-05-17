@@ -34,6 +34,9 @@ public:
   };
 
   explicit SessionWindow(const Session &session, QWidget *parent = nullptr);
+  void setCurrentProfile(const QString &displayName,
+                         const QString &avatarSource);
+  void setPeerProfile(const QString &displayName, const QString &avatarSource);
   void setPeerIdentity(const QString &userId, const QString &numericId);
   void updatePeerPresence(bool isOnline, const QString &lastSeenAtUtc);
   void loadHistory(const QVector<ChatMessage> &messages);
@@ -64,6 +67,7 @@ protected:
   void markPendingMessageFailed(int index, const QString &reason);
   bool isOutgoingMessage(const ChatMessage &message) const;
   QString renderMessageBody(const ChatMessage &message) const;
+  QWidget *createMessageAvatarWidget(int index, bool outgoing);
   QWidget *createMessageContentWidget(int index);
   QWidget *createFileCardWidget(int index, bool outgoing);
   void scrollChatToBottom();
@@ -77,6 +81,10 @@ protected:
   QPushButton *m_sendBtn;
   QLabel *m_presenceLabel;
   QString m_pendingMessage;
+  QString m_currentDisplayName;
+  QString m_currentAvatarSource;
+  QString m_peerDisplayName;
+  QString m_peerAvatarSource;
   QString m_peerUserId;
   QString m_peerNumericId;
   QString m_peerLastSeenAtUtc;

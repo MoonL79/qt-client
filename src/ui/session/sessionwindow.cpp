@@ -1,19 +1,32 @@
 #include "sessionwindow.h"
 #include "protocol.h"
 #include <QAbstractSocket>
+#include <QColor>
 #include <QDateTime>
 #include <QDebug>
+#include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QScrollBar>
 #include <QSizePolicy>
 #include <QTimer>
+#include <QUrl>
 #include <QUuid>
 
 namespace {
+constexpr int kDefaultSessionWindowWidth = 860;
+constexpr int kDefaultSessionWindowHeight = 780;
+constexpr int kMinimumSessionWindowWidth = 780;
+constexpr int kMinimumSessionWindowHeight = 620;
+constexpr int kMessageContentMaximumWidth = 520;
+constexpr int kFileCardMinimumWidth = 320;
+
 QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
   if (isOnline) {
     return QStringLiteral("在线");
@@ -120,6 +133,82 @@ QString humanReadableFileSize(qint64 sizeBytes) {
       .arg(QString::number(size, 'f', precision),
            QString::fromLatin1(kUnits[unitIndex]));
 }
+
+QString avatarInitial(const QString &displayName,
+                      const QString &fallback = QStringLiteral("?")) {
+  const QString trimmed = displayName.trimmed();
+  if (trimmed.isEmpty()) {
+    return fallback;
+  }
+
+  const QString initial = trimmed.left(1);
+  const QChar firstChar = initial.front();
+  if (firstChar.isLetter() && firstChar.unicode() < 128) {
+    return initial.toUpper();
+  }
+  return initial;
+}
+
+QColor fallbackAvatarColor(const QString &seed, bool outgoing) {
+  if (outgoing) {
+    return QColor(QStringLiteral("#4a90e2"));
+  }
+
+  static const QColor kPalette[] = {
+      QColor(QStringLiteral("#7f8ea3")),
+      QColor(QStringLiteral("#5f8b7e")),
+      QColor(QStringLiteral("#8e7aa8")),
+      QColor(QStringLiteral("#9a7b5f")),
+      QColor(QStringLiteral("#607d8b"))};
+  const uint hash = qHash(seed.trimmed());
+  return kPalette[hash % (sizeof(kPalette) / sizeof(kPalette[0]))];
+}
+
+QPixmap circularAvatarPixmap(const QPixmap &pixmap, int side) {
+  if (pixmap.isNull() || side <= 0) {
+    return QPixmap();
+  }
+
+  const QPixmap scaled =
+      pixmap.scaled(side, side, Qt::KeepAspectRatioByExpanding,
+                    Qt::SmoothTransformation);
+  QPixmap circular(side, side);
+  circular.fill(Qt::transparent);
+
+  QPainter painter(&circular);
+  painter.setRenderHint(QPainter::Antialiasing, true);
+  QPainterPath path;
+  path.addEllipse(0, 0, side, side);
+  painter.setClipPath(path);
+  painter.drawPixmap(0, 0, scaled);
+  return circular;
+}
+
+QPixmap loadAvatarPixmap(const QString &avatarSource, int side) {
+  if (side <= 0) {
+    return QPixmap();
+  }
+
+  const QString trimmed = avatarSource.trimmed();
+  if (trimmed.isEmpty()) {
+    return QPixmap();
+  }
+
+  QString localPath = trimmed;
+  if (!trimmed.startsWith(QLatin1Char(':'))) {
+    const QUrl avatarUrl(trimmed);
+    if (avatarUrl.isValid() && avatarUrl.isLocalFile()) {
+      localPath = avatarUrl.toLocalFile();
+    }
+  }
+
+  if (!localPath.startsWith(QLatin1Char(':')) && !QFileInfo::exists(localPath)) {
+    return QPixmap();
+  }
+
+  const QPixmap pixmap(localPath);
+  return circularAvatarPixmap(pixmap, side);
+}
 } // namespace
 
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
@@ -137,6 +226,40 @@ SessionWindow::SessionWindow(const Session &session, QWidget *parent)
 void SessionWindow::loadHistory(const QVector<ChatMessage> &messages) {
   for (const ChatMessage &message : messages) {
     appendPersistedMessage(message);
+  }
+}
+
+void SessionWindow::setCurrentProfile(const QString &displayName,
+                                      const QString &avatarSource) {
+  const QString nextDisplayName = displayName.trimmed();
+  const QString nextAvatarSource = avatarSource.trimmed();
+  const bool changed =
+      m_currentDisplayName != nextDisplayName ||
+      m_currentAvatarSource != nextAvatarSource;
+  m_currentDisplayName = nextDisplayName;
+  m_currentAvatarSource = nextAvatarSource;
+  if (!changed) {
+    return;
+  }
+  for (int index = 0; index < m_messages.size(); ++index) {
+    updateMessageBubble(index);
+  }
+}
+
+void SessionWindow::setPeerProfile(const QString &displayName,
+                                   const QString &avatarSource) {
+  const QString nextDisplayName = displayName.trimmed();
+  const QString nextAvatarSource = avatarSource.trimmed();
+  const bool changed =
+      m_peerDisplayName != nextDisplayName ||
+      m_peerAvatarSource != nextAvatarSource;
+  m_peerDisplayName = nextDisplayName;
+  m_peerAvatarSource = nextAvatarSource;
+  if (!changed) {
+    return;
+  }
+  for (int index = 0; index < m_messages.size(); ++index) {
+    updateMessageBubble(index);
   }
 }
 
@@ -159,8 +282,8 @@ void SessionWindow::updatePeerPresence(bool isOnline,
 
 void SessionWindow::initUI() {
   setWindowTitle(m_session.displayName());
-  resize(760, 780);
-  setMinimumSize(680, 620);
+  resize(kDefaultSessionWindowWidth, kDefaultSessionWindowHeight);
+  setMinimumSize(kMinimumSessionWindowWidth, kMinimumSessionWindowHeight);
 
   QWidget *root = contentWidget();
   root->setAttribute(Qt::WA_TranslucentBackground);
@@ -440,7 +563,7 @@ QLabel *SessionWindow::appendChatBubble(const QString &message, bool outgoing,
   QLabel *bubble = new QLabel(message, row);
   bubble->setWordWrap(true);
   bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  bubble->setMaximumWidth(420);
+  bubble->setMaximumWidth(kMessageContentMaximumWidth);
 
   if (status) {
     bubble->setStyleSheet("QLabel { background: #f1f3f5; color: #4f5b66; "
@@ -523,7 +646,7 @@ int SessionWindow::appendMessage(const ChatMessage &message, MessageStatus statu
   storedMessage.rowWidget = new QWidget(m_chatContainer);
   storedMessage.rowLayout = new QHBoxLayout(storedMessage.rowWidget);
   storedMessage.rowLayout->setContentsMargins(0, 0, 0, 0);
-  storedMessage.rowLayout->setSpacing(0);
+  storedMessage.rowLayout->setSpacing(10);
   m_chatLayout->addWidget(storedMessage.rowWidget);
   updateMessageBubble(index);
   scrollChatToBottom();
@@ -548,23 +671,87 @@ void SessionWindow::updateMessageBubble(int index) {
   }
 
   displayMessage.bubbleLabel = nullptr;
-  displayMessage.contentWidget = createMessageContentWidget(index);
-  if (!displayMessage.contentWidget) {
-    return;
-  }
-
   const bool outgoing =
       isOutgoingMessage(displayMessage.message) ||
       displayMessage.status == MessageStatus::Pending ||
       displayMessage.status == MessageStatus::Sent ||
       displayMessage.status == MessageStatus::Failed;
+  QWidget *avatarWidget = createMessageAvatarWidget(index, outgoing);
+  displayMessage.contentWidget = createMessageContentWidget(index);
+  if (!avatarWidget || !displayMessage.contentWidget) {
+    return;
+  }
   if (outgoing) {
     displayMessage.rowLayout->addStretch();
-    displayMessage.rowLayout->addWidget(displayMessage.contentWidget);
+    displayMessage.rowLayout->addWidget(displayMessage.contentWidget, 0,
+                                        Qt::AlignTop);
+    displayMessage.rowLayout->addWidget(avatarWidget, 0, Qt::AlignTop);
   } else {
-    displayMessage.rowLayout->addWidget(displayMessage.contentWidget);
+    displayMessage.rowLayout->addWidget(avatarWidget, 0, Qt::AlignTop);
+    displayMessage.rowLayout->addWidget(displayMessage.contentWidget, 0,
+                                        Qt::AlignTop);
     displayMessage.rowLayout->addStretch();
   }
+}
+
+QWidget *SessionWindow::createMessageAvatarWidget(int index, bool outgoing) {
+  if (index < 0 || index >= m_messages.size()) {
+    return nullptr;
+  }
+
+  const DisplayMessage &displayMessage = m_messages[index];
+  const ChatMessage &message = displayMessage.message;
+  QString displayName;
+  QString avatarSource;
+
+  if (outgoing) {
+    displayName = m_currentDisplayName.trimmed();
+    if (displayName.isEmpty()) {
+      displayName = UserSession::instance().username().trimmed();
+    }
+    avatarSource = m_currentAvatarSource.trimmed();
+  } else if (m_session.type() == Session::Type::Group) {
+    displayName = message.senderUsername.trimmed();
+    if (displayName.isEmpty()) {
+      displayName = QStringLiteral("Group");
+    }
+  } else {
+    displayName = m_peerDisplayName.trimmed();
+    if (displayName.isEmpty()) {
+      displayName = message.senderUsername.trimmed();
+    }
+    if (displayName.isEmpty()) {
+      displayName = QStringLiteral("Peer");
+    }
+    avatarSource = m_peerAvatarSource.trimmed();
+  }
+
+  auto *avatarLabel = new QLabel(displayMessage.rowWidget);
+  avatarLabel->setFixedSize(36, 36);
+  avatarLabel->setAlignment(Qt::AlignCenter);
+  avatarLabel->setTextInteractionFlags(Qt::NoTextInteraction);
+
+  const QPixmap avatarPixmap = loadAvatarPixmap(avatarSource, avatarLabel->width());
+  if (!avatarPixmap.isNull()) {
+    avatarLabel->setPixmap(avatarPixmap);
+    avatarLabel->setStyleSheet(QStringLiteral("QLabel { background: transparent; }"));
+    return avatarLabel;
+  }
+
+  const QString initial =
+      avatarInitial(displayName, outgoing ? QStringLiteral("我")
+                                          : QStringLiteral("对"));
+  const QColor avatarColor = fallbackAvatarColor(displayName, outgoing);
+  avatarLabel->setStyleSheet(
+      QStringLiteral(
+          "QLabel { background-color: %1; color: #ffffff; border-radius: 18px; "
+          "font-size: 14px; font-weight: 600; }")
+          .arg(avatarColor.name(QColor::HexRgb)));
+  avatarLabel->setText(
+      initial.trimmed().isEmpty() ? (outgoing ? QStringLiteral("M")
+                                              : QStringLiteral("P"))
+                                  : initial);
+  return avatarLabel;
 }
 
 QWidget *SessionWindow::createMessageContentWidget(int index) {
@@ -608,7 +795,7 @@ QWidget *SessionWindow::createMessageContentWidget(int index) {
   auto *bubble = new QLabel(bubbleText, displayMessage.rowWidget);
   bubble->setWordWrap(true);
   bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  bubble->setMaximumWidth(420);
+  bubble->setMaximumWidth(kMessageContentMaximumWidth);
   bubble->setStyleSheet(
       outgoing
           ? QStringLiteral("QLabel { background: #e2f0ff; color: #1f3552; "
@@ -654,8 +841,8 @@ QWidget *SessionWindow::createFileCardWidget(int index, bool outgoing) {
 
   auto *card = new QFrame(displayMessage.rowWidget);
   card->setObjectName(QStringLiteral("ChatFileCard"));
-  card->setMaximumWidth(420);
-  card->setMinimumWidth(280);
+  card->setMaximumWidth(kMessageContentMaximumWidth);
+  card->setMinimumWidth(kFileCardMinimumWidth);
   card->setStyleSheet(
       outgoing
           ? QStringLiteral(
