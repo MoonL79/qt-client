@@ -610,9 +610,6 @@ void ChatFileService::onTextMessageReceived(const QString &message) {
     return;
   }
 
-  if (requestId.isEmpty() && canHandleMessage(envelope)) {
-    handleIncomingMessage(envelope, nullptr, nullptr);
-  }
 }
 
 void ChatFileService::onDisconnected() {

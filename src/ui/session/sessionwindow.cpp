@@ -101,6 +101,25 @@ QString messageErrorText(int code, const QString &fallback) {
   }
   return QStringLiteral("发送失败：未知错误(%1)").arg(code);
 }
+
+QString humanReadableFileSize(qint64 sizeBytes) {
+  if (sizeBytes < 0) {
+    return QStringLiteral("未知大小");
+  }
+
+  static const char *kUnits[] = {"B", "KB", "MB", "GB"};
+  double size = static_cast<double>(sizeBytes);
+  int unitIndex = 0;
+  while (size >= 1024.0 && unitIndex < 3) {
+    size /= 1024.0;
+    ++unitIndex;
+  }
+
+  const int precision = unitIndex == 0 ? 0 : (size < 10.0 ? 1 : 0);
+  return QStringLiteral("%1 %2")
+      .arg(QString::number(size, 'f', precision),
+           QString::fromLatin1(kUnits[unitIndex]));
+}
 } // namespace
 
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
@@ -441,12 +460,7 @@ QLabel *SessionWindow::appendChatBubble(const QString &message, bool outgoing,
   }
 
   m_chatLayout->addWidget(row);
-  QTimer::singleShot(0, this, [this]() {
-    if (m_chatScroll && m_chatScroll->verticalScrollBar()) {
-      m_chatScroll->verticalScrollBar()->setValue(
-          m_chatScroll->verticalScrollBar()->maximum());
-    }
-  });
+  scrollChatToBottom();
   return bubble;
 }
 
@@ -505,9 +519,14 @@ int SessionWindow::appendMessage(const ChatMessage &message, MessageStatus statu
   displayMessage.status = status;
   m_messages.push_back(displayMessage);
   const int index = m_messages.size() - 1;
-  m_messages[index].bubbleLabel =
-      appendChatBubble(QString(), status != MessageStatus::Received, false);
+  DisplayMessage &storedMessage = m_messages[index];
+  storedMessage.rowWidget = new QWidget(m_chatContainer);
+  storedMessage.rowLayout = new QHBoxLayout(storedMessage.rowWidget);
+  storedMessage.rowLayout->setContentsMargins(0, 0, 0, 0);
+  storedMessage.rowLayout->setSpacing(0);
+  m_chatLayout->addWidget(storedMessage.rowWidget);
   updateMessageBubble(index);
+  scrollChatToBottom();
   return index;
 }
 
@@ -516,29 +535,217 @@ void SessionWindow::updateMessageBubble(int index) {
     return;
   }
 
-  DisplayMessage &message = m_messages[index];
-  if (!message.bubbleLabel) {
+  DisplayMessage &displayMessage = m_messages[index];
+  if (!displayMessage.rowLayout || !displayMessage.rowWidget) {
     return;
   }
 
-  const QString timeText = formatMessageTime(message.message.sentAt);
+  while (QLayoutItem *item = displayMessage.rowLayout->takeAt(0)) {
+    if (QWidget *widget = item->widget()) {
+      widget->deleteLater();
+    }
+    delete item;
+  }
+
+  displayMessage.bubbleLabel = nullptr;
+  displayMessage.contentWidget = createMessageContentWidget(index);
+  if (!displayMessage.contentWidget) {
+    return;
+  }
+
+  const bool outgoing =
+      isOutgoingMessage(displayMessage.message) ||
+      displayMessage.status == MessageStatus::Pending ||
+      displayMessage.status == MessageStatus::Sent ||
+      displayMessage.status == MessageStatus::Failed;
+  if (outgoing) {
+    displayMessage.rowLayout->addStretch();
+    displayMessage.rowLayout->addWidget(displayMessage.contentWidget);
+  } else {
+    displayMessage.rowLayout->addWidget(displayMessage.contentWidget);
+    displayMessage.rowLayout->addStretch();
+  }
+}
+
+QWidget *SessionWindow::createMessageContentWidget(int index) {
+  if (index < 0 || index >= m_messages.size()) {
+    return nullptr;
+  }
+
+  DisplayMessage &displayMessage = m_messages[index];
+  const bool outgoing =
+      isOutgoingMessage(displayMessage.message) ||
+      displayMessage.status == MessageStatus::Pending ||
+      displayMessage.status == MessageStatus::Sent ||
+      displayMessage.status == MessageStatus::Failed;
+  const MessageStatus visualStatus =
+      outgoing && displayMessage.status == MessageStatus::Received
+          ? MessageStatus::Sent
+          : displayMessage.status;
+  if (displayMessage.message.kind == ChatMessageKind::File) {
+    return createFileCardWidget(index, outgoing);
+  }
+
+  const QString timeText = formatMessageTime(displayMessage.message.sentAt);
   QString bubbleText;
-  if (message.status == MessageStatus::Received) {
+  if (!outgoing) {
     const QString sender =
-        message.message.senderUsername.trimmed().isEmpty()
+        displayMessage.message.senderUsername.trimmed().isEmpty()
             ? QStringLiteral("对方")
-            : message.message.senderUsername.trimmed();
+            : displayMessage.message.senderUsername.trimmed();
     bubbleText = QStringLiteral("%1 %2: %3")
-                     .arg(timeText, sender, renderMessageBody(message.message));
+                     .arg(timeText, sender,
+                          renderMessageBody(displayMessage.message));
   } else {
     bubbleText = QStringLiteral("%1 我: %2 [%3]")
-                     .arg(timeText, renderMessageBody(message.message),
-                          messageStatusText(message.status));
-    if (message.status == MessageStatus::Sent && message.message.seq > 0) {
-      bubbleText += QStringLiteral(" (#%1)").arg(message.message.seq);
+                     .arg(timeText, renderMessageBody(displayMessage.message),
+                          messageStatusText(visualStatus));
+    if (visualStatus == MessageStatus::Sent &&
+        displayMessage.message.seq > 0) {
+      bubbleText += QStringLiteral(" (#%1)").arg(displayMessage.message.seq);
     }
   }
-  message.bubbleLabel->setText(bubbleText);
+  auto *bubble = new QLabel(bubbleText, displayMessage.rowWidget);
+  bubble->setWordWrap(true);
+  bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  bubble->setMaximumWidth(420);
+  bubble->setStyleSheet(
+      outgoing
+          ? QStringLiteral("QLabel { background: #e2f0ff; color: #1f3552; "
+                           "border-radius: 12px; padding: 8px 12px; }")
+          : QStringLiteral("QLabel { background: #f7f7f8; color: #2f2f2f; "
+                           "border-radius: 12px; padding: 8px 12px; }"));
+  displayMessage.bubbleLabel = bubble;
+  return bubble;
+}
+
+QWidget *SessionWindow::createFileCardWidget(int index, bool outgoing) {
+  if (index < 0 || index >= m_messages.size()) {
+    return nullptr;
+  }
+
+  const DisplayMessage &displayMessage = m_messages[index];
+  const ChatMessage &message = displayMessage.message;
+  const QString fileName =
+      message.file.originalName.trimmed().isEmpty()
+          ? QStringLiteral("未命名文件")
+          : message.file.originalName.trimmed();
+  const QString contentType =
+      message.file.contentType.trimmed().isEmpty()
+          ? QStringLiteral("未知类型")
+          : message.file.contentType.trimmed();
+  const QString metaText = QStringLiteral("%1  |  %2")
+                               .arg(humanReadableFileSize(message.file.sizeBytes),
+                                    contentType);
+  const MessageStatus visualStatus =
+      outgoing && displayMessage.status == MessageStatus::Received
+          ? MessageStatus::Sent
+          : displayMessage.status;
+  const QString ownerText =
+      outgoing
+          ? QStringLiteral("%1 我 [%2]")
+                .arg(formatMessageTime(message.sentAt),
+                     messageStatusText(visualStatus))
+          : QStringLiteral("%1 %2")
+                .arg(formatMessageTime(message.sentAt),
+                     message.senderUsername.trimmed().isEmpty()
+                         ? QStringLiteral("对方")
+                         : message.senderUsername.trimmed());
+
+  auto *card = new QFrame(displayMessage.rowWidget);
+  card->setObjectName(QStringLiteral("ChatFileCard"));
+  card->setMaximumWidth(420);
+  card->setMinimumWidth(280);
+  card->setStyleSheet(
+      outgoing
+          ? QStringLiteral(
+                "QFrame#ChatFileCard { background-color: #eef6ff; border: 1px solid "
+                "#c6dbf7; border-radius: 14px; }")
+          : QStringLiteral(
+                "QFrame#ChatFileCard { background-color: #f8f9fb; border: 1px solid "
+                "#dde3ea; border-radius: 14px; }"));
+
+  auto *cardLayout = new QVBoxLayout(card);
+  cardLayout->setContentsMargins(14, 12, 14, 12);
+  cardLayout->setSpacing(10);
+
+  auto *headerLayout = new QHBoxLayout();
+  headerLayout->setContentsMargins(0, 0, 0, 0);
+  headerLayout->setSpacing(8);
+
+  auto *badge = new QLabel(QStringLiteral("文件"), card);
+  badge->setStyleSheet(
+      outgoing
+          ? QStringLiteral("QLabel { background: #cfe4ff; color: #1d4f91; "
+                           "border-radius: 8px; padding: 3px 8px; font-weight: 600; }")
+          : QStringLiteral("QLabel { background: #e8edf3; color: #49586b; "
+                           "border-radius: 8px; padding: 3px 8px; font-weight: 600; }"));
+  headerLayout->addWidget(badge, 0, Qt::AlignTop);
+
+  auto *titleLayout = new QVBoxLayout();
+  titleLayout->setContentsMargins(0, 0, 0, 0);
+  titleLayout->setSpacing(4);
+
+  auto *titleLabel = new QLabel(fileName, card);
+  titleLabel->setWordWrap(true);
+  titleLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  titleLabel->setStyleSheet(
+      "QLabel { color: #16202a; font-size: 14px; font-weight: 600; }");
+  titleLayout->addWidget(titleLabel);
+
+  auto *metaLabel = new QLabel(metaText, card);
+  metaLabel->setWordWrap(true);
+  metaLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  metaLabel->setStyleSheet("QLabel { color: #66727f; font-size: 12px; }");
+  titleLayout->addWidget(metaLabel);
+
+  auto *ownerLabel = new QLabel(ownerText, card);
+  ownerLabel->setWordWrap(true);
+  ownerLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  ownerLabel->setStyleSheet("QLabel { color: #51606f; font-size: 12px; }");
+  titleLayout->addWidget(ownerLabel);
+
+  headerLayout->addLayout(titleLayout, 1);
+  cardLayout->addLayout(headerLayout);
+
+  auto *buttonLayout = new QHBoxLayout();
+  buttonLayout->setContentsMargins(0, 0, 0, 0);
+  buttonLayout->setSpacing(8);
+
+  auto *downloadButton = new QPushButton(QStringLiteral("下载"), card);
+  downloadButton->setCursor(Qt::PointingHandCursor);
+  downloadButton->setStyleSheet(
+      "QPushButton { background-color: #4a90e2; color: #ffffff; border: none; "
+      "border-radius: 8px; padding: 6px 14px; font-weight: 600; }"
+      "QPushButton:hover { background-color: #3c7fce; }");
+  connect(downloadButton, &QPushButton::clicked, this,
+          [this, index]() {
+            if (index < 0 || index >= m_messages.size()) {
+              return;
+            }
+            emit fileDownloadRequested(m_messages[index].message, false);
+          });
+  buttonLayout->addWidget(downloadButton);
+
+  auto *saveAsButton = new QPushButton(QStringLiteral("另存为"), card);
+  saveAsButton->setCursor(Qt::PointingHandCursor);
+  saveAsButton->setStyleSheet(
+      "QPushButton { background-color: transparent; color: #35506d; "
+      "border: 1px solid #bfd0e3; border-radius: 8px; padding: 6px 14px; "
+      "font-weight: 600; }"
+      "QPushButton:hover { background-color: #edf3fa; }");
+  connect(saveAsButton, &QPushButton::clicked, this,
+          [this, index]() {
+            if (index < 0 || index >= m_messages.size()) {
+              return;
+            }
+            emit fileDownloadRequested(m_messages[index].message, true);
+          });
+  buttonLayout->addWidget(saveAsButton);
+  buttonLayout->addStretch();
+
+  cardLayout->addLayout(buttonLayout);
+  return card;
 }
 
 int SessionWindow::findExistingMessageIndex(const ChatMessage &message) const {
@@ -679,9 +886,24 @@ void SessionWindow::markPendingMessageFailed(int index, const QString &reason) {
 }
 
 bool SessionWindow::isOutgoingMessage(const ChatMessage &message) const {
-  const QString currentUserId = UserSession::instance().userId().trimmed();
-  return !currentUserId.isEmpty() &&
-         message.senderUserId.trimmed() == currentUserId;
+  const UserSession &session = UserSession::instance();
+
+  const QString currentUserId = session.userId().trimmed();
+  if (!currentUserId.isEmpty() &&
+      message.senderUserId.trimmed() == currentUserId) {
+    return true;
+  }
+
+  const QString currentNumericId = session.numericId().trimmed();
+  if (!currentNumericId.isEmpty() &&
+      message.senderNumericId.trimmed() == currentNumericId) {
+    return true;
+  }
+
+  const QString currentUsername = session.username().trimmed();
+  return !currentUsername.isEmpty() &&
+         message.senderUsername.trimmed().compare(currentUsername,
+                                                  Qt::CaseInsensitive) == 0;
 }
 
 QString SessionWindow::renderMessageBody(const ChatMessage &message) const {
@@ -691,6 +913,15 @@ QString SessionWindow::renderMessageBody(const ChatMessage &message) const {
                               : QStringLiteral("[文件] %1").arg(fileName);
   }
   return message.text;
+}
+
+void SessionWindow::scrollChatToBottom() {
+  QTimer::singleShot(0, this, [this]() {
+    if (m_chatScroll && m_chatScroll->verticalScrollBar()) {
+      m_chatScroll->verticalScrollBar()->setValue(
+          m_chatScroll->verticalScrollBar()->maximum());
+    }
+  });
 }
 
 

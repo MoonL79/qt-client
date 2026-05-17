@@ -101,14 +101,12 @@ private:
         QString uploadRequestId;
         QString sendRequestId;
         QString conversationId;
-        QString conversationName;
         QString localFilePath;
 
         void clear() {
             uploadRequestId.clear();
             sendRequestId.clear();
             conversationId.clear();
-            conversationName.clear();
             localFilePath.clear();
         }
     };
@@ -200,6 +198,8 @@ private:
         const QString &conversationId, const QString &conversationName,
         const QString &dialogTitle, const QString &fileFilter,
         const QString &attachmentLabel);
+    void startFileDownloadForMessage(const ChatMessage &message,
+                                     bool chooseSavePath);
     void scheduleInitialConversationSync();
     void beginInitialConversationSyncIfNeeded();
     void enqueueConversationSyncTask(const QString &conversationId,
@@ -267,7 +267,6 @@ private:
     LocalChatStore* m_localChatStore = nullptr;
     PendingFileTransferState m_pendingFileTransfer;
     QHash<QString, PendingFileDownloadState> m_pendingFileDownloads;
-    QSet<QString> m_seenIncomingFileMessageKeys;
     QList<ConversationSyncTask> m_conversationSyncQueue;
     QSet<QString> m_queuedConversationSyncIds;
     ActiveConversationSyncState m_activeConversationSync;

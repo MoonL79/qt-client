@@ -9,6 +9,7 @@
 #include "websocketclient.h"
 #include <QAbstractSocket>
 #include <QByteArray>
+#include <QHBoxLayout>
 #include <QHash>
 #include <QLabel>
 #include <QPushButton>
@@ -26,6 +27,9 @@ public:
   struct DisplayMessage {
     ChatMessage message;
     MessageStatus status = MessageStatus::Received;
+    QWidget *rowWidget = nullptr;
+    QHBoxLayout *rowLayout = nullptr;
+    QWidget *contentWidget = nullptr;
     QLabel *bubbleLabel = nullptr;
   };
 
@@ -43,6 +47,7 @@ signals:
                                 const QString &conversationName);
   void fileAttachmentRequested(const QString &conversationId,
                                const QString &conversationName);
+  void fileDownloadRequested(const ChatMessage &message, bool chooseSavePath);
 
 protected:
   void initUI();
@@ -59,6 +64,9 @@ protected:
   void markPendingMessageFailed(int index, const QString &reason);
   bool isOutgoingMessage(const ChatMessage &message) const;
   QString renderMessageBody(const ChatMessage &message) const;
+  QWidget *createMessageContentWidget(int index);
+  QWidget *createFileCardWidget(int index, bool outgoing);
+  void scrollChatToBottom();
   Session m_session;
 
   // Network & UI helpers
