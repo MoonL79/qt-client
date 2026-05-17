@@ -164,6 +164,11 @@ private:
     QString elidePreview(const QString &preview) const;
     void applyTopPanelThemeColor(const QColor &color);
     void applyMainThemeColor(const QColor &color);
+    bool ensureAttachmentTransferReady(const QString &attachmentLabel);
+    void startAttachmentTransferForConversation(
+        const QString &conversationId, const QString &conversationName,
+        const QString &dialogTitle, const QString &fileFilter,
+        const QString &attachmentLabel);
 
     Ui::Widget *ui;
     

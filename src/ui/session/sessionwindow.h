@@ -39,6 +39,10 @@ signals:
   void outgoingMessageSubmitted(const QString &conversationId,
                                 const QString &previewText);
   void messageReadyForPersistence(const ChatMessage &message);
+  void imageAttachmentRequested(const QString &conversationId,
+                                const QString &conversationName);
+  void fileAttachmentRequested(const QString &conversationId,
+                               const QString &conversationName);
 
 protected:
   void initUI();
@@ -72,6 +76,7 @@ protected:
   QHash<QString, int> m_pendingMessageIndexesByRequestId;
   void onSendClicked();
   void sendPendingMessage();
+  void requestAttachment(bool imageOnly);
 
   websocketclient *m_websocket;
 };

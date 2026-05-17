@@ -232,6 +232,41 @@ void SessionWindow::initUI() {
   m_chatScroll->setWidget(m_chatContainer);
   contentLayout->addWidget(m_chatScroll);
 
+  QWidget *attachmentBar = new QWidget(contentArea);
+  attachmentBar->setObjectName("SessionAttachmentBar");
+  attachmentBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  attachmentBar->setStyleSheet(
+      "#SessionAttachmentBar { background-color: #fbfcfe; border: 1px solid "
+      "#e6ebf2; border-radius: 10px; }");
+
+  QHBoxLayout *attachmentLayout = new QHBoxLayout(attachmentBar);
+  attachmentLayout->setContentsMargins(10, 7, 10, 7);
+  attachmentLayout->setSpacing(8);
+
+  auto attachmentButtonStyle = QStringLiteral(
+      "QPushButton { min-width: 58px; min-height: 30px; background-color: "
+      "#f3f7fd; color: #25476a; border: 1px solid #d7e3f3; border-radius: "
+      "8px; padding: 0 12px; }"
+      "QPushButton:hover { background-color: #e7f0fb; border-color: #a9c7ef; }");
+
+  QPushButton *imageButton = new QPushButton(QStringLiteral("图片"), attachmentBar);
+  imageButton->setCursor(Qt::PointingHandCursor);
+  imageButton->setStyleSheet(attachmentButtonStyle);
+  attachmentLayout->addWidget(imageButton, 0, Qt::AlignLeft);
+
+  QPushButton *fileButton = new QPushButton(QStringLiteral("文件"), attachmentBar);
+  fileButton->setCursor(Qt::PointingHandCursor);
+  fileButton->setStyleSheet(attachmentButtonStyle);
+  attachmentLayout->addWidget(fileButton, 0, Qt::AlignLeft);
+  attachmentLayout->addStretch();
+
+  connect(imageButton, &QPushButton::clicked, this,
+          [this]() { requestAttachment(true); });
+  connect(fileButton, &QPushButton::clicked, this,
+          [this]() { requestAttachment(false); });
+
+  contentLayout->addWidget(attachmentBar);
+
   QWidget *inputWrapper = new QWidget(contentArea);
   inputWrapper->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
@@ -241,7 +276,7 @@ void SessionWindow::initUI() {
   inputLayout->setVerticalSpacing(0);
 
   m_inputLine = new QTextEdit(inputWrapper);
-  m_inputLine->setPlaceholderText("输入测试消息");
+  m_inputLine->setPlaceholderText(QStringLiteral("输入消息"));
   m_inputLine->setAcceptRichText(false);
   m_inputLine->setMinimumHeight(96);
   m_inputLine->setMaximumHeight(140);
@@ -342,6 +377,26 @@ void SessionWindow::onSendClicked() {
   if (!m_inputLine)
     return;
   m_pendingMessage = m_inputLine->toPlainText().trimmed();
+}
+
+void SessionWindow::requestAttachment(bool imageOnly) {
+  const QString conversationId = m_session.conversationId().trimmed();
+  if (conversationId.isEmpty()) {
+    const QString kind = imageOnly ? QStringLiteral("图片")
+                                   : QStringLiteral("文件");
+    appendStatusLine(QStringLiteral("缺少 conversation_id，无法发送%1").arg(kind));
+    qWarning() << "[SessionWindow] missing conversation_id for attachment"
+               << "display_name=" << m_session.displayName()
+               << "kind=" << kind;
+    return;
+  }
+
+  const QString conversationName = m_session.displayName().trimmed();
+  if (imageOnly) {
+    emit imageAttachmentRequested(conversationId, conversationName);
+  } else {
+    emit fileAttachmentRequested(conversationId, conversationName);
+  }
 }
 
 void SessionWindow::appendStatusLine(const QString &message) {
