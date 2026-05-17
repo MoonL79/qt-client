@@ -140,7 +140,8 @@ void SessionWindow::updatePeerPresence(bool isOnline,
 
 void SessionWindow::initUI() {
   setWindowTitle(m_session.displayName());
-  resize(600, 400);
+  resize(760, 780);
+  setMinimumSize(680, 620);
 
   QWidget *root = contentWidget();
   root->setAttribute(Qt::WA_TranslucentBackground);
@@ -216,6 +217,7 @@ void SessionWindow::initUI() {
   contentLayout->setSpacing(12);
 
   m_chatScroll = new QScrollArea(contentArea);
+  m_chatScroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   m_chatScroll->setWidgetResizable(true);
   m_chatScroll->setFrameShape(QFrame::NoFrame);
   m_chatScroll->setStyleSheet("QScrollArea { background-color: #ffffff; border: "
@@ -230,7 +232,7 @@ void SessionWindow::initUI() {
   m_chatLayout->setAlignment(Qt::AlignTop);
 
   m_chatScroll->setWidget(m_chatContainer);
-  contentLayout->addWidget(m_chatScroll);
+  contentLayout->addWidget(m_chatScroll, 3);
 
   QWidget *attachmentBar = new QWidget(contentArea);
   attachmentBar->setObjectName("SessionAttachmentBar");
@@ -268,18 +270,19 @@ void SessionWindow::initUI() {
   contentLayout->addWidget(attachmentBar);
 
   QWidget *inputWrapper = new QWidget(contentArea);
-  inputWrapper->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  inputWrapper->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
   QGridLayout *inputLayout = new QGridLayout(inputWrapper);
   inputLayout->setContentsMargins(0, 0, 0, 0);
   inputLayout->setHorizontalSpacing(0);
   inputLayout->setVerticalSpacing(0);
+  inputLayout->setRowStretch(0, 1);
 
   m_inputLine = new QTextEdit(inputWrapper);
+  m_inputLine->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   m_inputLine->setPlaceholderText(QStringLiteral("输入消息"));
   m_inputLine->setAcceptRichText(false);
-  m_inputLine->setMinimumHeight(96);
-  m_inputLine->setMaximumHeight(140);
+  m_inputLine->setMinimumHeight(150);
   m_inputLine->setStyleSheet(
       "QTextEdit { border: 1px solid #dcdcdc; border-radius: 8px; "
       "padding: 8px 88px 40px 8px; background: #ffffff; color: #111111; }");
@@ -315,7 +318,7 @@ void SessionWindow::initUI() {
             appendStatusLine("连接错误: " + message);
           });
 
-  contentLayout->addWidget(inputWrapper);
+  contentLayout->addWidget(inputWrapper, 1);
 
   containerLayout->addWidget(contentArea);
   refreshPresenceLabel();
