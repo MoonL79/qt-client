@@ -22,6 +22,43 @@ QString sqlErrorText(const QSqlDatabase &database) {
   const QString text = database.lastError().text().trimmed();
   return text.isEmpty() ? QStringLiteral("unknown sqlite error") : text;
 }
+
+void bindMessageValues(QSqlQuery *query, const ChatMessage &message,
+                       const QString &ownerUserId, const QString &dedupeKey) {
+  query->bindValue(QStringLiteral(":dedupe_key"), normalizedText(dedupeKey));
+  query->bindValue(QStringLiteral(":local_id"),
+                   normalizedText(message.localId.trimmed()));
+  query->bindValue(QStringLiteral(":request_id"),
+                   normalizedText(message.requestId.trimmed()));
+  query->bindValue(QStringLiteral(":message_id"),
+                   normalizedText(message.messageId.trimmed()));
+  query->bindValue(QStringLiteral(":seq"), message.seq);
+  query->bindValue(QStringLiteral(":sent_at"),
+                   normalizedText(message.sentAt.trimmed()));
+  query->bindValue(QStringLiteral(":sender_user_id"),
+                   normalizedText(message.senderUserId.trimmed()));
+  query->bindValue(QStringLiteral(":sender_numeric_id"),
+                   normalizedText(message.senderNumericId.trimmed()));
+  query->bindValue(QStringLiteral(":sender_username"),
+                   normalizedText(message.senderUsername.trimmed()));
+  query->bindValue(QStringLiteral(":message_kind"),
+                   message.kind == ChatMessageKind::File ? 1 : 0);
+  query->bindValue(QStringLiteral(":text_content"), normalizedText(message.text));
+  query->bindValue(QStringLiteral(":file_id"),
+                   normalizedText(message.file.fileId.trimmed()));
+  query->bindValue(QStringLiteral(":file_original_name"),
+                   normalizedText(message.file.originalName.trimmed()));
+  query->bindValue(QStringLiteral(":file_stored_name"),
+                   normalizedText(message.file.storedName.trimmed()));
+  query->bindValue(QStringLiteral(":file_size_bytes"), message.file.sizeBytes);
+  query->bindValue(QStringLiteral(":file_content_type"),
+                   normalizedText(message.file.contentType.trimmed()));
+  query->bindValue(QStringLiteral(":file_sha256"),
+                   normalizedText(message.file.sha256.trimmed()));
+  query->bindValue(QStringLiteral(":owner_user_id"), normalizedText(ownerUserId));
+  query->bindValue(QStringLiteral(":conversation_id"),
+                   normalizedText(message.conversationId.trimmed()));
+}
 } // namespace
 
 LocalChatStore::LocalChatStore()
@@ -85,6 +122,14 @@ bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
   }
 
   if (updateExistingMessage(message, error)) {
+    QString cleanupError;
+    if (!cleanupDuplicateRequestRows(message, &cleanupError)) {
+      qWarning().noquote() << "[LocalChatStore] duplicate request cleanup failed"
+                           << "conversation_id=" << message.conversationId
+                           << "request_id=" << message.requestId
+                           << "message_id=" << message.messageId
+                           << "error=" << cleanupError;
+    }
     qInfo().noquote() << "[LocalChatStore] updated existing message"
                       << "conversation_id=" << message.conversationId
                       << "request_id=" << message.requestId
@@ -133,32 +178,7 @@ bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
       " file_content_type=excluded.file_content_type,"
       " file_sha256=excluded.file_sha256"));
 
-  query.bindValue(QStringLiteral(":owner_user_id"), normalizedText(m_currentUserId));
-  query.bindValue(QStringLiteral(":conversation_id"),
-                  normalizedText(message.conversationId.trimmed()));
-  query.bindValue(QStringLiteral(":dedupe_key"), normalizedText(dedupeKeyForMessage(message)));
-  query.bindValue(QStringLiteral(":local_id"), normalizedText(message.localId.trimmed()));
-  query.bindValue(QStringLiteral(":request_id"), normalizedText(message.requestId.trimmed()));
-  query.bindValue(QStringLiteral(":message_id"), normalizedText(message.messageId.trimmed()));
-  query.bindValue(QStringLiteral(":seq"), message.seq);
-  query.bindValue(QStringLiteral(":sent_at"), normalizedText(message.sentAt.trimmed()));
-  query.bindValue(QStringLiteral(":sender_user_id"), normalizedText(message.senderUserId.trimmed()));
-  query.bindValue(QStringLiteral(":sender_numeric_id"),
-                  normalizedText(message.senderNumericId.trimmed()));
-  query.bindValue(QStringLiteral(":sender_username"),
-                  normalizedText(message.senderUsername.trimmed()));
-  query.bindValue(QStringLiteral(":message_kind"),
-                  message.kind == ChatMessageKind::File ? 1 : 0);
-  query.bindValue(QStringLiteral(":text_content"), normalizedText(message.text));
-  query.bindValue(QStringLiteral(":file_id"), normalizedText(message.file.fileId.trimmed()));
-  query.bindValue(QStringLiteral(":file_original_name"),
-                  normalizedText(message.file.originalName.trimmed()));
-  query.bindValue(QStringLiteral(":file_stored_name"),
-                  normalizedText(message.file.storedName.trimmed()));
-  query.bindValue(QStringLiteral(":file_size_bytes"), message.file.sizeBytes);
-  query.bindValue(QStringLiteral(":file_content_type"),
-                  normalizedText(message.file.contentType.trimmed()));
-  query.bindValue(QStringLiteral(":file_sha256"), normalizedText(message.file.sha256.trimmed()));
+  bindMessageValues(&query, message, m_currentUserId, dedupeKeyForMessage(message));
   if (!query.exec()) {
     if (error) {
       *error = sqlErrorText(query);
@@ -183,11 +203,15 @@ bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
 
 bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
                                            QString *error) {
-  if (!message.requestId.trimmed().isEmpty()) {
+  const QString dedupeKey = dedupeKeyForMessage(message);
+
+  if (message.seq > 0) {
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral(
         "UPDATE chat_messages SET"
+        " dedupe_key = :dedupe_key,"
         " local_id = :local_id,"
+        " request_id = :request_id,"
         " message_id = :message_id,"
         " seq = :seq,"
         " sent_at = :sent_at,"
@@ -204,32 +228,91 @@ bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
         " file_sha256 = :file_sha256"
         " WHERE owner_user_id = :owner_user_id"
         "   AND conversation_id = :conversation_id"
-        "   AND request_id = :request_id"));
-    query.bindValue(QStringLiteral(":local_id"), normalizedText(message.localId.trimmed()));
-    query.bindValue(QStringLiteral(":message_id"), normalizedText(message.messageId.trimmed()));
-    query.bindValue(QStringLiteral(":seq"), message.seq);
-    query.bindValue(QStringLiteral(":sent_at"), normalizedText(message.sentAt.trimmed()));
-    query.bindValue(QStringLiteral(":sender_user_id"), normalizedText(message.senderUserId.trimmed()));
-    query.bindValue(QStringLiteral(":sender_numeric_id"),
-                    normalizedText(message.senderNumericId.trimmed()));
-    query.bindValue(QStringLiteral(":sender_username"),
-                    normalizedText(message.senderUsername.trimmed()));
-    query.bindValue(QStringLiteral(":message_kind"),
-                    message.kind == ChatMessageKind::File ? 1 : 0);
-    query.bindValue(QStringLiteral(":text_content"), normalizedText(message.text));
-    query.bindValue(QStringLiteral(":file_id"), normalizedText(message.file.fileId.trimmed()));
-    query.bindValue(QStringLiteral(":file_original_name"),
-                    normalizedText(message.file.originalName.trimmed()));
-    query.bindValue(QStringLiteral(":file_stored_name"),
-                    normalizedText(message.file.storedName.trimmed()));
-    query.bindValue(QStringLiteral(":file_size_bytes"), message.file.sizeBytes);
-    query.bindValue(QStringLiteral(":file_content_type"),
-                    normalizedText(message.file.contentType.trimmed()));
-    query.bindValue(QStringLiteral(":file_sha256"), normalizedText(message.file.sha256.trimmed()));
-    query.bindValue(QStringLiteral(":owner_user_id"), normalizedText(m_currentUserId));
-    query.bindValue(QStringLiteral(":conversation_id"),
-                    normalizedText(message.conversationId.trimmed()));
-    query.bindValue(QStringLiteral(":request_id"), normalizedText(message.requestId.trimmed()));
+        "   AND seq = :match_seq"));
+    bindMessageValues(&query, message, m_currentUserId, dedupeKey);
+    query.bindValue(QStringLiteral(":match_seq"), message.seq);
+    if (!query.exec()) {
+      if (error) {
+        *error = sqlErrorText(query);
+      }
+      return false;
+    }
+    if (query.numRowsAffected() > 0) {
+      if (error) {
+        error->clear();
+      }
+      return true;
+    }
+  }
+
+  if (!message.messageId.trimmed().isEmpty()) {
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "UPDATE chat_messages SET"
+        " dedupe_key = :dedupe_key,"
+        " local_id = :local_id,"
+        " request_id = :request_id,"
+        " message_id = :message_id,"
+        " seq = :seq,"
+        " sent_at = :sent_at,"
+        " sender_user_id = :sender_user_id,"
+        " sender_numeric_id = :sender_numeric_id,"
+        " sender_username = :sender_username,"
+        " message_kind = :message_kind,"
+        " text_content = :text_content,"
+        " file_id = :file_id,"
+        " file_original_name = :file_original_name,"
+        " file_stored_name = :file_stored_name,"
+        " file_size_bytes = :file_size_bytes,"
+        " file_content_type = :file_content_type,"
+        " file_sha256 = :file_sha256"
+        " WHERE owner_user_id = :owner_user_id"
+        "   AND conversation_id = :conversation_id"
+        "   AND message_id = :match_message_id"));
+    bindMessageValues(&query, message, m_currentUserId, dedupeKey);
+    query.bindValue(QStringLiteral(":match_message_id"),
+                    normalizedText(message.messageId.trimmed()));
+    if (!query.exec()) {
+      if (error) {
+        *error = sqlErrorText(query);
+      }
+      return false;
+    }
+    if (query.numRowsAffected() > 0) {
+      if (error) {
+        error->clear();
+      }
+      return true;
+    }
+  }
+
+  if (!message.requestId.trimmed().isEmpty()) {
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "UPDATE chat_messages SET"
+        " dedupe_key = :dedupe_key,"
+        " local_id = :local_id,"
+        " request_id = :request_id,"
+        " message_id = :message_id,"
+        " seq = :seq,"
+        " sent_at = :sent_at,"
+        " sender_user_id = :sender_user_id,"
+        " sender_numeric_id = :sender_numeric_id,"
+        " sender_username = :sender_username,"
+        " message_kind = :message_kind,"
+        " text_content = :text_content,"
+        " file_id = :file_id,"
+        " file_original_name = :file_original_name,"
+        " file_stored_name = :file_stored_name,"
+        " file_size_bytes = :file_size_bytes,"
+        " file_content_type = :file_content_type,"
+        " file_sha256 = :file_sha256"
+        " WHERE owner_user_id = :owner_user_id"
+        "   AND conversation_id = :conversation_id"
+        "   AND request_id = :match_request_id"));
+    bindMessageValues(&query, message, m_currentUserId, dedupeKey);
+    query.bindValue(QStringLiteral(":match_request_id"),
+                    normalizedText(message.requestId.trimmed()));
     if (!query.exec()) {
       if (error) {
         *error = sqlErrorText(query);
@@ -248,6 +331,41 @@ bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
     error->clear();
   }
   return false;
+}
+
+bool LocalChatStore::cleanupDuplicateRequestRows(const ChatMessage &message,
+                                                 QString *error) {
+  const QString requestId = message.requestId.trimmed();
+  if (requestId.isEmpty()) {
+    if (error) {
+      error->clear();
+    }
+    return true;
+  }
+
+  QSqlQuery query(m_database);
+  query.prepare(QStringLiteral(
+      "DELETE FROM chat_messages"
+      " WHERE owner_user_id = :owner_user_id"
+      "   AND conversation_id = :conversation_id"
+      "   AND request_id = :request_id"
+      "   AND dedupe_key <> :dedupe_key"));
+  query.bindValue(QStringLiteral(":owner_user_id"), normalizedText(m_currentUserId));
+  query.bindValue(QStringLiteral(":conversation_id"),
+                  normalizedText(message.conversationId.trimmed()));
+  query.bindValue(QStringLiteral(":request_id"), normalizedText(requestId));
+  query.bindValue(QStringLiteral(":dedupe_key"),
+                  normalizedText(dedupeKeyForMessage(message)));
+  if (!query.exec()) {
+    if (error) {
+      *error = sqlErrorText(query);
+    }
+    return false;
+  }
+  if (error) {
+    error->clear();
+  }
+  return true;
 }
 
 QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId, int limit,
@@ -273,13 +391,27 @@ QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId,
       " sender_numeric_id, sender_username, message_kind, text_content, file_id,"
       " file_original_name, file_stored_name, file_size_bytes, file_content_type,"
       " file_sha256"
-      " FROM chat_messages"
-      " WHERE owner_user_id = :owner_user_id AND conversation_id = :conversation_id"
+      " FROM ("
+      "   SELECT local_id, request_id, message_id, seq, sent_at, sender_user_id,"
+      "          sender_numeric_id, sender_username, message_kind, text_content,"
+      "          file_id, file_original_name, file_stored_name, file_size_bytes,"
+      "          file_content_type, file_sha256, id AS message_row_id"
+      "   FROM chat_messages"
+      "   WHERE owner_user_id = :owner_user_id AND conversation_id = :conversation_id"
+      "   ORDER BY"
+      "     CASE WHEN seq <= 0 THEN 1 ELSE 0 END DESC,"
+      "     seq DESC,"
+      "     CASE WHEN sent_at = '' THEN 1 ELSE 0 END ASC,"
+      "     sent_at DESC,"
+      "     id DESC"
+      "   LIMIT :limit"
+      " ) recent_messages"
       " ORDER BY"
+      "   CASE WHEN seq <= 0 THEN 1 ELSE 0 END ASC,"
+      "   seq ASC,"
       "   CASE WHEN sent_at = '' THEN 1 ELSE 0 END ASC,"
       "   sent_at ASC,"
-      "   rowid ASC"
-      " LIMIT :limit"));
+      "   message_row_id ASC"));
   query.bindValue(QStringLiteral(":owner_user_id"), normalizedText(m_currentUserId));
   query.bindValue(QStringLiteral(":conversation_id"), trimmedConversationId);
   query.bindValue(QStringLiteral(":limit"), qMax(limit, 1));
@@ -324,6 +456,51 @@ QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId,
                     << "limit=" << qMax(limit, 1);
 
   return messages;
+}
+
+qint64 LocalChatStore::lastSeqForConversation(const QString &conversationId,
+                                              QString *error) const {
+  if (!isReady(error)) {
+    qWarning().noquote() << "[LocalChatStore] last seq skipped: store not ready"
+                         << "conversation_id=" << conversationId;
+    return 0;
+  }
+
+  const QString trimmedConversationId = conversationId.trimmed();
+  if (trimmedConversationId.isEmpty()) {
+    if (error) {
+      *error = QStringLiteral("conversation id is empty");
+    }
+    return 0;
+  }
+
+  QSqlQuery query(m_database);
+  query.prepare(QStringLiteral(
+      "SELECT COALESCE(MAX(seq), 0)"
+      " FROM chat_messages"
+      " WHERE owner_user_id = :owner_user_id"
+      "   AND conversation_id = :conversation_id"));
+  query.bindValue(QStringLiteral(":owner_user_id"), normalizedText(m_currentUserId));
+  query.bindValue(QStringLiteral(":conversation_id"), trimmedConversationId);
+  if (!query.exec()) {
+    if (error) {
+      *error = sqlErrorText(query);
+    }
+    qWarning().noquote() << "[LocalChatStore] last seq query failed"
+                         << "conversation_id=" << trimmedConversationId
+                         << "error=" << (error ? *error : QString());
+    return 0;
+  }
+  if (!query.next()) {
+    if (error) {
+      error->clear();
+    }
+    return 0;
+  }
+  if (error) {
+    error->clear();
+  }
+  return query.value(0).toLongLong();
 }
 
 bool LocalChatStore::openDatabase(const QString &currentUserId, QString *error) {
@@ -392,6 +569,24 @@ bool LocalChatStore::ensureSchema(QString *error) {
     return false;
   }
 
+  if (!query.exec(QStringLiteral(
+          "CREATE INDEX IF NOT EXISTS idx_chat_messages_owner_conversation_seq"
+          " ON chat_messages(owner_user_id, conversation_id, seq)"))) {
+    if (error) {
+      *error = sqlErrorText(query);
+    }
+    return false;
+  }
+
+  if (!query.exec(QStringLiteral(
+          "CREATE INDEX IF NOT EXISTS idx_chat_messages_owner_conversation_message_id"
+          " ON chat_messages(owner_user_id, conversation_id, message_id)"))) {
+    if (error) {
+      *error = sqlErrorText(query);
+    }
+    return false;
+  }
+
   return true;
 }
 
@@ -408,6 +603,10 @@ QString LocalChatStore::databasePathForUser(const QString &currentUserId) const 
 
 QString LocalChatStore::dedupeKeyForMessage(const ChatMessage &message) const {
   const QString conversationId = message.conversationId.trimmed();
+  if (message.seq > 0) {
+    return QStringLiteral("%1|%2|seq|%3")
+        .arg(m_currentUserId, conversationId, QString::number(message.seq));
+  }
   if (!message.messageId.trimmed().isEmpty()) {
     return QStringLiteral("%1|%2|message|%3")
         .arg(m_currentUserId, conversationId, message.messageId.trimmed());

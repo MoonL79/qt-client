@@ -6,6 +6,7 @@
 #include <QSqlDatabase>
 #include <QString>
 #include <QVector>
+#include <QtGlobal>
 
 class LocalChatStore {
 public:
@@ -18,9 +19,12 @@ public:
   bool saveMessage(const ChatMessage &message, QString *error = nullptr);
   QVector<ChatMessage> loadMessages(const QString &conversationId, int limit = 100,
                                     QString *error = nullptr) const;
+  qint64 lastSeqForConversation(const QString &conversationId,
+                                QString *error = nullptr) const;
 
 private:
   bool updateExistingMessage(const ChatMessage &message, QString *error);
+  bool cleanupDuplicateRequestRows(const ChatMessage &message, QString *error);
   bool openDatabase(const QString &currentUserId, QString *error);
   bool ensureSchema(QString *error);
   QString databasePathForUser(const QString &currentUserId) const;

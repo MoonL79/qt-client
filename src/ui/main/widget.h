@@ -5,11 +5,13 @@
 #include "friendlistmanager.h"
 #include "profileapiclient.h"
 #include "session.h"
+#include "chatmessage.h"
 
 #include <QNetworkAccessManager>
 #include <QNetworkDiskCache>
 #include <QNetworkReply>
 #include <QHash>
+#include <QList>
 #include <QListWidget>
 #include <QPointer>
 #include <QJsonObject>
@@ -46,6 +48,7 @@ class DismissGroupDialog;
 class SessionWindow;
 class ChatFileService;
 class LocalChatStore;
+class MessageSyncClient;
 
 class Widget : public QWidget
 {
@@ -116,6 +119,34 @@ private:
         QString savePath;
     };
 
+    struct ConversationSyncTask {
+        QString conversationId;
+        qint64 serverLastSeq = 0;
+        bool onDemand = false;
+    };
+
+    struct ActiveConversationSyncState {
+        QString conversationId;
+        qint64 localLastSeq = 0;
+        qint64 serverLastSeq = 0;
+        qint64 nextAfterSeq = 0;
+        qint64 ackUpToSeq = 0;
+        bool hasMore = false;
+        bool onDemand = false;
+
+        void clear() {
+            conversationId.clear();
+            localLastSeq = 0;
+            serverLastSeq = 0;
+            nextAfterSeq = 0;
+            ackUpToSeq = 0;
+            hasMore = false;
+            onDemand = false;
+        }
+
+        bool isActive() const { return !conversationId.trimmed().isEmpty(); }
+    };
+
     void initUI();
     void initAvatarHttpClient();
     void addSessionItem(const Session &session);
@@ -169,6 +200,22 @@ private:
         const QString &conversationId, const QString &conversationName,
         const QString &dialogTitle, const QString &fileFilter,
         const QString &attachmentLabel);
+    void scheduleInitialConversationSync();
+    void beginInitialConversationSyncIfNeeded();
+    void enqueueConversationSyncTask(const QString &conversationId,
+                                     qint64 serverLastSeq, bool onDemand,
+                                     bool prioritize = false);
+    void startNextConversationSyncTask();
+    void startConversationPull(const QString &conversationId, qint64 afterSeq,
+                               qint64 serverLastSeq, bool onDemand);
+    void continueActiveConversationSync();
+    void finalizeActiveConversationSync();
+    void requestConversationIncrementalSync(const QString &conversationId);
+    qint64 serverLastSeqForConversation(const QString &conversationId) const;
+    bool storeAndRouteMessage(const ChatMessage &message, bool incrementUnread);
+    void updateConversationStateFromMessage(const ChatMessage &message,
+                                            bool incrementUnread);
+    QString previewTextForMessage(const ChatMessage &message) const;
 
     Ui::Widget *ui;
     
@@ -216,10 +263,17 @@ private:
     QHash<QString, QPointer<SessionWindow>> m_sessionWindowsByConversationId;
     QHash<QString, ConversationListState> m_conversationStatesByConversationId;
     ChatFileService* m_chatFileService = nullptr;
+    MessageSyncClient* m_messageSyncClient = nullptr;
     LocalChatStore* m_localChatStore = nullptr;
     PendingFileTransferState m_pendingFileTransfer;
     QHash<QString, PendingFileDownloadState> m_pendingFileDownloads;
     QSet<QString> m_seenIncomingFileMessageKeys;
+    QList<ConversationSyncTask> m_conversationSyncQueue;
+    QSet<QString> m_queuedConversationSyncIds;
+    ActiveConversationSyncState m_activeConversationSync;
+    QString m_pendingMessagePullRequestId;
+    QString m_pendingMessageAckRequestId;
+    bool m_pendingInitialConversationSync = false;
     
     // Dragging support
     bool m_isDragging;

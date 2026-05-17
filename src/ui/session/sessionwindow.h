@@ -53,6 +53,7 @@ protected:
   void handleIncomingPayload(const QString &payload, const QString &sourceTag);
   int appendMessage(const ChatMessage &message, MessageStatus status);
   void updateMessageBubble(int index);
+  int findExistingMessageIndex(const ChatMessage &message) const;
   void handleMessageSendResponse(const protocol::Envelope &envelope);
   void handleIncomingMessagePush(const protocol::Envelope &envelope);
   void markPendingMessageFailed(int index, const QString &reason);

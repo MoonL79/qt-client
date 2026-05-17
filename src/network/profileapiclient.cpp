@@ -125,6 +125,23 @@ int readOptionalInt(const QJsonObject &obj, const char *key, int defaultValue = 
   return defaultValue;
 }
 
+qint64 readOptionalInt64(const QJsonObject &obj, const char *key,
+                         qint64 defaultValue = 0) {
+  if (!obj.contains(QLatin1String(key))) {
+    return defaultValue;
+  }
+  const QJsonValue value = obj.value(QLatin1String(key));
+  if (value.isDouble()) {
+    return static_cast<qint64>(value.toDouble(defaultValue));
+  }
+  if (value.isString()) {
+    bool ok = false;
+    const qint64 parsed = value.toString().trimmed().toLongLong(&ok);
+    return ok ? parsed : defaultValue;
+  }
+  return defaultValue;
+}
+
 bool readOptionalBool(const QJsonObject &obj, const char *key,
                       bool defaultValue = false) {
   bool out = defaultValue;
@@ -1621,6 +1638,11 @@ bool ProfileApiClient::parseConversationList(
     item.peerIsOnline = readOptionalBool(obj, "peer_is_online", false);
     item.peerLastSeenAt = obj.value("peer_last_seen_at").toString().trimmed();
     item.peerLastSeenAtUtc = parseUtcIsoTime(item.peerLastSeenAt);
+    item.lastMessageSeq = readOptionalInt64(obj, "last_message_seq", 0);
+    item.lastMessageId = jsonValueToString(obj.value("last_message_id"));
+    item.lastMessageSentAt =
+        obj.value("last_message_sent_at").toString().trimmed();
+    item.updatedAt = obj.value("updated_at").toString().trimmed();
 
     if (item.conversationId.isEmpty()) {
       continue;

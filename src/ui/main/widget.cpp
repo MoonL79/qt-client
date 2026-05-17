@@ -7,6 +7,7 @@
 #include "dismissgroupdialog.h"
 #include "leavegroupdialog.h"
 #include "localchatstore.h"
+#include "messagesyncclient.h"
 #include "protocol.h"
 #include "searchgroupdialog.h"
 #include "settingswindow.h"
@@ -236,6 +237,7 @@ Widget::Widget(QWidget *parent)
   initUI();
   initAvatarHttpClient();
   m_chatFileService = new ChatFileService(websocketclient::instance(), this);
+  m_messageSyncClient = new MessageSyncClient(websocketclient::instance(), this);
   m_localChatStore = new LocalChatStore();
 
   connect(m_chatFileService, &ChatFileService::uploadFinished, this,
@@ -265,28 +267,7 @@ Widget::Widget(QWidget *parent)
             if (requestId != m_pendingFileTransfer.sendRequestId) {
               return;
             }
-
-            if (m_localChatStore) {
-              QString error;
-              if (!m_localChatStore->saveMessage(message, &error)) {
-                qWarning() << "[MainWidget] failed to persist outgoing file message:"
-                           << error;
-              }
-            }
-
-            ConversationListState state =
-                m_conversationStatesByConversationId.value(message.conversationId);
-            state.conversationId = message.conversationId;
-            if (state.displayName.isEmpty()) {
-              state.displayName = m_pendingFileTransfer.conversationName;
-            }
-            state.lastMessagePreview = filePreviewText(message.file.originalName);
-            state.unreadCount = 0;
-            m_conversationStatesByConversationId.insert(message.conversationId, state);
-            if (QListWidgetItem *item =
-                    findConversationItemByConversationId(message.conversationId)) {
-              applyConversationStateToItem(item, state, nullptr);
-            }
+            storeAndRouteMessage(message, false);
 
             QMessageBox::information(
                 this, QStringLiteral("文件发送成功"),
@@ -294,32 +275,17 @@ Widget::Widget(QWidget *parent)
                     .arg(m_pendingFileTransfer.conversationName.isEmpty()
                              ? message.conversationId
                              : m_pendingFileTransfer.conversationName));
-            if (SessionWindow *sessionWindow =
-                    m_sessionWindowsByConversationId.value(message.conversationId)) {
-              sessionWindow->appendPersistedMessage(message);
-            }
             m_pendingFileTransfer.clear();
           });
   connect(m_chatFileService, &ChatFileService::fileMessageReceived, this,
           [this](const ChatMessage &message) {
-            if (m_localChatStore) {
-              QString error;
-              if (!m_localChatStore->saveMessage(message, &error)) {
-                qWarning() << "[MainWidget] failed to persist incoming file message:"
-                           << error;
-              }
-            }
-
-            if (SessionWindow *sessionWindow =
-                    m_sessionWindowsByConversationId.value(message.conversationId)) {
-              sessionWindow->appendPersistedMessage(message);
-            }
-
             if (message.senderUserId.trimmed() == m_currentUserId.trimmed() ||
                 message.senderUserId.trimmed() ==
                     UserSession::instance().userId().trimmed()) {
               return;
             }
+
+            storeAndRouteMessage(message, true);
 
             const QString messageKey = incomingFileMessageKey(message);
             if (messageKey.isEmpty() ||
@@ -375,6 +341,111 @@ Widget::Widget(QWidget *parent)
             pending.originalName = message.file.originalName;
             pending.savePath = savePath;
             m_pendingFileDownloads.insert(requestId, pending);
+          });
+  connect(m_messageSyncClient, &MessageSyncClient::pullSucceeded, this,
+          [this](const QString &requestId, const MessagePullResult &result) {
+            if (requestId != m_pendingMessagePullRequestId) {
+              return;
+            }
+            m_pendingMessagePullRequestId.clear();
+            if (!m_activeConversationSync.isActive()) {
+              return;
+            }
+
+            qint64 highestSeq = m_activeConversationSync.localLastSeq;
+            bool allStored = true;
+            for (const ChatMessage &message : result.messages) {
+              allStored = storeAndRouteMessage(message, true) && allStored;
+              highestSeq = qMax(highestSeq, message.seq);
+            }
+
+            m_activeConversationSync.hasMore = result.hasMore;
+            m_activeConversationSync.nextAfterSeq =
+                qMax<qint64>(result.nextAfterSeq, highestSeq);
+            m_activeConversationSync.serverLastSeq =
+                qMax<qint64>(m_activeConversationSync.serverLastSeq,
+                             result.serverLastSeq);
+            const bool pullMadeProgress =
+                highestSeq > m_activeConversationSync.localLastSeq ||
+                m_activeConversationSync.nextAfterSeq >
+                    m_activeConversationSync.localLastSeq;
+
+            if (!allStored) {
+              qWarning() << "[MainWidget] skip ACK because local persistence failed"
+                         << "conversation_id=" << result.conversationId;
+              finalizeActiveConversationSync();
+              return;
+            }
+
+            if (m_activeConversationSync.hasMore && !pullMadeProgress) {
+              qWarning()
+                  << "[MainWidget] stop stalled pull pagination conversation_id="
+                  << result.conversationId << "local_last_seq="
+                  << m_activeConversationSync.localLastSeq << "next_after_seq="
+                  << m_activeConversationSync.nextAfterSeq;
+              finalizeActiveConversationSync();
+              return;
+            }
+
+            if (highestSeq > m_activeConversationSync.localLastSeq) {
+              m_activeConversationSync.ackUpToSeq = highestSeq;
+              if (!websocketclient::instance()->isConnected()) {
+                finalizeActiveConversationSync();
+                return;
+              }
+              m_pendingMessageAckRequestId =
+                  m_messageSyncClient->acknowledgeUpToSeq(
+                      result.conversationId, highestSeq, true);
+              return;
+            }
+
+            m_activeConversationSync.localLastSeq =
+                qMax(m_activeConversationSync.localLastSeq,
+                     m_activeConversationSync.nextAfterSeq);
+            if (m_activeConversationSync.hasMore) {
+              continueActiveConversationSync();
+            } else {
+              finalizeActiveConversationSync();
+            }
+          });
+  connect(m_messageSyncClient, &MessageSyncClient::ackSucceeded, this,
+          [this](const QString &requestId, const MessageAckResult &result) {
+            if (requestId != m_pendingMessageAckRequestId) {
+              return;
+            }
+            m_pendingMessageAckRequestId.clear();
+            if (!m_activeConversationSync.isActive()) {
+              return;
+            }
+
+            m_activeConversationSync.localLastSeq =
+                qMax(m_activeConversationSync.localLastSeq,
+                     qMax(result.ackedUpToSeq,
+                          qMax(m_activeConversationSync.ackUpToSeq,
+                               m_activeConversationSync.nextAfterSeq)));
+            if (m_activeConversationSync.hasMore) {
+              continueActiveConversationSync();
+            } else {
+              finalizeActiveConversationSync();
+            }
+          });
+  connect(m_messageSyncClient, &MessageSyncClient::requestFailed, this,
+          [this](const QString &requestId, const QString &action, int code,
+                 const QString &error) {
+            if (requestId != m_pendingMessagePullRequestId &&
+                requestId != m_pendingMessageAckRequestId) {
+              return;
+            }
+            qWarning() << "[MainWidget] message sync request failed action=" << action
+                       << "request_id=" << requestId << "code=" << code
+                       << "message=" << error;
+            if (requestId == m_pendingMessagePullRequestId) {
+              m_pendingMessagePullRequestId.clear();
+            }
+            if (requestId == m_pendingMessageAckRequestId) {
+              m_pendingMessageAckRequestId.clear();
+            }
+            finalizeActiveConversationSync();
           });
   connect(m_chatFileService, &ChatFileService::downloadFinished, this,
           [this](const QString &requestId, const ChatFileDownloadTask &task) {
@@ -440,6 +511,15 @@ Widget::Widget(QWidget *parent)
   m_conversationListRefreshTimer->setInterval(kConversationListRefreshIntervalMs);
   connect(m_conversationListRefreshTimer, &QTimer::timeout, this,
           [this]() { requestConversationList(false); });
+  connect(websocketclient::instance(), &websocketclient::connected, this,
+          [this]() {
+            if (!UserSession::instance().isLoggedIn()) {
+              return;
+            }
+            scheduleInitialConversationSync();
+            requestConversationList(true, true);
+            requestFriendListForContacts(true, true);
+          });
 }
 
 Widget::~Widget() {
@@ -829,11 +909,21 @@ void Widget::applyMainThemeColor(const QColor &color) {
 }
 
 void Widget::setCurrentUserId(const QString &userId) {
+  const QString previousUserId = m_currentUserId;
   m_currentUserId = userId.trimmed();
+  if (previousUserId != m_currentUserId) {
+    m_conversationSyncQueue.clear();
+    m_queuedConversationSyncIds.clear();
+    m_activeConversationSync.clear();
+    m_pendingMessagePullRequestId.clear();
+    m_pendingMessageAckRequestId.clear();
+    m_seenIncomingFileMessageKeys.clear();
+  }
   if (!m_localChatStore) {
     return;
   }
   if (m_currentUserId.isEmpty()) {
+    m_pendingInitialConversationSync = false;
     m_localChatStore->clearCurrentUser();
     return;
   }
@@ -846,6 +936,9 @@ void Widget::setCurrentUserId(const QString &userId) {
 
 void Widget::setCurrentUserNumericId(const QString &numericId) {
   m_currentUserNumericId = numericId.trimmed();
+  if (!m_currentUserNumericId.isEmpty()) {
+    scheduleInitialConversationSync();
+  }
   if (m_conversationListRefreshTimer) {
     if (m_currentUserNumericId.isEmpty()) {
       m_conversationListRefreshTimer->stop();
@@ -884,6 +977,273 @@ void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
   }
   requestConversationList();
   requestFriendListForContacts();
+}
+
+void Widget::scheduleInitialConversationSync() {
+  if (m_currentUserNumericId.trimmed().isEmpty() &&
+      UserSession::instance().numericId().trimmed().isEmpty()) {
+    return;
+  }
+  m_pendingInitialConversationSync = true;
+}
+
+void Widget::beginInitialConversationSyncIfNeeded() {
+  if (!m_pendingInitialConversationSync) {
+    return;
+  }
+  if (!m_messageSyncClient || !m_localChatStore ||
+      !m_pendingMessagePullRequestId.isEmpty() ||
+      !m_pendingMessageAckRequestId.isEmpty()) {
+    return;
+  }
+
+  m_pendingInitialConversationSync = false;
+  m_conversationSyncQueue.clear();
+  m_queuedConversationSyncIds.clear();
+  for (const conversationlist::ConversationItem &conversation :
+       m_conversationListManager.conversations()) {
+    enqueueConversationSyncTask(conversation.conversationId,
+                                conversation.lastMessageSeq, false, false);
+  }
+  startNextConversationSyncTask();
+}
+
+void Widget::enqueueConversationSyncTask(const QString &conversationId,
+                                         qint64 serverLastSeq, bool onDemand,
+                                         bool prioritize) {
+  const QString trimmedConversationId = conversationId.trimmed();
+  if (trimmedConversationId.isEmpty()) {
+    return;
+  }
+
+  if (m_activeConversationSync.conversationId == trimmedConversationId) {
+    m_activeConversationSync.serverLastSeq =
+        qMax(m_activeConversationSync.serverLastSeq, serverLastSeq);
+    m_activeConversationSync.onDemand =
+        m_activeConversationSync.onDemand || onDemand;
+    return;
+  }
+
+  for (ConversationSyncTask &task : m_conversationSyncQueue) {
+    if (task.conversationId == trimmedConversationId) {
+      task.serverLastSeq = qMax(task.serverLastSeq, serverLastSeq);
+      task.onDemand = task.onDemand || onDemand;
+      return;
+    }
+  }
+
+  ConversationSyncTask task;
+  task.conversationId = trimmedConversationId;
+  task.serverLastSeq = serverLastSeq;
+  task.onDemand = onDemand;
+  if (prioritize) {
+    m_conversationSyncQueue.push_front(task);
+  } else {
+    m_conversationSyncQueue.push_back(task);
+  }
+  m_queuedConversationSyncIds.insert(trimmedConversationId);
+}
+
+void Widget::startNextConversationSyncTask() {
+  if (!m_messageSyncClient || !m_localChatStore ||
+      !m_pendingMessagePullRequestId.isEmpty() ||
+      !m_pendingMessageAckRequestId.isEmpty()) {
+    return;
+  }
+
+  while (!m_conversationSyncQueue.isEmpty()) {
+    const ConversationSyncTask task = m_conversationSyncQueue.takeFirst();
+    m_queuedConversationSyncIds.remove(task.conversationId);
+    if (task.conversationId.trimmed().isEmpty()) {
+      continue;
+    }
+
+    QString error;
+    const qint64 localLastSeq =
+        m_localChatStore->lastSeqForConversation(task.conversationId, &error);
+    if (!error.isEmpty()) {
+      qWarning() << "[MainWidget] failed to load local last_seq conversation_id="
+                 << task.conversationId << "error=" << error;
+    }
+    if (task.serverLastSeq > 0 && task.serverLastSeq <= localLastSeq) {
+      continue;
+    }
+
+    startConversationPull(task.conversationId, localLastSeq, task.serverLastSeq,
+                          task.onDemand);
+    return;
+  }
+
+  m_activeConversationSync.clear();
+  beginInitialConversationSyncIfNeeded();
+}
+
+void Widget::startConversationPull(const QString &conversationId, qint64 afterSeq,
+                                   qint64 serverLastSeq, bool onDemand) {
+  if (!m_messageSyncClient || !websocketclient::instance()->isConnected()) {
+    m_activeConversationSync.clear();
+    return;
+  }
+  m_activeConversationSync.clear();
+  m_activeConversationSync.conversationId = conversationId.trimmed();
+  m_activeConversationSync.localLastSeq = qMax<qint64>(afterSeq, 0);
+  m_activeConversationSync.serverLastSeq = qMax<qint64>(serverLastSeq, 0);
+  m_activeConversationSync.onDemand = onDemand;
+  m_pendingMessagePullRequestId =
+      m_messageSyncClient->pullMessages(m_activeConversationSync.conversationId,
+                                        m_activeConversationSync.localLastSeq, 100);
+}
+
+void Widget::continueActiveConversationSync() {
+  if (!m_activeConversationSync.isActive()) {
+    startNextConversationSyncTask();
+    return;
+  }
+  startConversationPull(m_activeConversationSync.conversationId,
+                        qMax(m_activeConversationSync.localLastSeq,
+                             m_activeConversationSync.nextAfterSeq),
+                        m_activeConversationSync.serverLastSeq,
+                        m_activeConversationSync.onDemand);
+}
+
+void Widget::finalizeActiveConversationSync() {
+  m_activeConversationSync.clear();
+  if (!m_pendingMessagePullRequestId.isEmpty() ||
+      !m_pendingMessageAckRequestId.isEmpty()) {
+    return;
+  }
+  if (m_conversationSyncQueue.isEmpty()) {
+    beginInitialConversationSyncIfNeeded();
+  }
+  startNextConversationSyncTask();
+}
+
+void Widget::requestConversationIncrementalSync(const QString &conversationId) {
+  const QString trimmedConversationId = conversationId.trimmed();
+  if (trimmedConversationId.isEmpty() || !m_messageSyncClient || !m_localChatStore) {
+    return;
+  }
+  enqueueConversationSyncTask(trimmedConversationId,
+                              serverLastSeqForConversation(trimmedConversationId),
+                              true, true);
+  startNextConversationSyncTask();
+}
+
+qint64 Widget::serverLastSeqForConversation(const QString &conversationId) const {
+  const QString trimmedConversationId = conversationId.trimmed();
+  for (const conversationlist::ConversationItem &conversation :
+       m_conversationListManager.conversations()) {
+    if (conversation.conversationId.trimmed() == trimmedConversationId) {
+      return conversation.lastMessageSeq;
+    }
+  }
+  return 0;
+}
+
+bool Widget::storeAndRouteMessage(const ChatMessage &message, bool incrementUnread) {
+  if (!message.isValid()) {
+    return false;
+  }
+
+  bool stored = true;
+  if (!m_localChatStore) {
+    stored = false;
+  } else {
+    QString error;
+    if (!m_localChatStore->saveMessage(message, &error)) {
+      qWarning() << "[MainWidget] failed to persist message conversation_id="
+                 << message.conversationId << "message_id=" << message.messageId
+                 << "request_id=" << message.requestId << "error=" << error;
+      stored = false;
+    }
+  }
+
+  if (SessionWindow *sessionWindow =
+          m_sessionWindowsByConversationId.value(message.conversationId)) {
+    sessionWindow->appendPersistedMessage(message);
+  }
+  updateConversationStateFromMessage(message, incrementUnread);
+  return stored;
+}
+
+void Widget::updateConversationStateFromMessage(const ChatMessage &message,
+                                                bool incrementUnread) {
+  const QString conversationId = message.conversationId.trimmed();
+  if (conversationId.isEmpty()) {
+    return;
+  }
+
+  ConversationListState state =
+      m_conversationStatesByConversationId.value(conversationId);
+  state.conversationId = conversationId;
+  state.lastMessagePreview = previewTextForMessage(message);
+  state.placeholder = false;
+
+  const conversationlist::ConversationItem *meta = nullptr;
+  for (const conversationlist::ConversationItem &conversation :
+       m_conversationListManager.conversations()) {
+    if (conversation.conversationId.trimmed() == conversationId) {
+      meta = &conversation;
+      break;
+    }
+  }
+
+  if (meta) {
+    state.conversationUuid = meta->conversationUuid;
+    state.groupNumericId = meta->groupNumericId;
+    state.conversationType = meta->conversationType;
+    state.avatarUrl = meta->avatarUrl;
+    state.memberCount = meta->memberCount;
+    state.peerUserId = meta->peerUserId;
+    state.peerNumericId = meta->peerNumericId;
+    state.peerUsername = meta->peerUsername;
+    state.peerNickname = meta->peerNickname;
+    state.peerAvatarUrl = meta->peerAvatarUrl;
+    state.peerBio = meta->peerBio;
+    state.peerStatus = meta->peerStatus;
+    state.peerIsOnline = meta->peerIsOnline;
+    state.peerLastSeenAt = meta->peerLastSeenAt;
+    if (state.displayName.isEmpty()) {
+      state.displayName = meta->name.trimmed();
+    }
+  }
+
+  if (state.displayName.isEmpty()) {
+    state.displayName = message.senderUsername.trimmed();
+  }
+  if (state.displayName.isEmpty()) {
+    state.displayName = conversationId;
+  }
+  if (state.peerUserId.isEmpty()) {
+    state.peerUserId = message.senderUserId.trimmed();
+  }
+  if (state.peerNumericId.isEmpty()) {
+    state.peerNumericId = message.senderNumericId.trimmed();
+  }
+
+  const QString currentUserId = UserSession::instance().userId().trimmed();
+  const bool isOutgoing =
+      !currentUserId.isEmpty() && message.senderUserId.trimmed() == currentUserId;
+  SessionWindow *openWindow = m_sessionWindowsByConversationId.value(conversationId);
+  if (openWindow || isOutgoing || !incrementUnread) {
+    state.unreadCount = 0;
+  } else {
+    state.unreadCount += 1;
+  }
+
+  m_conversationStatesByConversationId.insert(conversationId, state);
+  if (QListWidgetItem *item = findConversationItemByConversationId(conversationId)) {
+    applyConversationStateToItem(item, state, meta);
+  } else {
+    upsertConversationListItem(state, meta);
+  }
+}
+
+QString Widget::previewTextForMessage(const ChatMessage &message) const {
+  if (message.kind == ChatMessageKind::File) {
+    return filePreviewText(message.file.originalName);
+  }
+  return message.text.trimmed();
 }
 
 // --- 拖拽窗口支持 ---
@@ -968,6 +1328,7 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
     }
     sessionWindow->raise();
     sessionWindow->activateWindow();
+    requestConversationIncrementalSync(conversationId);
     qInfo().noquote() << "[MainWidget] reuse session window peer_user_id="
                       << peerUserId << "peer_numeric_id=" << peerNumericId;
     return;
@@ -1070,6 +1431,7 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
             }
           });
   resetConversationUnread(conversationId);
+  requestConversationIncrementalSync(conversationId);
   sessionWindow->show();
 }
 
@@ -1142,6 +1504,15 @@ void Widget::onOpenSettings() {
     if (m_dismissGroupDialog) {
       m_dismissGroupDialog->close();
     }
+    QSet<SessionWindow *> sessionWindowsToClose;
+    for (const auto &window : m_sessionWindowsByConversationId) {
+      if (window) {
+        sessionWindowsToClose.insert(window.data());
+      }
+    }
+    for (SessionWindow *window : sessionWindowsToClose) {
+      window->close();
+    }
     m_currentUserId.clear();
     m_currentUserNumericId.clear();
     m_currentDisplayName.clear();
@@ -1150,6 +1521,17 @@ void Widget::onOpenSettings() {
     m_pendingConversationListRequestId.clear();
     m_pendingFriendListRequestId.clear();
     m_pendingOpenConversationId.clear();
+    m_silentConversationListRequestIds.clear();
+    m_silentFriendListRequestIds.clear();
+    m_conversationSyncQueue.clear();
+    m_queuedConversationSyncIds.clear();
+    m_activeConversationSync.clear();
+    m_pendingMessagePullRequestId.clear();
+    m_pendingMessageAckRequestId.clear();
+    m_pendingInitialConversationSync = false;
+    m_pendingFileTransfer.clear();
+    m_pendingFileDownloads.clear();
+    m_seenIncomingFileMessageKeys.clear();
     if (m_conversationListRefreshTimer) {
       m_conversationListRefreshTimer->stop();
     }
@@ -1989,89 +2371,21 @@ void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
   if (!envelope.requestId.trimmed().isEmpty()) {
     return;
   }
-
-  const QString conversationId =
-      envelope.data.value(QStringLiteral("conversation_id")).toString().trimmed();
-  const QString messageKind =
-      envelope.data.value(QStringLiteral("message_kind")).toString().trimmed().toLower();
-  QString previewText =
-      envelope.data.value(QStringLiteral("content")).toString().trimmed();
-  if (messageKind == QStringLiteral("file")) {
-    const QJsonObject fileObj = envelope.data.value(QStringLiteral("file")).toObject();
-    previewText = filePreviewText(
-        fileObj.value(QStringLiteral("original_name")).toString().trimmed());
-  }
-  if (conversationId.isEmpty() || previewText.isEmpty()) {
-    qWarning() << "[MainWidget] ignore MESSAGE/SEND push with invalid data"
-               << QString::fromUtf8(
-                      QJsonDocument(envelope.data).toJson(QJsonDocument::Compact));
+  ChatMessage message;
+  QString error;
+  if (!MessageSyncClient::parseIncomingSendEnvelope(envelope, &message, &error)) {
+    qWarning() << "[MainWidget] ignore MESSAGE/SEND push parse failure:" << error;
     return;
   }
-
-  if (messageKind != QStringLiteral("file") && m_localChatStore) {
-    ChatMessage message;
-    message.localId = envelope.data.value(QStringLiteral("message_id")).toString().trimmed();
-    message.conversationId = conversationId;
-    message.messageId =
-        envelope.data.value(QStringLiteral("message_id")).toString().trimmed();
-    message.seq =
-        static_cast<qint64>(envelope.data.value(QStringLiteral("seq")).toDouble());
-    message.sentAt =
-        envelope.data.value(QStringLiteral("sent_at")).toString().trimmed();
-    message.senderUserId =
-        envelope.data.value(QStringLiteral("from_user_id")).toString().trimmed();
-    message.senderNumericId =
-        envelope.data.value(QStringLiteral("from_numeric_id")).toString().trimmed();
-    message.senderUsername =
-        envelope.data.value(QStringLiteral("from_username")).toString().trimmed();
-    message.kind = ChatMessageKind::Text;
-    message.text = previewText;
-
-    QString error;
-    if (!m_localChatStore->saveMessage(message, &error)) {
-      qWarning() << "[MainWidget] failed to persist incoming text message:"
-                 << error;
-    }
+  const QString currentUserId = UserSession::instance().userId().trimmed();
+  if (!currentUserId.isEmpty() &&
+      message.senderUserId.trimmed() == currentUserId) {
+    return;
   }
-
-  ConversationListState state =
-      m_conversationStatesByConversationId.value(conversationId);
-  state.conversationId = conversationId;
-  if (state.displayName.isEmpty()) {
-    state.displayName =
-        envelope.data.value(QStringLiteral("from_username")).toString().trimmed();
-    if (state.displayName.isEmpty()) {
-      state.displayName = conversationId;
-    }
+  if (message.kind == ChatMessageKind::File) {
+    return;
   }
-  if (state.peerUserId.isEmpty()) {
-    state.peerUserId =
-        envelope.data.value(QStringLiteral("from_user_id")).toString().trimmed();
-  }
-  if (state.peerNumericId.isEmpty()) {
-    state.peerNumericId =
-        envelope.data.value(QStringLiteral("from_numeric_id")).toString().trimmed();
-  }
-  state.lastMessagePreview = previewText;
-  state.placeholder = false;
-
-  SessionWindow *openWindow = m_sessionWindowsByConversationId.value(conversationId);
-  if (!openWindow) {
-    state.unreadCount += 1;
-  } else {
-    state.unreadCount = 0;
-  }
-  m_conversationStatesByConversationId.insert(conversationId, state);
-
-  if (QListWidgetItem *item = findConversationItemByConversationId(conversationId)) {
-    applyConversationStateToItem(item, state, nullptr);
-  } else {
-    upsertConversationListItem(state, nullptr);
-  }
-
-  qInfo() << "[MainWidget] routed incoming MESSAGE/SEND conversation_id="
-          << conversationId << "open_window=" << (openWindow != nullptr)
-          << "unread=" << state.unreadCount;
+  storeAndRouteMessage(message, true);
 }
 
 void Widget::handlePresenceEnvelope(const QJsonObject &data) {
@@ -2128,7 +2442,7 @@ void Widget::handlePresenceEnvelope(const QJsonObject &data) {
 void Widget::onConversationListPayloadReceived(const QString &requestId,
                                                const QJsonObject &data) {
   m_silentConversationListRequestIds.remove(requestId);
-  if (!m_pendingConversationListRequestId.isEmpty() &&
+  if (m_pendingConversationListRequestId.isEmpty() ||
       requestId != m_pendingConversationListRequestId) {
     return;
   }
@@ -2139,6 +2453,7 @@ void Widget::onConversationListPayloadReceived(const QString &requestId,
   }
   refreshConversationListUi();
   refreshGroupListUi();
+  beginInitialConversationSyncIfNeeded();
   if (!m_pendingOpenConversationId.isEmpty()) {
     if (QListWidgetItem *item =
             findConversationItemByConversationId(m_pendingOpenConversationId)) {
@@ -2154,7 +2469,7 @@ void Widget::onConversationListPayloadReceived(const QString &requestId,
 void Widget::onConversationListFailed(const QString &requestId, int code,
                                       const QString &message) {
   const bool silentFailure = m_silentConversationListRequestIds.remove(requestId);
-  if (!m_pendingConversationListRequestId.isEmpty() &&
+  if (m_pendingConversationListRequestId.isEmpty() ||
       requestId != m_pendingConversationListRequestId) {
     return;
   }
@@ -2172,7 +2487,7 @@ void Widget::onConversationListFailed(const QString &requestId, int code,
 void Widget::onFriendListPayloadReceived(const QString &requestId,
                                          const QJsonObject &data) {
   m_silentFriendListRequestIds.remove(requestId);
-  if (!m_pendingFriendListRequestId.isEmpty() &&
+  if (m_pendingFriendListRequestId.isEmpty() ||
       requestId != m_pendingFriendListRequestId) {
     return;
   }
@@ -2188,7 +2503,7 @@ void Widget::onFriendListPayloadReceived(const QString &requestId,
 void Widget::onFriendListFailed(const QString &requestId, int code,
                                 const QString &message) {
   const bool silentFailure = m_silentFriendListRequestIds.remove(requestId);
-  if (!m_pendingFriendListRequestId.isEmpty() &&
+  if (m_pendingFriendListRequestId.isEmpty() ||
       requestId != m_pendingFriendListRequestId) {
     return;
   }

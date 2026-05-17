@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVector>
+#include <QtGlobal>
 
 #include "protocol.h"
 #include "websocketclient.h"
@@ -93,6 +94,10 @@ struct ConversationItem {
   bool peerIsOnline = false;
   QString peerLastSeenAt;
   QDateTime peerLastSeenAtUtc;
+  qint64 lastMessageSeq = 0;
+  QString lastMessageId;
+  QString lastMessageSentAt;
+  QString updatedAt;
 };
 Q_DECLARE_METATYPE(ConversationItem)
 Q_DECLARE_METATYPE(QVector<ConversationItem>)

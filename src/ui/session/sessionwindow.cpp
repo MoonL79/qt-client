@@ -471,9 +471,7 @@ void SessionWindow::handleIncomingPayload(const QString &payload,
   if (protocol::parseEnvelope(payload, &envelope, &parseError)) {
     if (envelope.type == QStringLiteral("MESSAGE") &&
         envelope.action == QStringLiteral("SEND")) {
-      if (envelope.requestId.trimmed().isEmpty()) {
-        handleIncomingMessagePush(envelope);
-      } else {
+      if (!envelope.requestId.trimmed().isEmpty()) {
         handleMessageSendResponse(envelope);
       }
     }
@@ -486,6 +484,15 @@ void SessionWindow::handleIncomingPayload(const QString &payload,
 
 void SessionWindow::appendPersistedMessage(const ChatMessage &message) {
   if (!message.isValid()) {
+    return;
+  }
+  const int existingIndex = findExistingMessageIndex(message);
+  if (existingIndex >= 0) {
+    DisplayMessage &displayMessage = m_messages[existingIndex];
+    displayMessage.message = message;
+    displayMessage.status = isOutgoingMessage(message) ? MessageStatus::Sent
+                                                       : MessageStatus::Received;
+    updateMessageBubble(existingIndex);
     return;
   }
   appendMessage(message, isOutgoingMessage(message) ? MessageStatus::Sent
@@ -534,6 +541,27 @@ void SessionWindow::updateMessageBubble(int index) {
   message.bubbleLabel->setText(bubbleText);
 }
 
+int SessionWindow::findExistingMessageIndex(const ChatMessage &message) const {
+  for (int index = 0; index < m_messages.size(); ++index) {
+    const ChatMessage &existing = m_messages[index].message;
+    if (existing.conversationId.trimmed() != message.conversationId.trimmed()) {
+      continue;
+    }
+    if (message.seq > 0 && existing.seq > 0 && existing.seq == message.seq) {
+      return index;
+    }
+    if (!message.messageId.trimmed().isEmpty() &&
+        existing.messageId.trimmed() == message.messageId.trimmed()) {
+      return index;
+    }
+    if (!message.requestId.trimmed().isEmpty() &&
+        existing.requestId.trimmed() == message.requestId.trimmed()) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope) {
   const QString requestId = envelope.requestId.trimmed();
   if (requestId.isEmpty()) {
@@ -566,7 +594,7 @@ void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope
 
   const bool ok = envelope.code == 0 &&
                   (envelope.hasOk ? envelope.ok
-                                  : envelope.data.value("ok").toBool(false));
+                                  : envelope.data.value("ok").toBool(true));
   if (!ok) {
     const QString errorMessage =
         envelope.message.trimmed().isEmpty()

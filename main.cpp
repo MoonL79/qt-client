@@ -114,6 +114,8 @@ int main(int argc, char *argv[])
     QObject::connect(&mainWidget, &Widget::logoutRequested, [&]() {
       UserSession::instance().clear();
       currentUserId.clear();
+      mainWidget.setCurrentUserId(QString());
+      mainWidget.setCurrentUserNumericId(QString());
       loginWindow.resetLoginForm();
       loginWindow.show();
       loginWindow.raise();
@@ -128,12 +130,12 @@ int main(int argc, char *argv[])
         mainWidget.setUserInfo(username); // 设置用户信息
         mainWidget.setWindowTitle("IM聊天 - " + username);
         mainWidget.show();
-        mainWidget.setCurrentUserNumericId(UserSession::instance().numericId());
         currentUserId = userId.trimmed();
         if (currentUserId.isEmpty()) {
           currentUserId = UserSession::instance().userId().trimmed();
         }
         mainWidget.setCurrentUserId(currentUserId);
+        mainWidget.setCurrentUserNumericId(UserSession::instance().numericId());
         if (!currentUserId.isEmpty()) {
           profileApiClient.requestProfileInfo(currentUserId);
         } else {

@@ -595,6 +595,16 @@ void ChatFileService::onTextMessageReceived(const QString &message) {
       return;
     }
 
+    if (chatMessage.senderUserId.trimmed().isEmpty()) {
+      chatMessage.senderUserId = UserSession::instance().userId().trimmed();
+    }
+    if (chatMessage.senderNumericId.trimmed().isEmpty()) {
+      chatMessage.senderNumericId = UserSession::instance().numericId().trimmed();
+    }
+    if (chatMessage.senderUsername.trimmed().isEmpty()) {
+      chatMessage.senderUsername = UserSession::instance().username().trimmed();
+    }
+
     cacheMessage(chatMessage);
     emit fileMessageSendSucceeded(requestId, chatMessage);
     return;

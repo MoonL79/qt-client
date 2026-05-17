@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QString>
+#include <QtGlobal>
 
 namespace conversationlist {
 
@@ -28,6 +29,10 @@ struct ConversationItem {
   bool peerIsOnline = false;
   QString peerLastSeenAt;
   QDateTime peerLastSeenAtUtc;
+  qint64 lastMessageSeq = 0;
+  QString lastMessageId;
+  QString lastMessageSentAt;
+  QString updatedAt;
 };
 
 class ConversationListManager {

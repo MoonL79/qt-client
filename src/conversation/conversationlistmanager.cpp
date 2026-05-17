@@ -29,6 +29,18 @@ int valueToInt(const QJsonValue &value, int defaultValue = 0) {
   return defaultValue;
 }
 
+qint64 valueToInt64(const QJsonValue &value, qint64 defaultValue = 0) {
+  if (value.isDouble()) {
+    return static_cast<qint64>(value.toDouble(defaultValue));
+  }
+  if (value.isString()) {
+    bool ok = false;
+    const qint64 parsed = value.toString().trimmed().toLongLong(&ok);
+    return ok ? parsed : defaultValue;
+  }
+  return defaultValue;
+}
+
 bool valueToBool(const QJsonValue &value, bool defaultValue = false) {
   if (value.isBool()) {
     return value.toBool();
@@ -138,6 +150,10 @@ bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
     item.peerIsOnline = valueToBool(obj.value("peer_is_online"), false);
     item.peerLastSeenAt = valueToString(obj.value("peer_last_seen_at"));
     item.peerLastSeenAtUtc = parseUtcIsoTime(item.peerLastSeenAt);
+    item.lastMessageSeq = valueToInt64(obj.value("last_message_seq"), 0);
+    item.lastMessageId = valueToString(obj.value("last_message_id"));
+    item.lastMessageSentAt = valueToString(obj.value("last_message_sent_at"));
+    item.updatedAt = valueToString(obj.value("updated_at"));
 
     if (item.conversationId.isEmpty()) {
       qWarning() << "[ConversationList] skip invalid item at index" << i

@@ -47,6 +47,8 @@ qt_add_executable(qt-client
     src/network/authapiclient.cpp
     src/network/profileapiclient.h
     src/network/profileapiclient.cpp
+    src/network/messagesyncclient.h
+    src/network/messagesyncclient.cpp
     src/chat/chatmessage.h
     src/chat/chatfileservice.h
     src/chat/chatfileservice.cpp
