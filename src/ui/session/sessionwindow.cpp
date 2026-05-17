@@ -282,7 +282,7 @@ void SessionWindow::initUI() {
   m_inputLine->setMaximumHeight(140);
   m_inputLine->setStyleSheet(
       "QTextEdit { border: 1px solid #dcdcdc; border-radius: 8px; "
-      "padding: 8px 88px 40px 8px; background: #ffffff; }");
+      "padding: 8px 88px 40px 8px; background: #ffffff; color: #111111; }");
   inputLayout->addWidget(m_inputLine, 0, 0);
 
   m_sendBtn = new QPushButton("发送", inputWrapper);
