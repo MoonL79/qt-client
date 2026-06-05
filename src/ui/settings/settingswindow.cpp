@@ -905,8 +905,14 @@ void SettingsWindow::buildUi() {
   connect(bEdit, &QLineEdit::editingFinished, this, applyRgbInput);
   (*syncInputs)(*currentColor);
 
+  auto *downloadTab = new QWidget(m_tabWidget);
+  auto *downloadLayout = new QVBoxLayout(downloadTab);
+  downloadLayout->setContentsMargins(0, 8, 0, 0);
+  downloadLayout->addStretch();
+
   m_tabWidget->addTab(userTab, QStringLiteral("用户"));
   m_tabWidget->addTab(appearanceTab, QStringLiteral("界面"));
+  m_tabWidget->addTab(downloadTab, QStringLiteral("下载"));
 
   m_statusLabel = new QLabel("就绪", panel);
   m_statusLabel->setStyleSheet("color: #666;");
@@ -1844,6 +1850,5 @@ void SettingsWindow::onAuthRequestFailed(const QString &requestId,
   m_statusLabel->setText("退出登录失败: " + error);
   QMessageBox::warning(this, "退出登录失败", error);
 }
-
 
 

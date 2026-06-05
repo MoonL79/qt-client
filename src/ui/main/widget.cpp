@@ -1066,6 +1066,15 @@ void Widget::setCurrentUserNumericId(const QString &numericId) {
 }
 
 /**
+ * @brief 设置主界面主题颜色值。
+ * @param colorHex 颜色十六进制字符串。
+ * @return 无返回值。
+ */
+void Widget::setThemeColor(const QString &colorHex) {
+  applyMainThemeColor(QColor(colorHex.trimmed()));
+}
+
+/**
  * @brief 设置资料apiclient值。
  * @param profileApiClient 文件相关数据。
  * @return 无返回值。

@@ -71,6 +71,7 @@ public:
     void setCurrentUserId(const QString& userId);
     void setCurrentUserNumericId(const QString& numericId);
     void setProfileApiClient(ProfileApiClient* profileApiClient);
+    void setThemeColor(const QString &colorHex);
 
 signals:
     void logoutRequested();

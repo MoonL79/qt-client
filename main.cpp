@@ -92,6 +92,7 @@ int main(int argc, char *argv[])
                                           : info.nickname.trimmed();
           mainWidget.setCurrentUserNumericId(info.numericId);
           mainWidget.setUserInfo(displayName, info.avatarUrl, info.signature);
+          mainWidget.setThemeColor(info.themeColor);
         };
 
     QObject::connect(&profileApiClient, &ProfileApiClient::profileInfoReceived,
@@ -119,6 +120,7 @@ int main(int argc, char *argv[])
       currentUserId.clear();
       mainWidget.setCurrentUserId(QString());
       mainWidget.setCurrentUserNumericId(QString());
+      mainWidget.setThemeColor(QString());
       loginWindow.resetLoginForm();
       loginWindow.show();
       loginWindow.raise();
@@ -131,6 +133,7 @@ int main(int argc, char *argv[])
         currentUserId.clear();
         loginWindow.close();
         mainWidget.setUserInfo(username); // 设置用户信息
+        mainWidget.setThemeColor(QString());
         mainWidget.setWindowTitle("IM聊天 - " + username);
         mainWidget.show();
         currentUserId = userId.trimmed();
