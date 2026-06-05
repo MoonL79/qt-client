@@ -1596,18 +1596,6 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   if (!conversationId.isEmpty()) {
     m_sessionWindowsByConversationId.insert(conversationId, sessionWindow);
   }
-  connect(sessionWindow, &SessionWindow::imageAttachmentRequested, this,
-          [this](const QString &conversationId, const QString &conversationName) {
-            if (!ensureAttachmentTransferReady(QStringLiteral("图片"))) {
-              return;
-            }
-            startAttachmentTransferForConversation(
-                conversationId, conversationName,
-                QStringLiteral("选择要发送的图片"),
-                QStringLiteral(
-                    "图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;All Files (*.*)"),
-                QStringLiteral("图片"));
-          });
   connect(sessionWindow, &SessionWindow::fileAttachmentRequested, this,
           [this](const QString &conversationId, const QString &conversationName) {
             if (!ensureAttachmentTransferReady(QStringLiteral("文件"))) {

@@ -639,21 +639,14 @@ void SessionWindow::initUI() {
       "8px; padding: 0 12px; }"
       "QPushButton:hover { background-color: #e7f0fb; border-color: #a9c7ef; }");
 
-  QPushButton *imageButton = new QPushButton(QStringLiteral("图片"), attachmentBar);
-  imageButton->setCursor(Qt::PointingHandCursor);
-  imageButton->setStyleSheet(attachmentButtonStyle);
-  attachmentLayout->addWidget(imageButton, 0, Qt::AlignLeft);
-
   QPushButton *fileButton = new QPushButton(QStringLiteral("文件"), attachmentBar);
   fileButton->setCursor(Qt::PointingHandCursor);
   fileButton->setStyleSheet(attachmentButtonStyle);
   attachmentLayout->addWidget(fileButton, 0, Qt::AlignLeft);
   attachmentLayout->addStretch();
 
-  connect(imageButton, &QPushButton::clicked, this,
-          [this]() { requestAttachment(true); });
   connect(fileButton, &QPushButton::clicked, this,
-          [this]() { requestAttachment(false); });
+          [this]() { requestFileAttachment(); });
 
   contentLayout->addWidget(attachmentBar);
 
@@ -779,28 +772,21 @@ void SessionWindow::onSendClicked() {
 }
 
 /**
- * @brief 发起attachment请求。
- * @param imageOnly 布尔参数 `imageOnly`。
+ * @brief 发起文件attachment请求。
  * @return 无返回值。
  */
-void SessionWindow::requestAttachment(bool imageOnly) {
+void SessionWindow::requestFileAttachment() {
   const QString conversationId = m_session.conversationId().trimmed();
   if (conversationId.isEmpty()) {
-    const QString kind = imageOnly ? QStringLiteral("图片")
-                                   : QStringLiteral("文件");
-    appendStatusLine(QStringLiteral("缺少 conversation_id，无法发送%1").arg(kind));
+    appendStatusLine(QStringLiteral("缺少 conversation_id，无法发送文件"));
     qWarning() << "[SessionWindow] missing conversation_id for attachment"
                << "display_name=" << m_session.displayName()
-               << "kind=" << kind;
+               << "kind=file";
     return;
   }
 
   const QString conversationName = m_session.displayName().trimmed();
-  if (imageOnly) {
-    emit imageAttachmentRequested(conversationId, conversationName);
-  } else {
-    emit fileAttachmentRequested(conversationId, conversationName);
-  }
+  emit fileAttachmentRequested(conversationId, conversationName);
 }
 
 /**

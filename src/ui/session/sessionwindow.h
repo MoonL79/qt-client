@@ -51,8 +51,6 @@ signals:
   void outgoingMessageSubmitted(const QString &conversationId,
                                 const QString &previewText);
   void messageReadyForPersistence(const ChatMessage &message);
-  void imageAttachmentRequested(const QString &conversationId,
-                                const QString &conversationName);
   void fileAttachmentRequested(const QString &conversationId,
                                const QString &conversationName);
   void fileDownloadRequested(const ChatMessage &message, bool chooseSavePath);
@@ -104,7 +102,7 @@ protected:
   QSet<QString> m_failedAvatarSources;
   void onSendClicked();
   void sendPendingMessage();
-  void requestAttachment(bool imageOnly);
+  void requestFileAttachment();
 
   websocketclient *m_websocket;
 };
