@@ -33,7 +33,13 @@ bool readRequiredString(const QJsonObject &obj, const char *key, QString *out,
   return false;
 }
 
-// 实现 `readRequiredInt` 的核心逻辑。
+/**
+ * @brief 读取RequiredInt。
+ * @param obj 输入的对象数据。
+ * @param key 对象参数 `key`。
+ * @param out 输出结果对象。
+ * @return 返回本次处理是否成功。
+ */
 bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   if (!obj.contains(QLatin1String(key))) {
     return false;
@@ -59,7 +65,13 @@ bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   return false;
 }
 
-// 实现 `readRequiredBool` 的核心逻辑。
+/**
+ * @brief 读取Required布尔值。
+ * @param obj 输入的对象数据。
+ * @param key 对象参数 `key`。
+ * @param out 输出结果对象。
+ * @return 返回本次处理是否成功。
+ */
 bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
   if (!obj.contains(QLatin1String(key))) {
     return false;
@@ -74,7 +86,12 @@ bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
   return true;
 }
 
-// 实现 `readTrimmedString` 的核心逻辑。
+/**
+ * @brief 读取TrimmedString。
+ * @param obj 输入的对象数据。
+ * @param key 对象参数 `key`。
+ * @return 返回处理后的字符串结果。
+ */
 QString readTrimmedString(const QJsonObject &obj, const char *key) {
   const QJsonValue value = obj.value(QLatin1String(key));
   if (value.isString()) {
@@ -86,7 +103,11 @@ QString readTrimmedString(const QJsonObject &obj, const char *key) {
   return QString();
 }
 
-// 解析utciso时间并生成内部结果。
+/**
+ * @brief 解析utciso时间并生成内部结果。
+ * @param value 待处理的值。
+ * @return 返回 QDateTime 结果。
+ */
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -104,7 +125,12 @@ QDateTime parseUtcIsoTime(const QString &value) {
 }
 } // namespace
 
-// 实现 `m_client` 的核心逻辑。
+/**
+ * @brief 构造并初始化AuthApiClient实例。
+ * @param client 客户端或服务对象。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 AuthApiClient::AuthApiClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<AuthUserInfo>("AuthUserInfo");
@@ -126,7 +152,12 @@ AuthApiClient::AuthApiClient(websocketclient *client, QObject *parent)
           &AuthApiClient::onDisconnected);
 }
 
-// 实现 `login` 的核心逻辑。
+/**
+ * @brief 执行login的核心逻辑。
+ * @param username 用户名。
+ * @param password 密码内容。
+ * @return 返回处理后的字符串结果。
+ */
 QString AuthApiClient::login(const QString &username, const QString &password) {
   const QString requestId = generateRequestId();
   const QString normalizedUsername = username.trimmed();
@@ -158,10 +189,17 @@ QString AuthApiClient::login(const QString &username, const QString &password) {
   return requestId;
 }
 
-// 实现 `uploadToken` 的核心逻辑。
+/**
+ * @brief 实现 uploadToken 的核心逻辑。
+ * @return 返回处理后的字符串结果。
+ */
 QString AuthApiClient::logout() { return logout(UserSession::instance().uploadToken()); }
 
-// 实现 `logout` 的核心逻辑。
+/**
+ * @brief 执行logout的核心逻辑。
+ * @param token 字符串参数 `token`。
+ * @return 返回处理后的字符串结果。
+ */
 QString AuthApiClient::logout(const QString &token) {
   const QString requestId = generateRequestId();
   const QString normalizedToken = token.trimmed();
@@ -187,7 +225,12 @@ QString AuthApiClient::logout(const QString &token) {
   return requestId;
 }
 
-// 判断当前登录响应条件是否满足。
+/**
+ * @brief 判断当前登录响应条件是否满足。
+ * @param envelope 协议封装数据。
+ * @param pendingRequestId 请求 ID，用于关联本次业务操作。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool AuthApiClient::isCurrentLoginResponse(const protocol::Envelope &envelope,
                                            const QString &pendingRequestId) {
   if (pendingRequestId.isEmpty()) {
@@ -216,7 +259,12 @@ bool AuthApiClient::isCurrentLoginResponse(const protocol::Envelope &envelope,
          originalRequest.action == QLatin1String(kActionLogin);
 }
 
-// 提取认证错误消息信息。
+/**
+ * @brief 提取认证错误消息信息。
+ * @param envelope 协议封装数据。
+ * @param fallbackAction 字符串参数 `fallbackAction`。
+ * @return 返回处理后的字符串结果。
+ */
 QString AuthApiClient::extractAuthErrorMessage(const protocol::Envelope &envelope,
                                                const QString &fallbackAction) {
   const QJsonObject &data = envelope.data;
@@ -260,13 +308,23 @@ QString AuthApiClient::extractAuthErrorMessage(const protocol::Envelope &envelop
   return QStringLiteral("request failed");
 }
 
-// 判断登录成功envelope条件是否满足。
+/**
+ * @brief 判断登录成功envelope条件是否满足。
+ * @param envelope 协议封装数据。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool AuthApiClient::isLoginSuccessEnvelope(const protocol::Envelope &envelope) {
   const int code = envelope.hasCode ? envelope.code : 0;
   return code == 0 && envelope.data.value(QStringLiteral("ok")).toBool(false);
 }
 
-// 解析登录结果并生成内部结果。
+/**
+ * @brief 解析登录结果并生成内部结果。
+ * @param envelope 协议封装数据。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool AuthApiClient::parseLoginResult(const protocol::Envelope &envelope,
                                      LoginResult *outResult, QString *error) {
   if (!outResult) {
@@ -346,7 +404,11 @@ bool AuthApiClient::parseLoginResult(const protocol::Envelope &envelope,
   return true;
 }
 
-// 响应文本消息接收事件。
+/**
+ * @brief 响应文本消息接收事件。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void AuthApiClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -412,7 +474,10 @@ void AuthApiClient::onTextMessageReceived(const QString &message) {
   failRequest(requestId, action, QStringLiteral("unsupported action"));
 }
 
-// 响应已断开事件。
+/**
+ * @brief 响应已断开事件。
+ * @return 无返回值。
+ */
 void AuthApiClient::onDisconnected() {
   const auto requestIds = m_pendingRequests.keys();
   for (const QString &requestId : requestIds) {
@@ -422,12 +487,21 @@ void AuthApiClient::onDisconnected() {
   }
 }
 
-// 实现 `generateRequestId` 的核心逻辑。
+/**
+ * @brief 执行generateRequestId的核心逻辑。
+ * @return 返回处理后的字符串结果。
+ */
 QString AuthApiClient::generateRequestId() const {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-// 发送认证payload数据。
+/**
+ * @brief 发送认证payload数据。
+ * @param action 字符串参数 `action`。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param data 请求或响应数据对象。
+ * @return 返回布尔结果。
+ */
 bool AuthApiClient::sendAuthPayload(const QString &action, const QString &requestId,
                                     const QJsonObject &data) {
   if (!m_client || !m_client->isConnected()) {
@@ -441,7 +515,12 @@ bool AuthApiClient::sendAuthPayload(const QString &action, const QString &reques
   return true;
 }
 
-// 实现 `addPendingRequest` 的核心逻辑。
+/**
+ * @brief 执行addPendingRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @return 无返回值。
+ */
 void AuthApiClient::addPendingRequest(const QString &requestId, const QString &action) {
   clearPendingRequest(requestId);
 
@@ -462,7 +541,11 @@ void AuthApiClient::addPendingRequest(const QString &requestId, const QString &a
   m_pendingRequests.insert(requestId, pending);
 }
 
-// 清理待处理请求状态。
+/**
+ * @brief 清理待处理请求状态。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @return 无返回值。
+ */
 void AuthApiClient::clearPendingRequest(const QString &requestId) {
   auto it = m_pendingRequests.find(requestId);
   if (it == m_pendingRequests.end()) {
@@ -475,7 +558,14 @@ void AuthApiClient::clearPendingRequest(const QString &requestId) {
   m_pendingRequests.erase(it);
 }
 
-// 实现 `failRequest` 的核心逻辑。
+/**
+ * @brief 执行failRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param errorMessage 错误信息输出参数。
+ * @param code 数值参数 `code`。
+ * @return 无返回值。
+ */
 void AuthApiClient::failRequest(const QString &requestId, const QString &action,
                                 const QString &errorMessage, int code) {
   qWarning().noquote() << "[AUTH] action=" << action
@@ -486,7 +576,13 @@ void AuthApiClient::failRequest(const QString &requestId, const QString &action,
   emit authRequestFailed(requestId, action, errorMessage);
 }
 
-// 解析登出结果并生成内部结果。
+/**
+ * @brief 解析登出结果并生成内部结果。
+ * @param envelope 协议封装数据。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool AuthApiClient::parseLogoutResult(const protocol::Envelope &envelope,
                                       LogoutResult *outResult,
                                       QString *error) const {
@@ -516,4 +612,7 @@ bool AuthApiClient::parseLogoutResult(const protocol::Envelope &envelope,
   outResult->lastSeenAt = parseUtcIsoTime(outResult->lastSeenAtUtc);
   return true;
 }
+
+
+
 

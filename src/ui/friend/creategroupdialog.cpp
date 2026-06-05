@@ -10,7 +10,13 @@
 #include <QRegularExpression>
 #include <QVBoxLayout>
 
-// 实现 `m_friends` 的核心逻辑。
+/**
+ * @brief 构造并初始化CreateGroupDialog实例。
+ * @param friends 好友相关数据。
+ * @param profileApiClient 文件相关数据。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 CreateGroupDialog::CreateGroupDialog(
     const QList<friendlist::FriendItem> &friends,
     ProfileApiClient *profileApiClient, QWidget *parent)
@@ -36,13 +42,20 @@ CreateGroupDialog::CreateGroupDialog(
           &CreateGroupDialog::onRequestFailedDetailed);
 }
 
-// 设置好友值。
+/**
+ * @brief 设置好友值。
+ * @param friends 好友相关数据。
+ * @return 无返回值。
+ */
 void CreateGroupDialog::setFriends(const QList<friendlist::FriendItem> &friends) {
   m_friends = friends;
   refreshFriendList();
 }
 
-// 构建界面内容。
+/**
+ * @brief 构建界面内容。
+ * @return 无返回值。
+ */
 void CreateGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -87,7 +100,10 @@ void CreateGroupDialog::buildUi() {
           &CreateGroupDialog::onCreateClicked);
 }
 
-// 刷新好友列表显示或缓存。
+/**
+ * @brief 刷新好友列表显示或缓存。
+ * @return 无返回值。
+ */
 void CreateGroupDialog::refreshFriendList() {
   if (!m_friendListWidget) {
     return;
@@ -119,13 +135,20 @@ void CreateGroupDialog::refreshFriendList() {
   }
 }
 
-// 判断valid数字编号条件是否满足。
+/**
+ * @brief 判断valid数字编号条件是否满足。
+ * @param numericId 数字编号。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool CreateGroupDialog::isValidNumericId(const QString &numericId) const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(numericId.trimmed()).hasMatch();
 }
 
-// 实现 `selectedMemberNumericIds` 的核心逻辑。
+/**
+ * @brief 执行selectedMemberNumericIds的核心逻辑。
+ * @return 返回处理后的字符串结果。
+ */
 QStringList CreateGroupDialog::selectedMemberNumericIds() const {
   QStringList memberNumericIds;
   if (!m_friendListWidget) {
@@ -149,7 +172,10 @@ QStringList CreateGroupDialog::selectedMemberNumericIds() const {
   return memberNumericIds;
 }
 
-// 响应创建点击事件。
+/**
+ * @brief 响应创建点击事件。
+ * @return 无返回值。
+ */
 void CreateGroupDialog::onCreateClicked() {
   if (!m_profileApiClient || !m_pendingCreateRequestId.isEmpty()) {
     return;
@@ -174,7 +200,12 @@ void CreateGroupDialog::onCreateClicked() {
       m_profileApiClient->createGroup(groupName, memberNumericIds);
 }
 
-// 响应创建群组succeeded事件。
+/**
+ * @brief 响应创建群组succeeded事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void CreateGroupDialog::onCreateGroupSucceeded(
     const QString &requestId, const CreateGroupResult &result) {
   if (requestId != m_pendingCreateRequestId) {
@@ -188,7 +219,14 @@ void CreateGroupDialog::onCreateGroupSucceeded(
   accept();
 }
 
-// 响应请求失败detailed事件。
+/**
+ * @brief 响应请求失败detailed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param arg3 数值参数 `arg3`。
+ * @param error 错误信息相关参数。
+ * @return 无返回值。
+ */
 void CreateGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                 const QString &action, int,
                                                 const QString &error) {
@@ -204,3 +242,5 @@ void CreateGroupDialog::onRequestFailedDetailed(const QString &requestId,
                              ? QStringLiteral("创建群聊失败，请稍后重试")
                              : error.trimmed());
 }
+
+

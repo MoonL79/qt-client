@@ -27,13 +27,20 @@ constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
 constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
 constexpr const char *kDefaultServerHost = "192.168.14.133";
 
-// 判断loopbackhost条件是否满足。
+/**
+ * @brief 判断loopbackhost条件是否满足。
+ * @param host 主机地址字符串。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isLoopbackHost(const QString &host) {
   const QString lower = host.trimmed().toLower();
   return lower == "127.0.0.1" || lower == "localhost" || lower == "::1";
 }
 
-// 解析并确定serverhost结果。
+/**
+ * @brief 解析并确定serverhost结果。
+ * @return 返回处理后的字符串结果。
+ */
 QString resolveServerHost() {
   QString host = qEnvironmentVariable(kStaticHostEnv).trimmed();
   if (host.isEmpty()) {
@@ -51,7 +58,11 @@ QString resolveServerHost() {
   return host;
 }
 
-// 解析并确定头像url结果。
+/**
+ * @brief 解析并确定头像url结果。
+ * @param avatarUrl 头像地址或头像来源。
+ * @return 返回解析得到的 URL 对象。
+ */
 QUrl resolveAvatarUrl(const QString &avatarUrl) {
   const QString trimmed = avatarUrl.trimmed();
   if (trimmed.isEmpty()) {
@@ -71,7 +82,11 @@ QUrl resolveAvatarUrl(const QString &avatarUrl) {
 
   QString staticPath = trimmed;
   if (staticPath.startsWith("/static/")) {
-    // Use as-is.
+    /**
+     * @brief Use as-is.
+     * @param arg1 输入参数 `arg1`。
+     * @return 返回 } else 结果。
+     */
   } else if (staticPath.startsWith("static/")) {
     staticPath.prepend('/');
   } else {
@@ -93,7 +108,14 @@ QUrl resolveAvatarUrl(const QString &avatarUrl) {
 }
 } // namespace
 
-// 实现 `trimmed` 的核心逻辑。
+/**
+ * @brief 构造并初始化AddFriendDialog实例。
+ * @param currentUserId 字符串参数 `currentUserId`。
+ * @param currentUserNumericId 字符串参数 `currentUserNumericId`。
+ * @param profileApiClient 文件相关数据。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 AddFriendDialog::AddFriendDialog(const QString &currentUserId,
                                  const QString &currentUserNumericId,
                                  ProfileApiClient *profileApiClient,
@@ -131,7 +153,10 @@ AddFriendDialog::AddFriendDialog(const QString &currentUserId,
   }
 }
 
-// 析构 AddFriendDialog 实例并释放相关资源。
+/**
+ * @brief 析构 AddFriendDialog 实例并释放相关资源。
+ * @return 无返回值。
+ */
 AddFriendDialog::~AddFriendDialog() {
   if (m_avatarReply) {
     m_avatarReply->abort();
@@ -140,7 +165,10 @@ AddFriendDialog::~AddFriendDialog() {
   }
 }
 
-// 构建界面内容。
+/**
+ * @brief 构建界面内容。
+ * @return 无返回值。
+ */
 void AddFriendDialog::buildUi() {
   auto *rootLayout = new QVBoxLayout(this);
   rootLayout->setContentsMargins(16, 16, 16, 16);
@@ -197,7 +225,12 @@ void AddFriendDialog::buildUi() {
           &AddFriendDialog::onAddFriendClicked);
 }
 
-// 设置查询loading值。
+/**
+ * @brief 设置查询loading值。
+ * @param loading 布尔参数 `loading`。
+ * @param text 字符串参数 `text`。
+ * @return 无返回值。
+ */
 void AddFriendDialog::setQueryLoading(bool loading, const QString &text) {
   m_queryLoading = loading;
   m_queryButton->setEnabled(!loading);
@@ -211,7 +244,12 @@ void AddFriendDialog::setQueryLoading(bool loading, const QString &text) {
   }
 }
 
-// 设置添加loading值。
+/**
+ * @brief 设置添加loading值。
+ * @param loading 布尔参数 `loading`。
+ * @param text 字符串参数 `text`。
+ * @return 无返回值。
+ */
 void AddFriendDialog::setAddLoading(bool loading, const QString &text) {
   m_addLoading = loading;
   const bool canAdd = !m_lastQueriedNumericId.isEmpty() && !isQueriedSelf() &&
@@ -225,7 +263,10 @@ void AddFriendDialog::setAddLoading(bool loading, const QString &text) {
   }
 }
 
-// 清理查询结果状态。
+/**
+ * @brief 清理查询结果状态。
+ * @return 无返回值。
+ */
 void AddFriendDialog::clearQueryResult() {
   m_lastQueriedNumericId.clear();
   m_lastQueriedAvatarUrl.clear();
@@ -242,7 +283,11 @@ void AddFriendDialog::clearQueryResult() {
   applyDefaultAvatar();
 }
 
-// 应用查询结果配置。
+/**
+ * @brief 应用查询结果配置。
+ * @param info 对象参数 `info`。
+ * @return 无返回值。
+ */
 void AddFriendDialog::applyQueryResult(const ProfileInfo &info) {
   m_lastProfile = info;
   m_lastQueriedNumericId = info.numericId.trimmed();
@@ -256,7 +301,10 @@ void AddFriendDialog::applyQueryResult(const ProfileInfo &info) {
   requestAvatar(info.avatarUrl);
 }
 
-// 判断queriedself条件是否满足。
+/**
+ * @brief 判断queriedself条件是否满足。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool AddFriendDialog::isQueriedSelf() const {
   const QString queriedNumericId = m_lastQueriedNumericId.trimmed();
   if (!queriedNumericId.isEmpty() &&
@@ -272,13 +320,21 @@ bool AddFriendDialog::isQueriedSelf() const {
   return false;
 }
 
-// 判断valid数字编号条件是否满足。
+/**
+ * @brief 判断valid数字编号条件是否满足。
+ * @param numericId 数字编号。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool AddFriendDialog::isValidNumericId(const QString &numericId) const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(numericId.trimmed()).hasMatch();
 }
 
-// 解析并确定查询错误消息结果。
+/**
+ * @brief 解析并确定查询错误消息结果。
+ * @param code 数值参数 `code`。
+ * @return 返回处理后的字符串结果。
+ */
 QString AddFriendDialog::resolveQueryErrorMessage(int code) const {
   if (code == 3001) {
     return QStringLiteral("用户不存在");
@@ -289,7 +345,11 @@ QString AddFriendDialog::resolveQueryErrorMessage(int code) const {
   return QStringLiteral("查询失败，请稍后重试");
 }
 
-// 解析并确定添加好友错误消息结果。
+/**
+ * @brief 解析并确定添加好友错误消息结果。
+ * @param code 数值参数 `code`。
+ * @return 返回处理后的字符串结果。
+ */
 QString AddFriendDialog::resolveAddFriendErrorMessage(int code) const {
   if (code == 3001) {
     return QStringLiteral("用户不存在");
@@ -306,7 +366,11 @@ QString AddFriendDialog::resolveAddFriendErrorMessage(int code) const {
   return QStringLiteral("添加好友失败，请稍后重试");
 }
 
-// 发起头像请求。
+/**
+ * @brief 发起头像请求。
+ * @param avatarUrl 头像地址或头像来源。
+ * @return 无返回值。
+ */
 void AddFriendDialog::requestAvatar(const QString &avatarUrl) {
   if (m_avatarReply) {
     m_avatarReply->abort();
@@ -327,7 +391,10 @@ void AddFriendDialog::requestAvatar(const QString &avatarUrl) {
           &AddFriendDialog::onAvatarReplyFinished);
 }
 
-// 应用默认头像配置。
+/**
+ * @brief 应用默认头像配置。
+ * @return 无返回值。
+ */
 void AddFriendDialog::applyDefaultAvatar() {
   QPixmap pixmap(m_avatarLabel->size());
   pixmap.fill(Qt::transparent);
@@ -346,7 +413,10 @@ void AddFriendDialog::applyDefaultAvatar() {
   m_avatarLabel->setPixmap(pixmap);
 }
 
-// 响应查询点击事件。
+/**
+ * @brief 响应查询点击事件。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onQueryClicked() {
   if (!m_profileApiClient || m_queryLoading || m_addLoading) {
     return;
@@ -363,7 +433,10 @@ void AddFriendDialog::onQueryClicked() {
   m_pendingQueryRequestId = m_profileApiClient->queryUserProfile(numericId);
 }
 
-// 响应添加好友点击事件。
+/**
+ * @brief 响应添加好友点击事件。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onAddFriendClicked() {
   if (!m_profileApiClient || m_addLoading || m_queryLoading) {
     return;
@@ -405,7 +478,12 @@ void AddFriendDialog::onAddFriendClicked() {
       m_profileApiClient->addFriend(userNumericId, friendNumericId, remark);
 }
 
-// 响应self资料信息接收事件。
+/**
+ * @brief 响应self资料信息接收事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param info 对象参数 `info`。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onSelfProfileInfoReceived(const QString &requestId,
                                                 const ProfileInfo &info) {
   if (requestId != m_pendingSelfProfileRequestId) {
@@ -426,7 +504,12 @@ void AddFriendDialog::onSelfProfileInfoReceived(const QString &requestId,
   }
 }
 
-// 响应user资料queried事件。
+/**
+ * @brief 响应user资料queried事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param info 对象参数 `info`。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onUserProfileQueried(const QString &requestId,
                                            const ProfileInfo &info) {
   if (requestId != m_pendingQueryRequestId) {
@@ -442,7 +525,12 @@ void AddFriendDialog::onUserProfileQueried(const QString &requestId,
   m_statusLabel->setText("查询成功");
 }
 
-// 响应添加好友成功事件。
+/**
+ * @brief 响应添加好友成功事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onAddFriendSuccess(const QString &requestId,
                                          const AddFriendResult &result) {
   if (requestId != m_pendingAddRequestId) {
@@ -460,7 +548,14 @@ void AddFriendDialog::onAddFriendSuccess(const QString &requestId,
   accept();
 }
 
-// 响应请求失败detailed事件。
+/**
+ * @brief 响应请求失败detailed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param code 数值参数 `code`。
+ * @param error 错误信息相关参数。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onRequestFailedDetailed(const QString &requestId,
                                               const QString &action, int code,
                                               const QString &error) {
@@ -499,7 +594,10 @@ void AddFriendDialog::onRequestFailedDetailed(const QString &requestId,
   }
 }
 
-// 响应头像回复完成事件。
+/**
+ * @brief 响应头像回复完成事件。
+ * @return 无返回值。
+ */
 void AddFriendDialog::onAvatarReplyFinished() {
   QNetworkReply *reply = m_avatarReply.data();
   m_avatarReply = nullptr;
@@ -541,4 +639,6 @@ void AddFriendDialog::onAvatarReplyFinished() {
 
   reply->deleteLater();
 }
+
+
 

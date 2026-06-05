@@ -58,7 +58,13 @@ public:
     Widget(QWidget *parent = nullptr);
     ~Widget();
     
-    // 设置当前登录用户信息的接口
+    /**
+     * @brief 设置当前登录用户信息的接口
+     * @param username 用户名。
+     * @param avatarPath 头像路径。
+     * @param signature 个性签名内容。
+     * @return 无返回值。
+     */
     void setUserInfo(const QString& username,
                      const QString& avatarPath = ":/resources/avatar.png",
                      const QString& signature = QString());
@@ -274,7 +280,11 @@ private:
     QString m_pendingMessageAckRequestId;
     bool m_pendingInitialConversationSync = false;
     
-    // Dragging support
+    /**
+     * @brief Dragging support
+     * @param item 数据项对象。
+     * @return 返回布尔结果。
+     */
     bool m_isDragging;
     QPoint m_dragPosition;
 
@@ -306,3 +316,5 @@ private slots:
                                 const DismissGroupResult &result);
 };
 #endif // WIDGET_H
+
+
