@@ -15,6 +15,7 @@ namespace {
 LogWindow *g_logWindow = nullptr;
 QtMessageHandler g_previousHandler = nullptr;
 
+// 实现 `messageTypeName` 的核心逻辑。
 QString messageTypeName(QtMsgType type) {
   switch (type) {
   case QtDebugMsg:
@@ -31,6 +32,7 @@ QString messageTypeName(QtMsgType type) {
   return "UNKNOWN";
 }
 
+// 实现 `forwardLogToWindow` 的核心逻辑。
 void forwardLogToWindow(const QString &line) {
   if (!g_logWindow)
     return;
@@ -44,6 +46,7 @@ void forwardLogToWindow(const QString &line) {
       Qt::QueuedConnection);
 }
 
+// 实现 `appMessageHandler` 的核心逻辑。
 void appMessageHandler(QtMsgType type, const QMessageLogContext &context,
                        const QString &message) {
   const QString timestamp = QDateTime::currentDateTime().toString("HH:mm:ss.zzz");

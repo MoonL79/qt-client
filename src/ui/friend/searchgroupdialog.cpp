@@ -14,6 +14,12 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
+/**
+ * @brief 构造并初始化SearchGroupDialog实例。
+ * @param profileApiClient 文件相关数据。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 SearchGroupDialog::SearchGroupDialog(ProfileApiClient *profileApiClient,
                                      QWidget *parent)
     : QDialog(parent), m_profileApiClient(profileApiClient) {
@@ -40,6 +46,10 @@ SearchGroupDialog::SearchGroupDialog(ProfileApiClient *profileApiClient,
           &SearchGroupDialog::onRequestFailedDetailed);
 }
 
+/**
+ * @brief 构建界面内容。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -83,6 +93,10 @@ void SearchGroupDialog::buildUi() {
           &SearchGroupDialog::onItemActivated);
 }
 
+/**
+ * @brief 响应搜索点击事件。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::onSearchClicked() {
   if (!m_profileApiClient || !m_keywordEdit || !m_pendingJoinRequestId.isEmpty()) {
     return;
@@ -104,6 +118,12 @@ void SearchGroupDialog::onSearchClicked() {
       m_profileApiClient->listGroups(keyword, keyword);
 }
 
+/**
+ * @brief 响应群组listed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param groups 群组相关数据。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::onGroupsListed(const QString &requestId,
                                        const QVector<GroupSearchItem> &groups) {
   if (requestId != m_pendingSearchRequestId) {
@@ -118,6 +138,12 @@ void SearchGroupDialog::onGroupsListed(const QString &requestId,
   renderGroups(groups);
 }
 
+/**
+ * @brief 响应加入群组succeeded事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::onJoinGroupSucceeded(const QString &requestId,
                                              const JoinGroupResult &result) {
   if (requestId != m_pendingJoinRequestId) {
@@ -161,6 +187,14 @@ void SearchGroupDialog::onJoinGroupSucceeded(const QString &requestId,
   accept();
 }
 
+/**
+ * @brief 响应请求失败detailed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param arg3 数值参数 `arg3`。
+ * @param error 错误信息相关参数。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                 const QString &action, int,
                                                 const QString &error) {
@@ -197,6 +231,11 @@ void SearchGroupDialog::onRequestFailedDetailed(const QString &requestId,
   QMessageBox::warning(this, QStringLiteral("搜索群聊失败"), m_statusLabel->text());
 }
 
+/**
+ * @brief 响应itemactivated事件。
+ * @param item 数据项对象。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::onItemActivated(QListWidgetItem *item) {
   if (!item) {
     return;
@@ -210,6 +249,10 @@ void SearchGroupDialog::onItemActivated(QListWidgetItem *item) {
   triggerGroupAction(index);
 }
 
+/**
+ * @brief 响应actionbutton点击事件。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::onActionButtonClicked() {
   const QObject *senderObject = sender();
   if (!senderObject) {
@@ -219,6 +262,11 @@ void SearchGroupDialog::onActionButtonClicked() {
   triggerGroupAction(index);
 }
 
+/**
+ * @brief 执行triggerGroupAction的核心逻辑。
+ * @param index 数值参数 `index`。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::triggerGroupAction(int index) {
   if (!m_profileApiClient || index < 0 || index >= m_groups.size()) {
     return;
@@ -252,6 +300,11 @@ void SearchGroupDialog::triggerGroupAction(int index) {
       group.groupNumericId.trimmed(), group.conversationId.trimmed());
 }
 
+/**
+ * @brief 执行renderGroups的核心逻辑。
+ * @param groups 群组相关数据。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::renderGroups(const QVector<GroupSearchItem> &groups) {
   m_groups = groups;
   m_resultListWidget->clear();
@@ -356,6 +409,11 @@ void SearchGroupDialog::renderGroups(const QVector<GroupSearchItem> &groups) {
   m_statusLabel->setText(QStringLiteral("搜索到 %1 个群聊结果").arg(groups.size()));
 }
 
+/**
+ * @brief 清理results状态。
+ * @param statusText 状态相关参数。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::clearResults(const QString &statusText) {
   m_groups.clear();
   if (m_resultListWidget) {
@@ -366,6 +424,12 @@ void SearchGroupDialog::clearResults(const QString &statusText) {
   }
 }
 
+/**
+ * @brief 设置加入loading值。
+ * @param loading 布尔参数 `loading`。
+ * @param index 数值参数 `index`。
+ * @return 无返回值。
+ */
 void SearchGroupDialog::setJoinLoading(bool loading, int index) {
   if (!m_resultListWidget) {
     return;
@@ -398,6 +462,12 @@ void SearchGroupDialog::setJoinLoading(bool loading, int index) {
   }
 }
 
+/**
+ * @brief 执行defaultGroupIcon的核心逻辑。
+ * @return 返回图标对象。
+ */
 QIcon SearchGroupDialog::defaultGroupIcon() const {
   return style() ? style()->standardIcon(QStyle::SP_DirIcon) : QIcon();
 }
+
+

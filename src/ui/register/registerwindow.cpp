@@ -23,6 +23,10 @@ constexpr int kRegisterTimeoutMs = 10000;
 constexpr int kRegisterWindowBaseWidth = 560;
 constexpr int kRegisterWindowExpandDelta = 100;
 
+/**
+ * @brief 解析并确定WebSocketurl结果。
+ * @return 返回解析得到的 URL 对象。
+ */
 QUrl resolveWebSocketUrl() {
   const QString urlFromEnv = qEnvironmentVariable(kWebSocketUrlEnv).trimmed();
   if (!urlFromEnv.isEmpty()) {
@@ -51,6 +55,12 @@ QUrl resolveWebSocketUrl() {
   return url;
 }
 
+/**
+ * @brief 判断当前注册响应条件是否满足。
+ * @param envelope 协议封装数据。
+ * @param pendingRequestId 请求 ID，用于关联本次业务操作。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isCurrentRegisterResponse(const protocol::Envelope &envelope,
                                const QString &pendingRequestId) {
   if (pendingRequestId.isEmpty()) {
@@ -77,6 +87,11 @@ bool isCurrentRegisterResponse(const protocol::Envelope &envelope,
          originalRequest.type == "AUTH" && originalRequest.action == "REGISTER";
 }
 
+/**
+ * @brief 提取响应消息信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractResponseMessage(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
   if (data.value("message").isString()) {
@@ -100,6 +115,11 @@ QString extractResponseMessage(const protocol::Envelope &envelope) {
   return QString();
 }
 
+/**
+ * @brief 判断注册成功条件是否满足。
+ * @param envelope 协议封装数据。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isRegisterSuccess(const protocol::Envelope &envelope) {
   if (!envelope.hasCode || envelope.code != 0) {
     return false;
@@ -108,6 +128,11 @@ bool isRegisterSuccess(const protocol::Envelope &envelope) {
 }
 } // namespace
 
+/**
+ * @brief 构造并初始化RegisterWindow实例。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 RegisterWindow::RegisterWindow(QWidget *parent)
     : QWidget(parent), ui(new Ui::RegisterWindow) {
   ui->setupUi(this);
@@ -147,8 +172,18 @@ RegisterWindow::RegisterWindow(QWidget *parent)
           &RegisterWindow::onWebSocketError);
 }
 
+/**
+ * @brief 析构 RegisterWindow 实例并释放相关资源。
+ * @return 无返回值。
+ */
 RegisterWindow::~RegisterWindow() { delete ui; }
 
+/**
+ * @brief 设置lineedit错误值。
+ * @param lineEdit 对象参数 `lineEdit`。
+ * @param hasError 错误信息相关参数。
+ * @return 无返回值。
+ */
 void RegisterWindow::setLineEditError(QLineEdit *lineEdit, bool hasError) {
   if (!lineEdit) {
     return;
@@ -159,6 +194,10 @@ void RegisterWindow::setLineEditError(QLineEdit *lineEdit, bool hasError) {
   lineEdit->update();
 }
 
+/**
+ * @brief 清理fielderrors状态。
+ * @return 无返回值。
+ */
 void RegisterWindow::clearFieldErrors() {
   setLineEditError(ui->usernameEdit, false);
   setLineEditError(ui->emailEdit, false);
@@ -168,11 +207,21 @@ void RegisterWindow::clearFieldErrors() {
   setLineEditError(ui->phoneEdit, false);
 }
 
+/**
+ * @brief 设置注册loading值。
+ * @param loading 布尔参数 `loading`。
+ * @param text 字符串参数 `text`。
+ * @return 无返回值。
+ */
 void RegisterWindow::setRegisterLoading(bool loading, const QString &text) {
   ui->registerButton->setEnabled(!loading);
   ui->registerButton->setText(text);
 }
 
+/**
+ * @brief 执行resetPendingState的核心逻辑。
+ * @return 无返回值。
+ */
 void RegisterWindow::resetPendingState() {
   m_isRegisterPending = false;
   m_pendingRegisterRequestId.clear();
@@ -180,6 +229,11 @@ void RegisterWindow::resetPendingState() {
   setRegisterLoading(false, "注 册");
 }
 
+/**
+ * @brief 应用normalizedinput配置。
+ * @param normalized 对象参数 `normalized`。
+ * @return 无返回值。
+ */
 void RegisterWindow::applyNormalizedInput(const auth::RegisterInput &normalized) {
   ui->usernameEdit->setText(normalized.username);
   ui->emailEdit->setText(normalized.email);
@@ -188,6 +242,10 @@ void RegisterWindow::applyNormalizedInput(const auth::RegisterInput &normalized)
   ui->phoneEdit->setText(normalized.phone);
 }
 
+/**
+ * @brief 发送注册请求数据。
+ * @return 无返回值。
+ */
 void RegisterWindow::sendRegisterRequest() {
   QString requestId;
   const QString payload = auth::createRegisterRequestPayload(
@@ -198,6 +256,10 @@ void RegisterWindow::sendRegisterRequest() {
   m_requestTimer.start();
 }
 
+/**
+ * @brief 响应注册点击事件。
+ * @return 无返回值。
+ */
 void RegisterWindow::onRegisterClicked() {
   clearFieldErrors();
 
@@ -264,10 +326,22 @@ void RegisterWindow::onRegisterClicked() {
   }
 }
 
+/**
+ * @brief 关闭close资源或连接。
+ * @return 无返回值。
+ */
 void RegisterWindow::onBackClicked() { close(); }
 
+/**
+ * @brief 关闭close资源或连接。
+ * @return 无返回值。
+ */
 void RegisterWindow::onCloseClicked() { close(); }
 
+/**
+ * @brief 响应WebSocket已连接事件。
+ * @return 无返回值。
+ */
 void RegisterWindow::onWebSocketConnected() {
   if (!m_isRegisterPending) {
     return;
@@ -275,6 +349,11 @@ void RegisterWindow::onWebSocketConnected() {
   sendRegisterRequest();
 }
 
+/**
+ * @brief 响应WebSocket文本消息事件。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void RegisterWindow::onWebSocketTextMessage(const QString &message) {
   if (!m_isRegisterPending || m_pendingRegisterRequestId.isEmpty()) {
     return;
@@ -332,6 +411,10 @@ void RegisterWindow::onWebSocketTextMessage(const QString &message) {
   QMessageBox::warning(this, "注册失败", displayMessage);
 }
 
+/**
+ * @brief 响应WebSocket已断开事件。
+ * @return 无返回值。
+ */
 void RegisterWindow::onWebSocketDisconnected() {
   if (!m_isRegisterPending) {
     return;
@@ -340,6 +423,12 @@ void RegisterWindow::onWebSocketDisconnected() {
   QMessageBox::warning(this, "连接断开", "连接已断开，请重试注册。");
 }
 
+/**
+ * @brief 响应WebSocket错误事件。
+ * @param arg1 输入参数 `arg1`。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void RegisterWindow::onWebSocketError(QAbstractSocket::SocketError,
                                       const QString &message) {
   if (!m_isRegisterPending) {
@@ -350,6 +439,10 @@ void RegisterWindow::onWebSocketError(QAbstractSocket::SocketError,
                        QStringLiteral("网络异常，请重试。%1").arg(message));
 }
 
+/**
+ * @brief 响应请求timeout事件。
+ * @return 无返回值。
+ */
 void RegisterWindow::onRequestTimeout() {
   if (!m_isRegisterPending) {
     return;
@@ -358,6 +451,11 @@ void RegisterWindow::onRequestTimeout() {
   QMessageBox::warning(this, "注册超时", "请求超时，请重试。");
 }
 
+/**
+ * @brief 执行paintEvent的核心逻辑。
+ * @param arg1 数值参数 `arg1`。
+ * @return 无返回值。
+ */
 void RegisterWindow::paintEvent(QPaintEvent *) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
@@ -368,6 +466,11 @@ void RegisterWindow::paintEvent(QPaintEvent *) {
   painter.drawPath(path);
 }
 
+/**
+ * @brief 执行mousePressEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void RegisterWindow::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = true;
@@ -376,6 +479,11 @@ void RegisterWindow::mousePressEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief 执行mouseMoveEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void RegisterWindow::mouseMoveEvent(QMouseEvent *event) {
   if (m_isDragging && (event->buttons() & Qt::LeftButton)) {
     move(event->globalPosition().toPoint() - m_dragPosition);
@@ -383,9 +491,18 @@ void RegisterWindow::mouseMoveEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief 执行mouseReleaseEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void RegisterWindow::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = false;
     event->accept();
   }
 }
+
+
+
+

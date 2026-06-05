@@ -16,6 +16,10 @@ private slots:
   void buildRegisterPayloadShouldMatchProtocol();
 };
 
+/**
+ * @brief 执行invalidUsernameShouldFail的核心逻辑。
+ * @return 无返回值。
+ */
 void RegisterUtilsTest::invalidUsernameShouldFail() {
   auth::RegisterInput input;
   input.username = "ab";
@@ -28,6 +32,10 @@ void RegisterUtilsTest::invalidUsernameShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("用户名")));
 }
 
+/**
+ * @brief 执行invalidEmailShouldFail的核心逻辑。
+ * @return 无返回值。
+ */
 void RegisterUtilsTest::invalidEmailShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -40,6 +48,10 @@ void RegisterUtilsTest::invalidEmailShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("邮箱")));
 }
 
+/**
+ * @brief 执行weakPasswordShouldFail的核心逻辑。
+ * @return 无返回值。
+ */
 void RegisterUtilsTest::weakPasswordShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -52,6 +64,10 @@ void RegisterUtilsTest::weakPasswordShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("密码")));
 }
 
+/**
+ * @brief 执行emptyNicknameShouldFail的核心逻辑。
+ * @return 无返回值。
+ */
 void RegisterUtilsTest::emptyNicknameShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -64,6 +80,10 @@ void RegisterUtilsTest::emptyNicknameShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("昵称")));
 }
 
+/**
+ * @brief 执行optionalFieldTooLongShouldFail的核心逻辑。
+ * @return 无返回值。
+ */
 void RegisterUtilsTest::optionalFieldTooLongShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -77,6 +97,10 @@ void RegisterUtilsTest::optionalFieldTooLongShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("简介")));
 }
 
+/**
+ * @brief 构建注册payloadshouldmatchprotocol内容。
+ * @return 无返回值。
+ */
 void RegisterUtilsTest::buildRegisterPayloadShouldMatchProtocol() {
   auth::RegisterInput input;
   input.username = " alice_01 ";
@@ -113,3 +137,5 @@ void RegisterUtilsTest::buildRegisterPayloadShouldMatchProtocol() {
 
 QTEST_MAIN(RegisterUtilsTest)
 #include "registerutils_test.moc"
+
+

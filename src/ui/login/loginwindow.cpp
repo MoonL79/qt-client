@@ -21,6 +21,10 @@ constexpr const char *kWebSocketPortEnv = "QT_SERVER_WS_PORT";
 constexpr const char *kDefaultWebSocketHost = "192.168.14.133";
 constexpr int kDefaultWebSocketPort = 12345;
 
+/**
+ * @brief 解析并确定WebSocketurl结果。
+ * @return 返回解析得到的 URL 对象。
+ */
 QUrl resolveWebSocketUrl() {
   const QString urlFromEnv = qEnvironmentVariable(kWebSocketUrlEnv).trimmed();
   if (!urlFromEnv.isEmpty()) {
@@ -49,6 +53,11 @@ QUrl resolveWebSocketUrl() {
   return url;
 }
 
+/**
+ * @brief 提取登录错误消息信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractLoginErrorMessage(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
 
@@ -92,18 +101,32 @@ QString extractLoginErrorMessage(const protocol::Envelope &envelope) {
   return QStringLiteral("登录失败，未返回错误详情");
 }
 
+/**
+ * @brief 判断当前登录响应条件是否满足。
+ * @param envelope 协议封装数据。
+ * @param pendingRequestId 请求 ID，用于关联本次业务操作。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isCurrentLoginResponse(const protocol::Envelope &envelope,
                             const QString &pendingRequestId) {
   if (pendingRequestId.isEmpty()) {
     return false;
   }
 
-  // Normal case: server echoes current request_id.
+  /**
+   * @brief   // Normal case: server echoes current request_id.
+   * @param arg1 输入参数 `arg1`。
+   * @return 无返回值。
+   */
   if (envelope.requestId == pendingRequestId) {
     return true;
   }
 
-  // Some error packets may not carry request_id and only include received_payload.
+  /**
+   * @brief   // Some error packets may not carry request_id and only include received_payload.
+   * @param arg1 输入参数 `arg1`。
+   * @return 无返回值。
+   */
   if (!envelope.requestId.isEmpty()) {
     return false;
   }
@@ -122,6 +145,11 @@ bool isCurrentLoginResponse(const protocol::Envelope &envelope,
          originalRequest.type == "AUTH" && originalRequest.action == "LOGIN";
 }
 
+/**
+ * @brief 判断登录成功条件是否满足。
+ * @param envelope 协议封装数据。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isLoginSuccess(const protocol::Envelope &envelope) {
   if (envelope.hasCode) {
     return envelope.code == 0;
@@ -130,6 +158,11 @@ bool isLoginSuccess(const protocol::Envelope &envelope) {
   return envelope.data.value("ok").toBool(false);
 }
 
+/**
+ * @brief 执行toUnsignedString的核心逻辑。
+ * @param value 待处理的值。
+ * @return 返回处理后的字符串结果。
+ */
 QString toUnsignedString(const QJsonValue &value) {
   if (value.isString()) {
     const QString s = value.toString().trimmed();
@@ -147,6 +180,11 @@ QString toUnsignedString(const QJsonValue &value) {
   return QString();
 }
 
+/**
+ * @brief 提取登录user编号信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractLoginUserId(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
 
@@ -182,6 +220,11 @@ QString extractLoginUserId(const protocol::Envelope &envelope) {
   return QString();
 }
 
+/**
+ * @brief 提取登录数字编号信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractLoginNumericId(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
 
@@ -199,6 +242,12 @@ QString extractLoginNumericId(const protocol::Envelope &envelope) {
   return QString();
 }
 
+/**
+ * @brief 提取登录username信息。
+ * @param envelope 协议封装数据。
+ * @param fallback 字符串参数 `fallback`。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractLoginUsername(const protocol::Envelope &envelope,
                              const QString &fallback) {
   const QJsonObject &data = envelope.data;
@@ -226,32 +275,67 @@ QString extractLoginUsername(const protocol::Envelope &envelope,
   return fallback;
 }
 
+/**
+ * @brief 提取上传令牌信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractUploadToken(const protocol::Envelope &envelope) {
   return envelope.data.value("upload_token").toString().trimmed();
 }
 
+/**
+ * @brief 提取上传令牌类型信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractUploadTokenType(const protocol::Envelope &envelope) {
   return envelope.data.value("upload_token_type").toString().trimmed();
 }
 
+/**
+ * @brief 提取上传令牌expiresat信息。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString extractUploadTokenExpiresAt(const protocol::Envelope &envelope) {
   return envelope.data.value("upload_token_expires_at").toString().trimmed();
 }
 }
 
+/**
+ * @brief 构造并初始化LoginWindow实例。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent), ui(new Ui::LoginWindow), m_isDragging(false) {
   ui->setupUi(this);
 
-  // 设置窗口标题和大小
+  /**
+   * @brief 设置窗口标题和大小
+   * @param arg1 输入参数 `arg1`。
+   * @return 无返回值。
+   */
   setWindowTitle("登录 - IM聊天软件");
   setFixedSize(400, 500);
 
-  // 设置无边框窗口
+  /**
+   * @brief 设置无边框窗口
+   * @param arg1 数值参数 `arg1`。
+   * @return 无返回值。
+   */
   setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
   setAttribute(Qt::WA_TranslucentBackground);
 
-  // 连接信号槽
+  /**
+   * @brief 连接信号槽
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 对象参数 `arg2`。
+   * @param arg3 输入参数 `arg3`。
+   * @param arg4 对象参数 `arg4`。
+   * @return 无返回值。
+   */
   connect(ui->loginButton, &QPushButton::clicked, this,
           &LoginWindow::onLoginClicked);
   connect(ui->usernameEdit, &QLineEdit::returnPressed, ui->loginButton,
@@ -271,12 +355,24 @@ LoginWindow::LoginWindow(QWidget *parent)
   connect(ws, &websocketclient::errorOccurred, this,
           &LoginWindow::onWebSocketError);
 
-  // 设置密码框为密码模式
+  /**
+   * @brief 设置密码框为密码模式
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 ui->passwordEdit-> 结果。
+   */
   ui->passwordEdit->setEchoMode(QLineEdit::Password);
 }
 
+/**
+ * @brief 析构 LoginWindow 实例并释放相关资源。
+ * @return 无返回值。
+ */
 LoginWindow::~LoginWindow() { delete ui; }
 
+/**
+ * @brief 执行resetLoginForm的核心逻辑。
+ * @return 无返回值。
+ */
 void LoginWindow::resetLoginForm() {
   m_isLoginPending = false;
   m_pendingUsername.clear();
@@ -290,21 +386,40 @@ void LoginWindow::resetLoginForm() {
   ui->usernameEdit->setFocus();
 }
 
+/**
+ * @brief 执行paintEvent的核心逻辑。
+ * @param event 数值参数 `event`。
+ * @return 无返回值。
+ */
 void LoginWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
 
-  // 绘制圆角矩形背景
+  /**
+   * @brief 绘制圆角矩形背景
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @param arg3 输入参数 `arg3`。
+   * @return 返回计算得到的数值结果。
+   */
   QPainterPath path;
   path.addRoundedRect(rect(), 20, 20);
 
   painter.fillPath(path, QColor("#f5f5f5"));
 
-  // 绘制边框（可选）
+  /**
+   * @brief 绘制边框（可选）
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回计算得到的数值结果。
+   */
   painter.setPen(QPen(QColor("#d9d9d9"), 1));
   painter.drawPath(path);
 }
 
+/**
+ * @brief 响应登录点击事件。
+ * @return 无返回值。
+ */
 void LoginWindow::onLoginClicked() {
   QString username = ui->usernameEdit->text().trimmed();
   const QString password = ui->passwordEdit->text();
@@ -340,6 +455,10 @@ void LoginWindow::onLoginClicked() {
   }
 }
 
+/**
+ * @brief 响应注册点击事件。
+ * @return 无返回值。
+ */
 void LoginWindow::onRegisterClicked() {
   if (!m_registerWindow) {
     m_registerWindow = new RegisterWindow(nullptr);
@@ -365,8 +484,16 @@ void LoginWindow::onRegisterClicked() {
   m_registerWindow->activateWindow();
 }
 
+/**
+ * @brief 关闭close资源或连接。
+ * @return 无返回值。
+ */
 void LoginWindow::onCloseClicked() { close(); }
 
+/**
+ * @brief 响应WebSocket已连接事件。
+ * @return 无返回值。
+ */
 void LoginWindow::onWebSocketConnected() {
   if (!m_isLoginPending)
     return;
@@ -383,6 +510,11 @@ void LoginWindow::onWebSocketConnected() {
   ui->loginButton->setText("登录中...");
 }
 
+/**
+ * @brief 响应WebSocket文本消息事件。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void LoginWindow::onWebSocketTextMessage(const QString &message) {
   if (!m_isLoginPending || m_pendingLoginRequestId.isEmpty())
     return;
@@ -481,6 +613,12 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
   QMessageBox::warning(this, "登录失败", responseMessage);
 }
 
+/**
+ * @brief 响应WebSocket错误事件。
+ * @param arg1 输入参数 `arg1`。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void LoginWindow::onWebSocketError(QAbstractSocket::SocketError,
                                    const QString &message) {
   qWarning() << "WebSocket error during login:" << message;
@@ -492,6 +630,11 @@ void LoginWindow::onWebSocketError(QAbstractSocket::SocketError,
   QMessageBox::warning(this, "连接失败", message);
 }
 
+/**
+ * @brief 执行mousePressEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void LoginWindow::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = true;
@@ -501,6 +644,11 @@ void LoginWindow::mousePressEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief 执行mouseMoveEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void LoginWindow::mouseMoveEvent(QMouseEvent *event) {
   if (m_isDragging && (event->buttons() & Qt::LeftButton)) {
     move(event->globalPosition().toPoint() - m_dragPosition);
@@ -508,9 +656,17 @@ void LoginWindow::mouseMoveEvent(QMouseEvent *event) {
   }
 }
 
+/**
+ * @brief 执行mouseReleaseEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void LoginWindow::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = false;
     event->accept();
   }
 }
+
+
+

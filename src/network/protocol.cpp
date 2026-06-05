@@ -6,6 +6,14 @@
 
 namespace protocol {
 
+/**
+ * @brief 创建请求对象或数据。
+ * @param type 字符串参数 `type`。
+ * @param action 字符串参数 `action`。
+ * @param data 请求或响应数据对象。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @return 返回处理后的字符串结果。
+ */
 QString createRequest(const QString &type, const QString &action,
                       const QJsonObject &data, const QString &requestId) {
   QJsonObject envelope;
@@ -19,6 +27,13 @@ QString createRequest(const QString &type, const QString &action,
   return QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
 }
 
+/**
+ * @brief 解析envelope并生成内部结果。
+ * @param payload 原始载荷字符串。
+ * @param outEnvelope 输出参数 `outEnvelope`，用于承接函数处理结果。
+ * @param errorMessage 错误信息输出参数。
+ * @return 返回本次处理是否成功。
+ */
 bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
                    QString *errorMessage) {
   if (!outEnvelope) {
@@ -84,3 +99,6 @@ bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
 }
 
 } // namespace protocol
+
+
+

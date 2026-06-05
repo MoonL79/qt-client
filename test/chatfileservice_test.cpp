@@ -13,6 +13,10 @@ private slots:
   void parseFileMessage_rejectsTextMessage();
 };
 
+/**
+ * @brief 解析登录结果reads聊天文件上传令牌并生成内部结果。
+ * @return 无返回值。
+ */
 void ChatFileServiceTest::parseLoginResult_readsChatFileUploadToken() {
   protocol::Envelope envelope;
   envelope.type = QStringLiteral("AUTH");
@@ -49,6 +53,10 @@ void ChatFileServiceTest::parseLoginResult_readsChatFileUploadToken() {
            QStringLiteral("2026-03-24T12:00:00Z"));
 }
 
+/**
+ * @brief 解析文件消息accepts文件消息并生成内部结果。
+ * @return 无返回值。
+ */
 void ChatFileServiceTest::parseFileMessage_acceptsFileMessage() {
   ChatFileService service(nullptr);
   protocol::Envelope envelope;
@@ -80,6 +88,10 @@ void ChatFileServiceTest::parseFileMessage_acceptsFileMessage() {
   QCOMPARE(message.file.originalName, QStringLiteral("demo.txt"));
 }
 
+/**
+ * @brief 解析文件消息rejects文本消息并生成内部结果。
+ * @return 无返回值。
+ */
 void ChatFileServiceTest::parseFileMessage_rejectsTextMessage() {
   ChatFileService service(nullptr);
   protocol::Envelope envelope;

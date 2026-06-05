@@ -48,11 +48,20 @@ constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
 constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
 constexpr const char *kDefaultServerHost = "192.168.14.133";
 
+/**
+ * @brief 判断loopbackhost条件是否满足。
+ * @param host 主机地址字符串。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isLoopbackHost(const QString &host) {
   const QString lower = host.trimmed().toLower();
   return lower == "127.0.0.1" || lower == "localhost" || lower == "::1";
 }
 
+/**
+ * @brief 解析并确定serverhost结果。
+ * @return 返回处理后的字符串结果。
+ */
 QString resolveServerHost() {
   QString host = qEnvironmentVariable(kStaticHostEnv).trimmed();
   if (host.isEmpty()) {
@@ -70,6 +79,11 @@ QString resolveServerHost() {
   return host;
 }
 
+/**
+ * @brief 生成好友状态显示文本。
+ * @param status 状态值。
+ * @return 返回处理后的字符串结果。
+ */
 QString friendStatusText(int status) {
   switch (status) {
   case 1:
@@ -81,10 +95,21 @@ QString friendStatusText(int status) {
   }
 }
 
+/**
+ * @brief 生成好友在线显示文本。
+ * @param isOnline 在线状态标记。
+ * @return 返回处理后的字符串结果。
+ */
 QString friendOnlineText(bool isOnline) {
   return isOnline ? QStringLiteral("在线") : QStringLiteral("离线");
 }
 
+/**
+ * @brief 生成好友在线状态显示文本。
+ * @param isOnline 在线状态标记。
+ * @param lastSeenAtUtc 最近在线时间字符串。
+ * @return 返回处理后的字符串结果。
+ */
 QString friendPresenceText(bool isOnline, const QString &lastSeenAtUtc) {
   if (isOnline) {
     return QStringLiteral("在线");
@@ -112,12 +137,22 @@ constexpr int kTransferRoleConversationId = Qt::UserRole + 100;
 constexpr int kTransferRoleConversationName = Qt::UserRole + 101;
 constexpr int kTransferRoleConversationType = Qt::UserRole + 102;
 
+/**
+ * @brief 生成文件预览显示文本。
+ * @param originalName 字符串参数 `originalName`。
+ * @return 返回处理后的字符串结果。
+ */
 QString filePreviewText(const QString &originalName) {
   const QString trimmed = originalName.trimmed();
   return trimmed.isEmpty() ? QStringLiteral("[文件]") :
                              QStringLiteral("[文件] %1").arg(trimmed);
 }
 
+/**
+ * @brief 执行uniqueDownloadSavePath的核心逻辑。
+ * @param preferredPath 路径相关参数。
+ * @return 返回处理后的字符串结果。
+ */
 QString uniqueDownloadSavePath(const QString &preferredPath) {
   QFileInfo preferredInfo(preferredPath);
   const QString directoryPath =
@@ -154,6 +189,11 @@ QString uniqueDownloadSavePath(const QString &preferredPath) {
                          suffix.isEmpty() ? QString() : QStringLiteral(".%1").arg(suffix)));
 }
 
+/**
+ * @brief 执行topPanelStyleSheetForColor的核心逻辑。
+ * @param color 颜色值。
+ * @return 返回处理后的字符串结果。
+ */
 QString topPanelStyleSheetForColor(const QColor &color) {
   const QColor resolved = color.isValid() ? color : QColor(QStringLiteral("#ffffff"));
   const QColor border = resolved.darker(112);
@@ -163,6 +203,11 @@ QString topPanelStyleSheetForColor(const QColor &color) {
       .arg(resolved.name(QColor::HexRgb), border.name(QColor::HexRgb));
 }
 
+/**
+ * @brief 执行listWidgetStyleSheetForColor的核心逻辑。
+ * @param color 颜色值。
+ * @return 返回处理后的字符串结果。
+ */
 QString listWidgetStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
   const QColor selected = accent.lighter(145);
@@ -184,6 +229,11 @@ QString listWidgetStyleSheetForColor(const QColor &color) {
       .arg(selected.name(QColor::HexRgb), hover.name(QColor::HexRgb));
 }
 
+/**
+ * @brief 执行mainTabsStyleSheetForColor的核心逻辑。
+ * @param color 颜色值。
+ * @return 返回处理后的字符串结果。
+ */
 QString mainTabsStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
   const QColor selected = accent.lighter(150);
@@ -211,6 +261,10 @@ QString topButtonStyleSheetForColor(const QColor &color, bool closeButton = fals
                        : QStringLiteral(""));
 }
 
+/**
+ * @brief 执行minButtonStyleSheet的核心逻辑。
+ * @return 返回处理后的字符串结果。
+ */
 QString minButtonStyleSheet() {
   return QStringLiteral(
       "QPushButton { border: none; font-weight: bold; color: #374151; font-size: 16px; "
@@ -218,6 +272,11 @@ QString minButtonStyleSheet() {
       "QPushButton:hover { background-color: #eef2f7; color: #111827; border-radius: 6px; }");
 }
 
+/**
+ * @brief 执行quickActionButtonStyleSheetForColor的核心逻辑。
+ * @param color 颜色值。
+ * @return 返回处理后的字符串结果。
+ */
 QString quickActionButtonStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
   const QColor border = accent.darker(110);
@@ -231,6 +290,11 @@ QString quickActionButtonStyleSheetForColor(const QColor &color) {
            hover.name(QColor::HexRgb));
 }
 
+/**
+ * @brief 执行quickActionMenuStyleSheetForColor的核心逻辑。
+ * @param color 颜色值。
+ * @return 返回处理后的字符串结果。
+ */
 QString quickActionMenuStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#4a90e2"));
   return QStringLiteral(
@@ -241,6 +305,11 @@ QString quickActionMenuStyleSheetForColor(const QColor &color) {
 }
 }
 
+/**
+ * @brief 构造并初始化Widget实例。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 Widget::Widget(QWidget *parent)
     : QWidget(parent), ui(new Ui::Widget), m_topPanelThemeColor(QStringLiteral("#ffffff")),
       m_isDragging(false) {
@@ -460,11 +529,19 @@ Widget::Widget(QWidget *parent)
           });
 }
 
+/**
+ * @brief 析构 Widget 实例并释放相关资源。
+ * @return 无返回值。
+ */
 Widget::~Widget() {
   delete m_localChatStore;
   delete ui;
 }
 
+/**
+ * @brief 初始化界面依赖与状态。
+ * @return 无返回值。
+ */
 void Widget::initUI() {
   this->resize(300, 700);
   this->setMinimumSize(280, 500);  // 设置最小尺寸，保证内容不被过度压缩
@@ -478,15 +555,27 @@ void Widget::initUI() {
   this->setAttribute(
       Qt::WA_TranslucentBackground); // 可选：背景透明支持（如果需要圆角）
 
-  // 主布局
+  /**
+   * @brief 主布局
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 QVBoxLayout mainLayout = new 结果。
+   */
   QVBoxLayout *mainLayout = new QVBoxLayout(this);
   mainLayout->setContentsMargins(0, 0, 0, 0); // 确保没有 margin
   mainLayout->setSpacing(0);
 
-  // 整体背景容器 (因为 WA_TranslucentBackground 可能会导致全透明，需要一个底板)
+  /**
+   * @brief 整体背景容器 (因为 WA_TranslucentBackground 可能会导致全透明，需要一个底板)
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回处理得到的对象指针。
+   */
   QWidget *container = new QWidget(this);
   container->setObjectName("MainContainer");
-  // 1. 容器底色设为浅灰 (#f0f2f5)
+  /**
+   * @brief 1. 容器底色设为浅灰 (#f0f2f5)
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 container-> 结果。
+   */
   container->setStyleSheet("#MainContainer { background-color: #f0f2f5; "
                            "border: 1px solid #dcdcdc; border-radius: 8px; }");
   mainLayout->addWidget(container);
@@ -495,10 +584,18 @@ void Widget::initUI() {
   containerLayout->setContentsMargins(0, 0, 0, 0);
   containerLayout->setSpacing(0);
 
-  // --- 上部：用户个人信息展示 ---
+  /**
+   * @brief --- 上部：用户个人信息展示 ---
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 m_topPanel = new 结果。
+   */
   m_topPanel = new QWidget(container);
   m_topPanel->setFixedHeight(120);
-  // 2. 顶部面板保持白色，以便与灰色的底板区分
+  /**
+   * @brief 2. 顶部面板保持白色，以便与灰色的底板区分
+   * @param arg1 输入参数 `arg1`。
+   * @return 无返回值。
+   */
   applyTopPanelThemeColor(m_topPanelThemeColor);
 
   QHBoxLayout *mainTopLayout = new QHBoxLayout(m_topPanel);
@@ -507,7 +604,11 @@ void Widget::initUI() {
   QHBoxLayout *leftContentLayout = new QHBoxLayout();
   leftContentLayout->setContentsMargins(20, 20, 20, 20);
 
-  // 头像 (简单模拟)
+  /**
+   * @brief 头像 (简单模拟)
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 m_avatarLabel = new 结果。
+   */
   m_avatarLabel = new QLabel(m_topPanel);
   m_avatarLabel->setFixedSize(60, 60);
   m_avatarLabel->setStyleSheet(
@@ -515,7 +616,12 @@ void Widget::initUI() {
       "font-weight: bold; qproperty-alignment: AlignCenter; border: none;");
   m_avatarLabel->setText("User"); // 默认文字
 
-  // 用户名
+  /**
+   * @brief 用户名
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @return 返回 m_nameLabel = new 结果。
+   */
   m_nameLabel = new QLabel("Username", m_topPanel);
   m_nameLabel->setStyleSheet(
       "font-size: 18px; font-weight: bold; color: #333; border: none;");
@@ -551,7 +657,12 @@ void Widget::initUI() {
   btnRowLayout->setContentsMargins(0, 0, 0, 0);
   btnRowLayout->setSpacing(0);
 
-  // 设置、最小化和关闭按钮
+  /**
+   * @brief 设置、最小化和关闭按钮
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @return 返回 m_settingsButton = new 结果。
+   */
   m_settingsButton = new QPushButton("设", m_topPanel);
   m_minButton = new QPushButton("-", m_topPanel);
   m_closeButton = new QPushButton("x", m_topPanel);
@@ -611,7 +722,12 @@ void Widget::initUI() {
   rightBtnLayout->addLayout(quickActionLayout);
   mainTopLayout->addLayout(rightBtnLayout);
 
-  // 样式：悬浮时背景变灰/红
+  /**
+   * @brief 样式：悬浮时背景变灰/红
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @return 返回 m_settingsButton-> 结果。
+   */
   m_settingsButton->setFixedSize(40, 30);
   m_settingsButton->setCursor(Qt::ArrowCursor);
   m_minButton->setFixedSize(40, 30);
@@ -623,7 +739,11 @@ void Widget::initUI() {
   connect(m_minButton, &QPushButton::clicked, this, &QWidget::showMinimized);
   connect(m_closeButton, &QPushButton::clicked, this, &QWidget::close);
 
-  // --- 中下部：标签页 ---
+  /**
+   * @brief --- 中下部：标签页 ---
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 m_tabWidget = new 结果。
+   */
   m_tabWidget = new QTabWidget(container);
   m_tabWidget->setDocumentMode(true);
   m_tabWidget->tabBar()->setExpanding(true);
@@ -647,7 +767,11 @@ void Widget::initUI() {
   m_tabWidget->addTab(m_contactList, QStringLiteral("联系人"));
   m_tabWidget->addTab(m_groupList, QStringLiteral("群聊"));
 
-  // 添加到容器布局
+  /**
+   * @brief 添加到容器布局
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回 containerLayout-> 结果。
+   */
   containerLayout->addWidget(m_topPanel);
   containerLayout->addWidget(m_tabWidget);
 
@@ -668,6 +792,10 @@ void Widget::initUI() {
   applyMainThemeColor(m_topPanelThemeColor);
 }
 
+/**
+ * @brief 初始化头像HTTPclient依赖与状态。
+ * @return 无返回值。
+ */
 void Widget::initAvatarHttpClient() {
   if (m_avatarNetworkManager) {
     return;
@@ -687,6 +815,11 @@ void Widget::initAvatarHttpClient() {
           &Widget::onAvatarReplyFinished);
 }
 
+/**
+ * @brief 解析并确定头像url结果。
+ * @param avatarUrl 头像地址或头像来源。
+ * @return 返回解析得到的 URL 对象。
+ */
 QUrl Widget::resolveAvatarUrl(const QString &avatarUrl) const {
   const QString trimmed = avatarUrl.trimmed();
   if (trimmed.isEmpty()) {
@@ -706,7 +839,11 @@ QUrl Widget::resolveAvatarUrl(const QString &avatarUrl) const {
 
   QString staticPath = trimmed;
   if (staticPath.startsWith("/static/")) {
-    // Use as-is.
+    /**
+     * @brief Use as-is.
+     * @param arg1 输入参数 `arg1`。
+     * @return 返回 } else 结果。
+     */
   } else if (staticPath.startsWith("static/")) {
     staticPath.prepend('/');
   } else {
@@ -729,6 +866,11 @@ QUrl Widget::resolveAvatarUrl(const QString &avatarUrl) const {
   return url;
 }
 
+/**
+ * @brief 发起头像image请求。
+ * @param avatarUrl 头像地址或头像来源。
+ * @return 无返回值。
+ */
 void Widget::requestAvatarImage(const QString &avatarUrl) {
   if (!m_avatarNetworkManager) {
     applyDefaultAvatar();
@@ -754,6 +896,11 @@ void Widget::requestAvatarImage(const QString &avatarUrl) {
   reply->setProperty("requested_avatar_url", avatarUrl.trimmed());
 }
 
+/**
+ * @brief 应用头像pixmap配置。
+ * @param pixmap 位图对象。
+ * @return 无返回值。
+ */
 void Widget::applyAvatarPixmap(const QPixmap &pixmap) {
   if (pixmap.isNull() || !m_avatarLabel) {
     applyDefaultAvatar();
@@ -780,6 +927,10 @@ void Widget::applyAvatarPixmap(const QPixmap &pixmap) {
   m_avatarLabel->setText(QString());
 }
 
+/**
+ * @brief 应用默认头像配置。
+ * @return 无返回值。
+ */
 void Widget::applyDefaultAvatar() {
   if (!m_avatarLabel) {
     return;
@@ -792,6 +943,13 @@ void Widget::applyDefaultAvatar() {
   }
 }
 
+/**
+ * @brief 设置user信息值。
+ * @param username 用户名。
+ * @param avatarPath 头像路径。
+ * @param signature 个性签名内容。
+ * @return 无返回值。
+ */
 void Widget::setUserInfo(const QString &username, const QString &avatarPath,
                          const QString &signature) {
   m_currentDisplayName = username;
@@ -807,6 +965,11 @@ void Widget::setUserInfo(const QString &username, const QString &avatarPath,
   requestAvatarImage(m_currentAvatarUrl);
 }
 
+/**
+ * @brief 应用toppanel主题颜色配置。
+ * @param color 颜色值。
+ * @return 无返回值。
+ */
 void Widget::applyTopPanelThemeColor(const QColor &color) {
   m_topPanelThemeColor = color.isValid() ? color : QColor(QStringLiteral("#ffffff"));
   if (m_topPanel) {
@@ -814,6 +977,11 @@ void Widget::applyTopPanelThemeColor(const QColor &color) {
   }
 }
 
+/**
+ * @brief 应用main主题颜色配置。
+ * @param color 颜色值。
+ * @return 无返回值。
+ */
 void Widget::applyMainThemeColor(const QColor &color) {
   applyTopPanelThemeColor(color);
   if (m_settingsButton) {
@@ -846,6 +1014,11 @@ void Widget::applyMainThemeColor(const QColor &color) {
   }
 }
 
+/**
+ * @brief 设置当前user编号值。
+ * @param userId 用户 ID。
+ * @return 无返回值。
+ */
 void Widget::setCurrentUserId(const QString &userId) {
   const QString previousUserId = m_currentUserId;
   m_currentUserId = userId.trimmed();
@@ -871,6 +1044,11 @@ void Widget::setCurrentUserId(const QString &userId) {
   }
 }
 
+/**
+ * @brief 设置当前user数字编号值。
+ * @param numericId 数字编号。
+ * @return 无返回值。
+ */
 void Widget::setCurrentUserNumericId(const QString &numericId) {
   m_currentUserNumericId = numericId.trimmed();
   if (!m_currentUserNumericId.isEmpty()) {
@@ -887,6 +1065,11 @@ void Widget::setCurrentUserNumericId(const QString &numericId) {
   requestFriendListForContacts();
 }
 
+/**
+ * @brief 设置资料apiclient值。
+ * @param profileApiClient 文件相关数据。
+ * @return 无返回值。
+ */
 void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
   m_profileApiClient = profileApiClient;
   if (!m_profileApiClient) {
@@ -916,6 +1099,10 @@ void Widget::setProfileApiClient(ProfileApiClient *profileApiClient) {
   requestFriendListForContacts();
 }
 
+/**
+ * @brief 执行scheduleInitialConversationSync的核心逻辑。
+ * @return 无返回值。
+ */
 void Widget::scheduleInitialConversationSync() {
   if (m_currentUserNumericId.trimmed().isEmpty() &&
       UserSession::instance().numericId().trimmed().isEmpty()) {
@@ -924,6 +1111,10 @@ void Widget::scheduleInitialConversationSync() {
   m_pendingInitialConversationSync = true;
 }
 
+/**
+ * @brief 执行beginInitialConversationSyncIfNeeded的核心逻辑。
+ * @return 无返回值。
+ */
 void Widget::beginInitialConversationSyncIfNeeded() {
   if (!m_pendingInitialConversationSync) {
     return;
@@ -945,6 +1136,14 @@ void Widget::beginInitialConversationSyncIfNeeded() {
   startNextConversationSyncTask();
 }
 
+/**
+ * @brief 执行enqueueConversationSyncTask的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @param serverLastSeq 数值参数 `serverLastSeq`。
+ * @param onDemand 布尔参数 `onDemand`。
+ * @param prioritize 布尔参数 `prioritize`。
+ * @return 无返回值。
+ */
 void Widget::enqueueConversationSyncTask(const QString &conversationId,
                                          qint64 serverLastSeq, bool onDemand,
                                          bool prioritize) {
@@ -981,6 +1180,10 @@ void Widget::enqueueConversationSyncTask(const QString &conversationId,
   m_queuedConversationSyncIds.insert(trimmedConversationId);
 }
 
+/**
+ * @brief 启动next会话同步task流程。
+ * @return 无返回值。
+ */
 void Widget::startNextConversationSyncTask() {
   if (!m_messageSyncClient || !m_localChatStore ||
       !m_pendingMessagePullRequestId.isEmpty() ||
@@ -1015,6 +1218,14 @@ void Widget::startNextConversationSyncTask() {
   beginInitialConversationSyncIfNeeded();
 }
 
+/**
+ * @brief 启动会话拉取流程。
+ * @param conversationId 会话 ID。
+ * @param afterSeq 数值参数 `afterSeq`。
+ * @param serverLastSeq 数值参数 `serverLastSeq`。
+ * @param onDemand 布尔参数 `onDemand`。
+ * @return 无返回值。
+ */
 void Widget::startConversationPull(const QString &conversationId, qint64 afterSeq,
                                    qint64 serverLastSeq, bool onDemand) {
   if (!m_messageSyncClient || !websocketclient::instance()->isConnected()) {
@@ -1031,6 +1242,10 @@ void Widget::startConversationPull(const QString &conversationId, qint64 afterSe
                                         m_activeConversationSync.localLastSeq, 100);
 }
 
+/**
+ * @brief 继续执行active会话同步流程。
+ * @return 无返回值。
+ */
 void Widget::continueActiveConversationSync() {
   if (!m_activeConversationSync.isActive()) {
     startNextConversationSyncTask();
@@ -1043,6 +1258,10 @@ void Widget::continueActiveConversationSync() {
                         m_activeConversationSync.onDemand);
 }
 
+/**
+ * @brief 完成active会话同步收尾处理。
+ * @return 无返回值。
+ */
 void Widget::finalizeActiveConversationSync() {
   m_activeConversationSync.clear();
   if (!m_pendingMessagePullRequestId.isEmpty() ||
@@ -1055,6 +1274,11 @@ void Widget::finalizeActiveConversationSync() {
   startNextConversationSyncTask();
 }
 
+/**
+ * @brief 发起会话incremental同步请求。
+ * @param conversationId 会话 ID。
+ * @return 无返回值。
+ */
 void Widget::requestConversationIncrementalSync(const QString &conversationId) {
   const QString trimmedConversationId = conversationId.trimmed();
   if (trimmedConversationId.isEmpty() || !m_messageSyncClient || !m_localChatStore) {
@@ -1066,6 +1290,11 @@ void Widget::requestConversationIncrementalSync(const QString &conversationId) {
   startNextConversationSyncTask();
 }
 
+/**
+ * @brief 执行serverLastSeqForConversation的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @return 返回计算得到的数值结果。
+ */
 qint64 Widget::serverLastSeqForConversation(const QString &conversationId) const {
   const QString trimmedConversationId = conversationId.trimmed();
   for (const conversationlist::ConversationItem &conversation :
@@ -1077,6 +1306,12 @@ qint64 Widget::serverLastSeqForConversation(const QString &conversationId) const
   return 0;
 }
 
+/**
+ * @brief 执行storeAndRouteMessage的核心逻辑。
+ * @param message 消息对象或消息内容。
+ * @param incrementUnread 布尔参数 `incrementUnread`。
+ * @return 返回布尔结果。
+ */
 bool Widget::storeAndRouteMessage(const ChatMessage &message, bool incrementUnread) {
   if (!message.isValid()) {
     return false;
@@ -1103,6 +1338,12 @@ bool Widget::storeAndRouteMessage(const ChatMessage &message, bool incrementUnre
   return stored;
 }
 
+/**
+ * @brief 更新会话状态from消息状态。
+ * @param message 消息对象或消息内容。
+ * @param incrementUnread 布尔参数 `incrementUnread`。
+ * @return 无返回值。
+ */
 void Widget::updateConversationStateFromMessage(const ChatMessage &message,
                                                 bool incrementUnread) {
   const QString conversationId = message.conversationId.trimmed();
@@ -1176,6 +1417,11 @@ void Widget::updateConversationStateFromMessage(const ChatMessage &message,
   }
 }
 
+/**
+ * @brief 执行previewTextForMessage的核心逻辑。
+ * @param message 消息对象或消息内容。
+ * @return 返回处理后的字符串结果。
+ */
 QString Widget::previewTextForMessage(const ChatMessage &message) const {
   if (message.kind == ChatMessageKind::File) {
     return filePreviewText(message.file.originalName);
@@ -1183,7 +1429,11 @@ QString Widget::previewTextForMessage(const ChatMessage &message) const {
   return message.text.trimmed();
 }
 
-// --- 拖拽窗口支持 ---
+/**
+ * @brief --- 拖拽窗口支持 ---
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void Widget::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     QWidget *target = childAt(event->position().toPoint());
@@ -1216,6 +1466,11 @@ void Widget::mousePressEvent(QMouseEvent *event) {
   QWidget::mousePressEvent(event);
 }
 
+/**
+ * @brief 执行mouseMoveEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void Widget::mouseMoveEvent(QMouseEvent *event) {
   if (m_isDragging && (event->buttons() & Qt::LeftButton)) {
     move(event->globalPosition().toPoint() - m_dragPosition);
@@ -1225,6 +1480,11 @@ void Widget::mouseMoveEvent(QMouseEvent *event) {
   QWidget::mouseMoveEvent(event);
 }
 
+/**
+ * @brief 执行mouseReleaseEvent的核心逻辑。
+ * @param event 对象参数 `event`。
+ * @return 无返回值。
+ */
 void Widget::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = false;
@@ -1234,6 +1494,11 @@ void Widget::mouseReleaseEvent(QMouseEvent *event) {
   QWidget::mouseReleaseEvent(event);
 }
 
+/**
+ * @brief 响应会话double点击事件。
+ * @param item 数据项对象。
+ * @return 无返回值。
+ */
 void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   if (!item)
     return;
@@ -1400,6 +1665,11 @@ void Widget::onSessionDoubleClicked(QListWidgetItem *item) {
   sessionWindow->show();
 }
 
+/**
+ * @brief 执行addSessionItem的核心逻辑。
+ * @param session 会话对象。
+ * @return 无返回值。
+ */
 void Widget::addSessionItem(const Session &session) {
   if (!session.isValid() || !m_sessionList)
     return;
@@ -1414,6 +1684,10 @@ void Widget::addSessionItem(const Session &session) {
   m_sessionList->addItem(item);
 }
 
+/**
+ * @brief 响应打开设置事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenSettings() {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   if (!kUnsignedIntRe.match(m_currentUserId.trimmed()).hasMatch()) {
@@ -1521,6 +1795,11 @@ void Widget::onOpenSettings() {
   m_settingsWindow->activateWindow();
 }
 
+/**
+ * @brief 响应头像回复完成事件。
+ * @param reply 网络回复对象。
+ * @return 无返回值。
+ */
 void Widget::onAvatarReplyFinished(QNetworkReply *reply) {
   if (!reply) {
     return;
@@ -1558,6 +1837,10 @@ void Widget::onAvatarReplyFinished(QNetworkReply *reply) {
   reply->deleteLater();
 }
 
+/**
+ * @brief 响应打开添加好友事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenAddFriend() {
   if (!m_profileApiClient) {
     QMessageBox::warning(this, "无法添加好友", "Profile 服务未初始化。");
@@ -1593,6 +1876,10 @@ void Widget::onOpenAddFriend() {
   m_addFriendDialog->activateWindow();
 }
 
+/**
+ * @brief 响应打开删除好友事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenDeleteFriend() {
   if (!m_profileApiClient) {
     QMessageBox::warning(this, "无法删除好友", "Profile 服务未初始化。");
@@ -1636,6 +1923,10 @@ void Widget::onOpenDeleteFriend() {
   m_deleteFriendDialog->activateWindow();
 }
 
+/**
+ * @brief 响应打开创建群组事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenCreateGroup() {
   if (!m_profileApiClient) {
     QMessageBox::warning(this, QStringLiteral("无法创建群聊"),
@@ -1670,6 +1961,10 @@ void Widget::onOpenCreateGroup() {
   m_createGroupDialog->activateWindow();
 }
 
+/**
+ * @brief 响应打开搜索群组事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenSearchGroup() {
   if (!m_profileApiClient) {
     QMessageBox::warning(this, QStringLiteral("无法搜索群聊"),
@@ -1718,6 +2013,10 @@ void Widget::onOpenSearchGroup() {
   m_searchGroupDialog->activateWindow();
 }
 
+/**
+ * @brief 响应打开退出群组事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenLeaveGroup() {
   if (!m_profileApiClient) {
     QMessageBox::warning(this, QStringLiteral("无法退出群聊"),
@@ -1747,6 +2046,10 @@ void Widget::onOpenLeaveGroup() {
   m_leaveGroupDialog->activateWindow();
 }
 
+/**
+ * @brief 响应打开解散群组事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenDismissGroup() {
   if (!m_profileApiClient) {
     QMessageBox::warning(this, QStringLiteral("无法解散群聊"),
@@ -1777,6 +2080,11 @@ void Widget::onOpenDismissGroup() {
   m_dismissGroupDialog->activateWindow();
 }
 
+/**
+ * @brief 确保附件传输Ready满足预期条件。
+ * @param attachmentLabel 字符串参数 `attachmentLabel`。
+ * @return 返回本次处理是否成功。
+ */
 bool Widget::ensureAttachmentTransferReady(const QString &attachmentLabel) {
   const QString failureTitle =
       QStringLiteral("无法发送%1").arg(attachmentLabel.trimmed());
@@ -1803,6 +2111,15 @@ bool Widget::ensureAttachmentTransferReady(const QString &attachmentLabel) {
   return true;
 }
 
+/**
+ * @brief 启动attachmenttransferfor会话流程。
+ * @param conversationId 会话 ID。
+ * @param conversationName 会话相关标识或会话数据。
+ * @param dialogTitle 字符串参数 `dialogTitle`。
+ * @param fileFilter 文件相关数据。
+ * @param attachmentLabel 字符串参数 `attachmentLabel`。
+ * @return 无返回值。
+ */
 void Widget::startAttachmentTransferForConversation(
     const QString &conversationId, const QString &conversationName,
     const QString &dialogTitle, const QString &fileFilter,
@@ -1867,6 +2184,12 @@ void Widget::startAttachmentTransferForConversation(
                attachmentLabel.trimmed(), fileInfo.fileName()));
 }
 
+/**
+ * @brief 启动文件下载for消息流程。
+ * @param message 消息对象或消息内容。
+ * @param chooseSavePath 路径相关参数。
+ * @return 无返回值。
+ */
 void Widget::startFileDownloadForMessage(const ChatMessage &message,
                                          bool chooseSavePath) {
   if (message.kind != ChatMessageKind::File || !m_chatFileService) {
@@ -1914,6 +2237,10 @@ void Widget::startFileDownloadForMessage(const ChatMessage &message,
   m_pendingFileDownloads.insert(requestId, pending);
 }
 
+/**
+ * @brief 响应打开文件transfer事件。
+ * @return 无返回值。
+ */
 void Widget::onOpenFileTransfer() {
   if (!ensureAttachmentTransferReady(QStringLiteral("文件"))) {
     return;
@@ -2030,6 +2357,12 @@ void Widget::onOpenFileTransfer() {
       QStringLiteral("All Files (*.*)"), QStringLiteral("文件"));
 }
 
+/**
+ * @brief 发起会话列表请求。
+ * @param force 布尔参数 `force`。
+ * @param silent 布尔参数 `silent`。
+ * @return 无返回值。
+ */
 void Widget::requestConversationList(bool force, bool silent) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
@@ -2055,6 +2388,12 @@ void Widget::requestConversationList(bool force, bool silent) {
   }
 }
 
+/**
+ * @brief 发起好友列表forcontacts请求。
+ * @param force 布尔参数 `force`。
+ * @param silent 布尔参数 `silent`。
+ * @return 无返回值。
+ */
 void Widget::requestFriendListForContacts(bool force, bool silent) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   QString numericId = m_currentUserNumericId.trimmed();
@@ -2079,6 +2418,10 @@ void Widget::requestFriendListForContacts(bool force, bool silent) {
   }
 }
 
+/**
+ * @brief 刷新会话列表界面显示或缓存。
+ * @return 无返回值。
+ */
 void Widget::refreshConversationListUi() {
   if (!m_sessionList) {
     qWarning() << "[MainWidget] refresh conversation list skipped: session list is null";
@@ -2142,6 +2485,10 @@ void Widget::refreshConversationListUi() {
   }
 }
 
+/**
+ * @brief 刷新群组列表界面显示或缓存。
+ * @return 无返回值。
+ */
 void Widget::refreshGroupListUi() {
   if (!m_groupList) {
     qWarning() << "[MainWidget] refresh group list skipped: group list is null";
@@ -2204,16 +2551,30 @@ void Widget::refreshGroupListUi() {
 
 }
 
+/**
+ * @brief 刷新contact列表界面显示或缓存。
+ * @return 无返回值。
+ */
 void Widget::refreshContactListUi() {
   if (!m_contactList) {
     qWarning() << "[MainWidget] refresh contact list skipped: contact list is null";
     return;
   }
-  // Contacts still depend on LIST_FRIENDS until dedicated contact models are split out.
+  /**
+   * @brief Contacts still depend on LIST_FRIENDS until dedicated contact models are split out.
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @return 无返回值。
+   */
   friendlist::FriendListManager::refreshListWidget(m_contactList,
                                                    m_friendListManager.friends());
 }
 
+/**
+ * @brief 更新会话列表item状态。
+ * @param conversationItem 会话相关标识或会话数据。
+ * @return 无返回值。
+ */
 void Widget::updateConversationListItem(
     const conversationlist::ConversationItem &conversationItem) {
   if (!m_sessionList && !m_groupList) {
@@ -2255,6 +2616,10 @@ void Widget::updateConversationListItem(
                                           conversationItem.peerLastSeenAt);
 }
 
+/**
+ * @brief 执行syncFriendListToDeleteDialog的核心逻辑。
+ * @return 无返回值。
+ */
 void Widget::syncFriendListToDeleteDialog() {
   if (m_deleteFriendDialog) {
     m_deleteFriendDialog->setFriends(m_friendListManager.friends());
@@ -2264,6 +2629,11 @@ void Widget::syncFriendListToDeleteDialog() {
   }
 }
 
+/**
+ * @brief 处理退出群组结果流程。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void Widget::handleLeaveGroupResult(const LeaveGroupResult &result) {
   const QString conversationId = result.conversationId.trimmed();
   const QString groupNumericId = result.groupNumericId.trimmed();
@@ -2305,6 +2675,11 @@ void Widget::handleLeaveGroupResult(const LeaveGroupResult &result) {
                            QStringLiteral("已退出群聊“%1”").arg(groupName));
 }
 
+/**
+ * @brief 处理解散群组结果流程。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void Widget::handleDismissGroupResult(const DismissGroupResult &result) {
   const QString conversationId = result.conversationId.trimmed();
   const QString groupNumericId = result.groupNumericId.trimmed();
@@ -2344,18 +2719,36 @@ void Widget::handleDismissGroupResult(const DismissGroupResult &result) {
                            QStringLiteral("已解散群聊“%1”").arg(groupName));
 }
 
+/**
+ * @brief 响应退出群组完成事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void Widget::onLeaveGroupFinished(const QString &requestId,
                                   const LeaveGroupResult &result) {
   Q_UNUSED(requestId);
   handleLeaveGroupResult(result);
 }
 
+/**
+ * @brief 响应解散群组完成事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void Widget::onDismissGroupFinished(const QString &requestId,
                                     const DismissGroupResult &result) {
   Q_UNUSED(requestId);
   handleDismissGroupResult(result);
 }
 
+/**
+ * @brief 处理incomingrealtimepayload流程。
+ * @param payload 原始载荷字符串。
+ * @param sourceTag 来源标识或来源数据。
+ * @return 无返回值。
+ */
 void Widget::handleIncomingRealtimePayload(const QString &payload,
                                            const QString &sourceTag) {
   protocol::Envelope envelope;
@@ -2381,6 +2774,11 @@ void Widget::handleIncomingRealtimePayload(const QString &payload,
   }
 }
 
+/**
+ * @brief 处理消息envelope流程。
+ * @param envelope 协议封装数据。
+ * @return 无返回值。
+ */
 void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
   if (!envelope.requestId.trimmed().isEmpty()) {
     return;
@@ -2399,6 +2797,11 @@ void Widget::handleMessageEnvelope(const protocol::Envelope &envelope) {
   storeAndRouteMessage(message, true);
 }
 
+/**
+ * @brief 处理在线状态envelope流程。
+ * @param data 请求或响应数据对象。
+ * @return 无返回值。
+ */
 void Widget::handlePresenceEnvelope(const QJsonObject &data) {
   const QString userId = data.value(QStringLiteral("user_id")).toString().trimmed();
   const QString numericId =
@@ -2450,6 +2853,12 @@ void Widget::handlePresenceEnvelope(const QJsonObject &data) {
   }
 }
 
+/**
+ * @brief 响应会话列表payload接收事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param data 请求或响应数据对象。
+ * @return 无返回值。
+ */
 void Widget::onConversationListPayloadReceived(const QString &requestId,
                                                const QJsonObject &data) {
   m_silentConversationListRequestIds.remove(requestId);
@@ -2477,6 +2886,13 @@ void Widget::onConversationListPayloadReceived(const QString &requestId,
   }
 }
 
+/**
+ * @brief 响应会话列表失败事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param code 数值参数 `code`。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void Widget::onConversationListFailed(const QString &requestId, int code,
                                       const QString &message) {
   const bool silentFailure = m_silentConversationListRequestIds.remove(requestId);
@@ -2495,6 +2911,12 @@ void Widget::onConversationListFailed(const QString &requestId, int code,
   refreshGroupListUi();
 }
 
+/**
+ * @brief 响应好友列表payload接收事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param data 请求或响应数据对象。
+ * @return 无返回值。
+ */
 void Widget::onFriendListPayloadReceived(const QString &requestId,
                                          const QJsonObject &data) {
   m_silentFriendListRequestIds.remove(requestId);
@@ -2511,6 +2933,13 @@ void Widget::onFriendListPayloadReceived(const QString &requestId,
   syncFriendListToDeleteDialog();
 }
 
+/**
+ * @brief 响应好友列表失败事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param code 数值参数 `code`。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void Widget::onFriendListFailed(const QString &requestId, int code,
                                 const QString &message) {
   const bool silentFailure = m_silentFriendListRequestIds.remove(requestId);
@@ -2529,6 +2958,13 @@ void Widget::onFriendListFailed(const QString &requestId, int code,
   syncFriendListToDeleteDialog();
 }
 
+/**
+ * @brief 响应资料server请求接收事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param data 请求或响应数据对象。
+ * @return 无返回值。
+ */
 void Widget::onProfileServerRequestReceived(const QString &requestId,
                                             const QString &action,
                                             const QJsonObject &data) {
@@ -2572,10 +3008,21 @@ void Widget::onProfileServerRequestReceived(const QString &requestId,
   }
 }
 
+/**
+ * @brief 执行listWidgetForConversationType的核心逻辑。
+ * @param conversationType 会话相关标识或会话数据。
+ * @return 返回整理后的集合结果。
+ */
 QListWidget *Widget::listWidgetForConversationType(int conversationType) const {
   return conversationType == 2 ? m_groupList : m_sessionList;
 }
 
+/**
+ * @brief 查找会话条目In列表。
+ * @param listWidget 列表控件对象。
+ * @param conversationId 会话 ID。
+ * @return 返回整理后的集合结果。
+ */
 QListWidgetItem *Widget::findConversationItemInList(
     QListWidget *listWidget, const QString &conversationId) const {
   if (!listWidget || conversationId.trimmed().isEmpty()) {
@@ -2595,6 +3042,11 @@ QListWidgetItem *Widget::findConversationItemInList(
   return nullptr;
 }
 
+/**
+ * @brief 查找会话条目By会话ID。
+ * @param conversationId 会话 ID。
+ * @return 返回整理后的集合结果。
+ */
 QListWidgetItem *Widget::findConversationItemByConversationId(
     const QString &conversationId) const {
   if (conversationId.trimmed().isEmpty()) {
@@ -2611,6 +3063,12 @@ QListWidgetItem *Widget::findConversationItemByConversationId(
   return nullptr;
 }
 
+/**
+ * @brief 执行upsertConversationListItem的核心逻辑。
+ * @param state 对象参数 `state`。
+ * @param conversationItem 会话相关标识或会话数据。
+ * @return 返回整理后的集合结果。
+ */
 QListWidgetItem *Widget::upsertConversationListItem(
     const ConversationListState &state,
     const conversationlist::ConversationItem *conversationItem) {
@@ -2618,6 +3076,13 @@ QListWidgetItem *Widget::upsertConversationListItem(
   return upsertConversationListItemToList(targetList, state, conversationItem);
 }
 
+/**
+ * @brief 执行upsertConversationListItemToList的核心逻辑。
+ * @param targetList 对象参数 `targetList`。
+ * @param state 对象参数 `state`。
+ * @param conversationItem 会话相关标识或会话数据。
+ * @return 返回整理后的集合结果。
+ */
 QListWidgetItem *Widget::upsertConversationListItemToList(
     QListWidget *targetList, const ConversationListState &state,
     const conversationlist::ConversationItem *conversationItem) {
@@ -2652,6 +3117,11 @@ QListWidgetItem *Widget::upsertConversationListItemToList(
   return item;
 }
 
+/**
+ * @brief 执行conversationIcon的核心逻辑。
+ * @param conversationType 会话相关标识或会话数据。
+ * @return 返回图标对象。
+ */
 QIcon Widget::conversationIcon(int conversationType) const {
   if (!style()) {
     return QIcon();
@@ -2661,6 +3131,13 @@ QIcon Widget::conversationIcon(int conversationType) const {
              : style()->standardIcon(QStyle::SP_FileDialogContentsView);
 }
 
+/**
+ * @brief 应用会话状态toitem配置。
+ * @param item 数据项对象。
+ * @param state 对象参数 `state`。
+ * @param conversationItem 会话相关标识或会话数据。
+ * @return 无返回值。
+ */
 void Widget::applyConversationStateToItem(QListWidgetItem *item,
                                           const ConversationListState &state,
                                           const conversationlist::ConversationItem *conversationItem) {
@@ -2739,6 +3216,11 @@ void Widget::applyConversationStateToItem(QListWidgetItem *item,
   }
 }
 
+/**
+ * @brief 执行resetConversationUnread的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @return 无返回值。
+ */
 void Widget::resetConversationUnread(const QString &conversationId) {
   const QString trimmedConversationId = conversationId.trimmed();
   if (trimmedConversationId.isEmpty()) {
@@ -2757,6 +3239,20 @@ void Widget::resetConversationUnread(const QString &conversationId) {
   }
 }
 
+/**
+ * @brief 构建会话item文本内容。
+ * @param conversationType 会话相关标识或会话数据。
+ * @param displayName 字符串参数 `displayName`。
+ * @param groupNumericId 群组数字编号。
+ * @param numericId 数字编号。
+ * @param isOnline 在线状态标记。
+ * @param userStatus 状态相关参数。
+ * @param preview 字符串参数 `preview`。
+ * @param memberCount 数值参数 `memberCount`。
+ * @param preferGroupMeta 群组相关数据。
+ * @param unreadCount 数值参数 `unreadCount`。
+ * @return 返回处理后的字符串结果。
+ */
 QString Widget::buildSessionItemText(int conversationType,
                                      const QString &displayName,
                                      const QString &groupNumericId,
@@ -2798,6 +3294,11 @@ QString Widget::buildSessionItemText(int conversationType,
   return firstLine + QLatin1Char('\n') + previewText;
 }
 
+/**
+ * @brief 执行elidePreview的核心逻辑。
+ * @param preview 字符串参数 `preview`。
+ * @return 返回处理后的字符串结果。
+ */
 QString Widget::elidePreview(const QString &preview) const {
   QString singleLine = preview;
   singleLine.replace(QLatin1Char('\n'), QLatin1Char(' '));
@@ -2807,5 +3308,7 @@ QString Widget::elidePreview(const QString &preview) const {
   }
   return singleLine;
 }
+
+
 
 

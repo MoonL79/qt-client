@@ -16,6 +16,11 @@ constexpr const char *kActionSend = "SEND";
 constexpr int kDefaultPullLimit = 100;
 constexpr int kMaxPullLimit = 200;
 
+/**
+ * @brief 执行jsonStringValue的核心逻辑。
+ * @param value 待处理的值。
+ * @return 返回处理后的字符串结果。
+ */
 QString jsonStringValue(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString().trimmed();
@@ -50,6 +55,11 @@ int jsonIntValue(const QJsonValue &value, int defaultValue = 0) {
   return defaultValue;
 }
 
+/**
+ * @brief 执行messageEnvelopeOk的核心逻辑。
+ * @param envelope 协议封装数据。
+ * @return 返回布尔结果。
+ */
 bool messageEnvelopeOk(const protocol::Envelope &envelope) {
   if (envelope.hasCode && envelope.code != 0) {
     return false;
@@ -64,6 +74,11 @@ bool messageEnvelopeOk(const protocol::Envelope &envelope) {
   return true;
 }
 
+/**
+ * @brief 生成协议封装错误显示文本。
+ * @param envelope 协议封装数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString envelopeErrorText(const protocol::Envelope &envelope) {
   const QString envelopeMessage = envelope.message.trimmed();
   if (!envelopeMessage.isEmpty()) {
@@ -88,6 +103,14 @@ QString envelopeErrorText(const protocol::Envelope &envelope) {
   return QStringLiteral("request failed, code=%1").arg(code);
 }
 
+/**
+ * @brief 解析消息object并生成内部结果。
+ * @param messageObject 消息对象。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param outMessage 消息对象。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool parseMessageObject(const QJsonObject &messageObject,
                         const QString &requestId, ChatMessage *outMessage,
                         QString *error) {
@@ -152,6 +175,12 @@ bool parseMessageObject(const QJsonObject &messageObject,
 }
 } // namespace
 
+/**
+ * @brief 构造并初始化MessageSyncClient实例。
+ * @param client 客户端或服务对象。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 MessageSyncClient::MessageSyncClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<MessagePullResult>("MessagePullResult");
@@ -173,6 +202,13 @@ MessageSyncClient::MessageSyncClient(websocketclient *client, QObject *parent)
           &MessageSyncClient::onDisconnected);
 }
 
+/**
+ * @brief 执行pullMessages的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @param afterSeq 数值参数 `afterSeq`。
+ * @param limit 数值参数 `limit`。
+ * @return 返回处理后的字符串结果。
+ */
 QString MessageSyncClient::pullMessages(const QString &conversationId,
                                         qint64 afterSeq, int limit) {
   const QString requestId = generateRequestId();
@@ -205,6 +241,13 @@ QString MessageSyncClient::pullMessages(const QString &conversationId,
   return requestId;
 }
 
+/**
+ * @brief 执行acknowledgeUpToSeq的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @param upToSeq 数值参数 `upToSeq`。
+ * @param delivered 布尔参数 `delivered`。
+ * @return 返回处理后的字符串结果。
+ */
 QString MessageSyncClient::acknowledgeUpToSeq(const QString &conversationId,
                                               qint64 upToSeq, bool delivered) {
   const QString requestId = generateRequestId();
@@ -239,6 +282,13 @@ QString MessageSyncClient::acknowledgeUpToSeq(const QString &conversationId,
   return requestId;
 }
 
+/**
+ * @brief 解析incoming发送envelope并生成内部结果。
+ * @param envelope 协议封装数据。
+ * @param outMessage 消息对象。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool MessageSyncClient::parseIncomingSendEnvelope(
     const protocol::Envelope &envelope, ChatMessage *outMessage,
     QString *error) {
@@ -252,12 +302,24 @@ bool MessageSyncClient::parseIncomingSendEnvelope(
   return parseMessageObject(envelope.data, envelope.requestId, outMessage, error);
 }
 
+/**
+ * @brief 解析pulled消息object并生成内部结果。
+ * @param messageObject 消息对象。
+ * @param outMessage 消息对象。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool MessageSyncClient::parsePulledMessageObject(const QJsonObject &messageObject,
                                                  ChatMessage *outMessage,
                                                  QString *error) {
   return parseMessageObject(messageObject, QString(), outMessage, error);
 }
 
+/**
+ * @brief 响应文本消息接收事件。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void MessageSyncClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -314,6 +376,10 @@ void MessageSyncClient::onTextMessageReceived(const QString &message) {
   failRequest(requestId, action, 500, QStringLiteral("unsupported action"));
 }
 
+/**
+ * @brief 响应已断开事件。
+ * @return 无返回值。
+ */
 void MessageSyncClient::onDisconnected() {
   const auto requestIds = m_pendingRequests.keys();
   for (const QString &requestId : requestIds) {
@@ -324,10 +390,21 @@ void MessageSyncClient::onDisconnected() {
   }
 }
 
+/**
+ * @brief 执行generateRequestId的核心逻辑。
+ * @return 返回处理后的字符串结果。
+ */
 QString MessageSyncClient::generateRequestId() const {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+/**
+ * @brief 发送消息payload数据。
+ * @param action 字符串参数 `action`。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param data 请求或响应数据对象。
+ * @return 返回布尔结果。
+ */
 bool MessageSyncClient::sendMessagePayload(const QString &action,
                                            const QString &requestId,
                                            const QJsonObject &data) {
@@ -342,6 +419,12 @@ bool MessageSyncClient::sendMessagePayload(const QString &action,
   return true;
 }
 
+/**
+ * @brief 执行addPendingRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @return 无返回值。
+ */
 void MessageSyncClient::addPendingRequest(const QString &requestId,
                                           const QString &action) {
   clearPendingRequest(requestId);
@@ -363,6 +446,11 @@ void MessageSyncClient::addPendingRequest(const QString &requestId,
   m_pendingRequests.insert(requestId, pending);
 }
 
+/**
+ * @brief 清理待处理请求状态。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @return 无返回值。
+ */
 void MessageSyncClient::clearPendingRequest(const QString &requestId) {
   auto it = m_pendingRequests.find(requestId);
   if (it == m_pendingRequests.end()) {
@@ -375,6 +463,14 @@ void MessageSyncClient::clearPendingRequest(const QString &requestId) {
   m_pendingRequests.erase(it);
 }
 
+/**
+ * @brief 执行failRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param code 数值参数 `code`。
+ * @param errorMessage 错误信息输出参数。
+ * @return 无返回值。
+ */
 void MessageSyncClient::failRequest(const QString &requestId,
                                     const QString &action, int code,
                                     const QString &errorMessage) {
@@ -384,6 +480,13 @@ void MessageSyncClient::failRequest(const QString &requestId,
   emit requestFailed(requestId, action, code, errorMessage);
 }
 
+/**
+ * @brief 解析拉取结果并生成内部结果。
+ * @param envelope 协议封装数据。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool MessageSyncClient::parsePullResult(const protocol::Envelope &envelope,
                                         MessagePullResult *outResult,
                                         QString *error) const {
@@ -452,6 +555,13 @@ bool MessageSyncClient::parsePullResult(const protocol::Envelope &envelope,
   return true;
 }
 
+/**
+ * @brief 解析确认结果并生成内部结果。
+ * @param envelope 协议封装数据。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool MessageSyncClient::parseAckResult(const protocol::Envelope &envelope,
                                        MessageAckResult *outResult,
                                        QString *error) const {
@@ -482,3 +592,5 @@ bool MessageSyncClient::parseAckResult(const protocol::Envelope &envelope,
   *outResult = result;
   return true;
 }
+
+

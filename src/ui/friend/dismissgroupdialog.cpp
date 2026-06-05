@@ -6,6 +6,14 @@
 #include <QMessageBox>
 #include <QVBoxLayout>
 
+/**
+ * @brief 构造并初始化DismissGroupDialog实例。
+ * @param currentUserId 字符串参数 `currentUserId`。
+ * @param conversations 会话相关标识或会话数据。
+ * @param profileApiClient 文件相关数据。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 DismissGroupDialog::DismissGroupDialog(
     const QString &currentUserId,
     const QList<conversationlist::ConversationItem> &conversations,
@@ -36,6 +44,11 @@ DismissGroupDialog::DismissGroupDialog(
   refreshList();
 }
 
+/**
+ * @brief 设置会话值。
+ * @param conversations 会话相关标识或会话数据。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::setConversations(
     const QList<conversationlist::ConversationItem> &conversations) {
   m_conversations = conversations;
@@ -43,6 +56,10 @@ void DismissGroupDialog::setConversations(
   refreshList();
 }
 
+/**
+ * @brief 构建界面内容。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -66,6 +83,10 @@ void DismissGroupDialog::buildUi() {
           &DismissGroupDialog::onItemDoubleClicked);
 }
 
+/**
+ * @brief 发起拥有者信息for群组请求。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::requestOwnerInfoForGroups() {
   if (!m_profileApiClient) {
     return;
@@ -88,6 +109,10 @@ void DismissGroupDialog::requestOwnerInfoForGroups() {
   }
 }
 
+/**
+ * @brief 刷新列表显示或缓存。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::refreshList() {
   if (!m_groupListWidget) {
     return;
@@ -162,6 +187,12 @@ void DismissGroupDialog::refreshList() {
   m_tipLabel->setText(QStringLiteral("双击群聊项即可解散"));
 }
 
+/**
+ * @brief 解析并确定解散错误消息结果。
+ * @param code 数值参数 `code`。
+ * @param error 错误信息相关参数。
+ * @return 返回处理后的字符串结果。
+ */
 QString DismissGroupDialog::resolveDismissErrorMessage(int code,
                                                        const QString &error) const {
   if (code == 2001) {
@@ -174,6 +205,11 @@ QString DismissGroupDialog::resolveDismissErrorMessage(int code,
                                    : error.trimmed();
 }
 
+/**
+ * @brief 响应itemdouble点击事件。
+ * @param item 数据项对象。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
   if (!item || !m_profileApiClient || !m_pendingDismissRequestId.isEmpty()) {
     return;
@@ -201,6 +237,12 @@ void DismissGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
       m_profileApiClient->dismissGroupByConversationId(conversationId);
 }
 
+/**
+ * @brief 响应群组listed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param groups 群组相关数据。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::onGroupsListed(const QString &requestId,
                                         const QVector<GroupSearchItem> &groups) {
   const auto it = m_ownerLookupRequestIdToGroupNumericId.find(requestId);
@@ -222,6 +264,12 @@ void DismissGroupDialog::onGroupsListed(const QString &requestId,
   refreshList();
 }
 
+/**
+ * @brief 响应解散群组完成事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::onDismissGroupFinished(
     const QString &requestId, const DismissGroupResult &result) {
   if (requestId != m_pendingDismissRequestId) {
@@ -251,6 +299,14 @@ void DismissGroupDialog::onDismissGroupFinished(
                           : result.message.trimmed());
 }
 
+/**
+ * @brief 响应请求失败detailed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param code 数值参数 `code`。
+ * @param error 错误信息相关参数。
+ * @return 无返回值。
+ */
 void DismissGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                  const QString &action, int code,
                                                  const QString &error) {
@@ -270,3 +326,6 @@ void DismissGroupDialog::onRequestFailedDetailed(const QString &requestId,
   m_groupListWidget->setEnabled(true);
   m_tipLabel->setText(resolveDismissErrorMessage(code, error));
 }
+
+
+

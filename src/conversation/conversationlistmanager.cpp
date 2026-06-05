@@ -7,6 +7,11 @@
 #include <QTimeZone>
 
 namespace {
+/**
+ * @brief 执行valueToString的核心逻辑。
+ * @param value 待处理的值。
+ * @return 返回处理后的字符串结果。
+ */
 QString valueToString(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString().trimmed();
@@ -48,6 +53,11 @@ bool valueToBool(const QJsonValue &value, bool defaultValue = false) {
   return defaultValue;
 }
 
+/**
+ * @brief 解析utciso时间并生成内部结果。
+ * @param value 待处理的值。
+ * @return 返回 QDateTime 结果。
+ */
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -64,6 +74,11 @@ QDateTime parseUtcIsoTime(const QString &value) {
   return dt.toUTC();
 }
 
+/**
+ * @brief 解析并确定display名称结果。
+ * @param item 数据项对象。
+ * @return 返回处理后的字符串结果。
+ */
 QString resolveDisplayName(const conversationlist::ConversationItem &item) {
   if (!item.name.trimmed().isEmpty()) {
     return item.name.trimmed();
@@ -85,6 +100,11 @@ namespace conversationlist {
 
 namespace {
 
+/**
+ * @brief 读取群组数字ID。
+ * @param obj 输入的对象数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString readGroupNumericId(const QJsonObject &obj) {
   const QString groupNumericId = valueToString(obj.value("group_numeric_id"));
   if (!groupNumericId.isEmpty()) {
@@ -101,6 +121,11 @@ QString readGroupNumericId(const QJsonObject &obj) {
 
 } // namespace
 
+/**
+ * @brief 更新fromJSON状态。
+ * @param jsonBytes 对象参数 `jsonBytes`。
+ * @return 返回本次处理是否成功。
+ */
 bool ConversationListManager::updateFromJson(const QByteArray &jsonBytes) {
   QJsonParseError parseError;
   const QJsonDocument doc = QJsonDocument::fromJson(jsonBytes, &parseError);
@@ -112,6 +137,11 @@ bool ConversationListManager::updateFromJson(const QByteArray &jsonBytes) {
   return updateFromResponse(doc.object());
 }
 
+/**
+ * @brief 更新from响应状态。
+ * @param data 请求或响应数据对象。
+ * @return 返回本次处理是否成功。
+ */
 bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
   const QJsonValue conversationsValue = data.value("conversations");
   if (!conversationsValue.isArray()) {
@@ -179,6 +209,15 @@ bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
   return true;
 }
 
+/**
+ * @brief 应用peer在线状态更新配置。
+ * @param userId 用户 ID。
+ * @param numericId 数字编号。
+ * @param isOnline 在线状态标记。
+ * @param lastSeenAtUtc 最近在线时间字符串。
+ * @param updatedConversation 会话相关标识或会话数据。
+ * @return 返回布尔结果。
+ */
 bool ConversationListManager::applyPeerPresenceUpdate(
     const QString &userId, const QString &numericId, bool isOnline,
     const QString &lastSeenAtUtc, ConversationItem *updatedConversation) {
@@ -212,6 +251,13 @@ bool ConversationListManager::applyPeerPresenceUpdate(
   return false;
 }
 
+/**
+ * @brief 移除会话数据或状态。
+ * @param conversationId 会话 ID。
+ * @param groupNumericId 群组数字编号。
+ * @param removedConversation 会话相关标识或会话数据。
+ * @return 返回布尔结果。
+ */
 bool ConversationListManager::removeConversation(
     const QString &conversationId, const QString &groupNumericId,
     ConversationItem *removedConversation) {
@@ -241,10 +287,21 @@ bool ConversationListManager::removeConversation(
   return false;
 }
 
+/**
+ * @brief 执行conversations的核心逻辑。
+ * @return 返回整理后的集合结果。
+ */
 const QList<ConversationItem> &ConversationListManager::conversations() const {
   return m_conversations;
 }
 
+/**
+ * @brief 清理clear状态。
+ * @return 无返回值。
+ */
 void ConversationListManager::clear() { m_conversations.clear(); }
 
 } // namespace conversationlist
+
+
+

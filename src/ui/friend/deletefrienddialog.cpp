@@ -8,6 +8,11 @@
 #include <QVBoxLayout>
 
 namespace {
+/**
+ * @brief 生成好友状态显示文本。
+ * @param status 状态值。
+ * @return 返回处理后的字符串结果。
+ */
 QString friendStatusText(int status) {
   switch (status) {
   case 1:
@@ -20,6 +25,14 @@ QString friendStatusText(int status) {
 }
 }
 
+/**
+ * @brief 构造并初始化DeleteFriendDialog实例。
+ * @param currentUserNumericId 字符串参数 `currentUserNumericId`。
+ * @param friends 好友相关数据。
+ * @param profileApiClient 文件相关数据。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 DeleteFriendDialog::DeleteFriendDialog(
     const QString &currentUserNumericId,
     const QList<friendlist::FriendItem> &friends,
@@ -46,11 +59,20 @@ DeleteFriendDialog::DeleteFriendDialog(
           &DeleteFriendDialog::onRequestFailedDetailed);
 }
 
+/**
+ * @brief 设置好友值。
+ * @param friends 好友相关数据。
+ * @return 无返回值。
+ */
 void DeleteFriendDialog::setFriends(const QList<friendlist::FriendItem> &friends) {
   m_friends = friends;
   refreshList();
 }
 
+/**
+ * @brief 构建界面内容。
+ * @return 无返回值。
+ */
 void DeleteFriendDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -75,6 +97,10 @@ void DeleteFriendDialog::buildUi() {
           &DeleteFriendDialog::onItemDoubleClicked);
 }
 
+/**
+ * @brief 刷新列表显示或缓存。
+ * @return 无返回值。
+ */
 void DeleteFriendDialog::refreshList() {
   if (!m_friendListWidget) {
     return;
@@ -108,11 +134,22 @@ void DeleteFriendDialog::refreshList() {
   }
 }
 
+/**
+ * @brief 判断valid数字编号条件是否满足。
+ * @param numericId 数字编号。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool DeleteFriendDialog::isValidNumericId(const QString &numericId) const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(numericId.trimmed()).hasMatch();
 }
 
+/**
+ * @brief 解析并确定删除错误消息结果。
+ * @param code 数值参数 `code`。
+ * @param error 错误信息相关参数。
+ * @return 返回处理后的字符串结果。
+ */
 QString DeleteFriendDialog::resolveDeleteErrorMessage(int code,
                                                       const QString &error) const {
   if (code == 3001) {
@@ -128,6 +165,11 @@ QString DeleteFriendDialog::resolveDeleteErrorMessage(int code,
                                    : error.trimmed();
 }
 
+/**
+ * @brief 响应itemdouble点击事件。
+ * @param item 数据项对象。
+ * @return 无返回值。
+ */
 void DeleteFriendDialog::onItemDoubleClicked(QListWidgetItem *item) {
   if (!item || !m_profileApiClient || !m_pendingDeleteRequestId.isEmpty()) {
     return;
@@ -155,6 +197,12 @@ void DeleteFriendDialog::onItemDoubleClicked(QListWidgetItem *item) {
       m_profileApiClient->deleteFriend(m_currentUserNumericId, friendNumericId);
 }
 
+/**
+ * @brief 响应删除好友完成事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param result 处理结果对象。
+ * @return 无返回值。
+ */
 void DeleteFriendDialog::onDeleteFriendFinished(const QString &requestId,
                                                 const DeleteFriendResult &result) {
   if (requestId != m_pendingDeleteRequestId) {
@@ -179,6 +227,14 @@ void DeleteFriendDialog::onDeleteFriendFinished(const QString &requestId,
   emit friendDeleted(result);
 }
 
+/**
+ * @brief 响应请求失败detailed事件。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param code 数值参数 `code`。
+ * @param error 错误信息相关参数。
+ * @return 无返回值。
+ */
 void DeleteFriendDialog::onRequestFailedDetailed(const QString &requestId,
                                                  const QString &action, int code,
                                                  const QString &error) {
@@ -191,3 +247,6 @@ void DeleteFriendDialog::onRequestFailedDetailed(const QString &requestId,
   m_friendListWidget->setEnabled(true);
   m_tipLabel->setText(resolveDeleteErrorMessage(code, error));
 }
+
+
+

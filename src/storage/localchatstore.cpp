@@ -9,20 +9,43 @@
 #include <QUuid>
 
 namespace {
+/**
+ * @brief 生成normalized显示文本。
+ * @param value 待处理的值。
+ * @return 返回处理后的字符串结果。
+ */
 QString normalizedText(const QString &value) {
   return value.isNull() ? QString("") : value;
 }
 
+/**
+ * @brief 生成SQL错误显示文本。
+ * @param query 对象参数 `query`。
+ * @return 返回处理后的字符串结果。
+ */
 QString sqlErrorText(const QSqlQuery &query) {
   const QString text = query.lastError().text().trimmed();
   return text.isEmpty() ? QStringLiteral("unknown sqlite error") : text;
 }
 
+/**
+ * @brief 生成SQL错误显示文本。
+ * @param database 对象参数 `database`。
+ * @return 返回处理后的字符串结果。
+ */
 QString sqlErrorText(const QSqlDatabase &database) {
   const QString text = database.lastError().text().trimmed();
   return text.isEmpty() ? QStringLiteral("unknown sqlite error") : text;
 }
 
+/**
+ * @brief 绑定消息Values。
+ * @param query 对象参数 `query`。
+ * @param message 消息对象或消息内容。
+ * @param ownerUserId 字符串参数 `ownerUserId`。
+ * @param dedupeKey 字符串参数 `dedupeKey`。
+ * @return 无返回值。
+ */
 void bindMessageValues(QSqlQuery *query, const ChatMessage &message,
                        const QString &ownerUserId, const QString &dedupeKey) {
   query->bindValue(QStringLiteral(":dedupe_key"), normalizedText(dedupeKey));
@@ -61,13 +84,27 @@ void bindMessageValues(QSqlQuery *query, const ChatMessage &message,
 }
 } // namespace
 
+/**
+ * @brief 构造本地聊天记录存储对象。
+ * @return 无返回值。
+ */
 LocalChatStore::LocalChatStore()
     : m_connectionName(
           QStringLiteral("local-chat-store-%1")
               .arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {}
 
+/**
+ * @brief 清理当前user状态。
+ * @return 无返回值。
+ */
 LocalChatStore::~LocalChatStore() { clearCurrentUser(); }
 
+/**
+ * @brief 设置当前user值。
+ * @param currentUserId 字符串参数 `currentUserId`。
+ * @param error 错误信息相关参数。
+ * @return 返回布尔结果。
+ */
 bool LocalChatStore::setCurrentUser(const QString &currentUserId, QString *error) {
   const QString trimmedUserId = currentUserId.trimmed();
   if (trimmedUserId.isEmpty()) {
@@ -95,6 +132,10 @@ bool LocalChatStore::setCurrentUser(const QString &currentUserId, QString *error
   return true;
 }
 
+/**
+ * @brief 清理当前user状态。
+ * @return 无返回值。
+ */
 void LocalChatStore::clearCurrentUser() {
   if (m_database.isValid()) {
     m_database.close();
@@ -106,6 +147,12 @@ void LocalChatStore::clearCurrentUser() {
   m_currentUserId.clear();
 }
 
+/**
+ * @brief 保存消息数据。
+ * @param message 消息对象或消息内容。
+ * @param error 错误信息相关参数。
+ * @return 返回布尔结果。
+ */
 bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
   if (!message.isValid()) {
     if (error) {
@@ -201,6 +248,12 @@ bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
   return true;
 }
 
+/**
+ * @brief 更新existing消息状态。
+ * @param message 消息对象或消息内容。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
                                            QString *error) {
   const QString dedupeKey = dedupeKeyForMessage(message);
@@ -333,6 +386,12 @@ bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
   return false;
 }
 
+/**
+ * @brief 执行cleanupDuplicateRequestRows的核心逻辑。
+ * @param message 消息对象或消息内容。
+ * @param error 错误信息相关参数。
+ * @return 返回布尔结果。
+ */
 bool LocalChatStore::cleanupDuplicateRequestRows(const ChatMessage &message,
                                                  QString *error) {
   const QString requestId = message.requestId.trimmed();
@@ -368,6 +427,13 @@ bool LocalChatStore::cleanupDuplicateRequestRows(const ChatMessage &message,
   return true;
 }
 
+/**
+ * @brief 加载消息数据。
+ * @param conversationId 会话 ID。
+ * @param limit 数值参数 `limit`。
+ * @param error 错误信息相关参数。
+ * @return 返回整理后的集合结果。
+ */
 QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId, int limit,
                                                   QString *error) const {
   QVector<ChatMessage> messages;
@@ -458,6 +524,12 @@ QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId,
   return messages;
 }
 
+/**
+ * @brief 执行lastSeqForConversation的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @param error 错误信息相关参数。
+ * @return 返回计算得到的数值结果。
+ */
 qint64 LocalChatStore::lastSeqForConversation(const QString &conversationId,
                                               QString *error) const {
   if (!isReady(error)) {
@@ -503,6 +575,12 @@ qint64 LocalChatStore::lastSeqForConversation(const QString &conversationId,
   return query.value(0).toLongLong();
 }
 
+/**
+ * @brief 打开database资源或连接。
+ * @param currentUserId 字符串参数 `currentUserId`。
+ * @param error 错误信息相关参数。
+ * @return 返回布尔结果。
+ */
 bool LocalChatStore::openDatabase(const QString &currentUserId, QString *error) {
   const QString databasePath = databasePathForUser(currentUserId);
   QFileInfo info(databasePath);
@@ -529,6 +607,11 @@ bool LocalChatStore::openDatabase(const QString &currentUserId, QString *error) 
   return true;
 }
 
+/**
+ * @brief 确保Schema满足预期条件。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool LocalChatStore::ensureSchema(QString *error) {
   QSqlQuery query(m_database);
   if (!query.exec(QStringLiteral(
@@ -590,6 +673,11 @@ bool LocalChatStore::ensureSchema(QString *error) {
   return true;
 }
 
+/**
+ * @brief 执行databasePathForUser的核心逻辑。
+ * @param currentUserId 字符串参数 `currentUserId`。
+ * @return 返回处理后的字符串结果。
+ */
 QString LocalChatStore::databasePathForUser(const QString &currentUserId) const {
   QString basePath =
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).trimmed();
@@ -601,6 +689,11 @@ QString LocalChatStore::databasePathForUser(const QString &currentUserId) const 
                     .arg(currentUserId.trimmed()));
 }
 
+/**
+ * @brief 执行dedupeKeyForMessage的核心逻辑。
+ * @param message 消息对象或消息内容。
+ * @return 返回处理后的字符串结果。
+ */
 QString LocalChatStore::dedupeKeyForMessage(const ChatMessage &message) const {
   const QString conversationId = message.conversationId.trimmed();
   if (message.seq > 0) {
@@ -629,6 +722,11 @@ QString LocalChatStore::dedupeKeyForMessage(const ChatMessage &message) const {
            message.sentAt.trimmed(), message.text.trimmed());
 }
 
+/**
+ * @brief 判断ready条件是否满足。
+ * @param error 错误信息相关参数。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool LocalChatStore::isReady(QString *error) const {
   if (m_currentUserId.isEmpty() || !m_database.isValid() || !m_database.isOpen()) {
     if (error) {
@@ -638,6 +736,9 @@ bool LocalChatStore::isReady(QString *error) const {
   }
   return true;
 }
+
+
+
 
 
 

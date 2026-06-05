@@ -37,11 +37,20 @@ constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
 constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
 constexpr const char *kDefaultServerHost = "192.168.14.133";
 
+/**
+ * @brief 判断loopbackhost条件是否满足。
+ * @param host 主机地址字符串。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isLoopbackHost(const QString &host) {
   const QString lower = host.trimmed().toLower();
   return lower == "127.0.0.1" || lower == "localhost" || lower == "::1";
 }
 
+/**
+ * @brief 解析并确定serverhost结果。
+ * @return 返回处理后的字符串结果。
+ */
 QString resolveServerHost() {
   QString host = qEnvironmentVariable(kStaticHostEnv).trimmed();
   if (host.isEmpty()) {
@@ -59,6 +68,11 @@ QString resolveServerHost() {
   return host;
 }
 
+/**
+ * @brief 解析并确定头像url结果。
+ * @param avatarSource 头像地址或头像来源。
+ * @return 返回解析得到的 URL 对象。
+ */
 QUrl resolveAvatarUrl(const QString &avatarSource) {
   const QString trimmed = avatarSource.trimmed();
   if (trimmed.isEmpty()) {
@@ -79,7 +93,11 @@ QUrl resolveAvatarUrl(const QString &avatarSource) {
 
   QString staticPath = trimmed;
   if (staticPath.startsWith(QStringLiteral("/static/"))) {
-    // Use as-is.
+    /**
+     * @brief Use as-is.
+     * @param arg1 字符串参数 `arg1`。
+     * @return 返回 } else 结果。
+     */
   } else if (staticPath.startsWith(QStringLiteral("static/"))) {
     staticPath.prepend(QLatin1Char('/'));
   } else {
@@ -100,6 +118,12 @@ QUrl resolveAvatarUrl(const QString &avatarSource) {
   return url;
 }
 
+/**
+ * @brief 生成在线状态显示文本。
+ * @param isOnline 在线状态标记。
+ * @param lastSeenAtUtc 最近在线时间字符串。
+ * @return 返回处理后的字符串结果。
+ */
 QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
   if (isOnline) {
     return QStringLiteral("在线");
@@ -111,6 +135,12 @@ QString presenceText(bool isOnline, const QString &lastSeenAtUtc) {
   return QStringLiteral("离线 · 最近在线 %1").arg(trimmed);
 }
 
+/**
+ * @brief 执行jsonStringValue的核心逻辑。
+ * @param obj 输入的对象数据。
+ * @param key 对象参数 `key`。
+ * @return 返回处理后的字符串结果。
+ */
 QString jsonStringValue(const QJsonObject &obj, const char *key) {
   const QJsonValue value = obj.value(QLatin1String(key));
   if (value.isString()) {
@@ -136,6 +166,11 @@ qint64 jsonIntegerValue(const QJsonObject &obj, const char *key,
   return defaultValue;
 }
 
+/**
+ * @brief 执行formatMessageTime的核心逻辑。
+ * @param utcIsoTime 时间相关参数。
+ * @return 返回处理后的字符串结果。
+ */
 QString formatMessageTime(const QString &utcIsoTime) {
   const QString trimmed = utcIsoTime.trimmed();
   if (trimmed.isEmpty()) {
@@ -149,6 +184,11 @@ QString formatMessageTime(const QString &utcIsoTime) {
   return parsed.toLocalTime().toString(QStringLiteral("HH:mm:ss"));
 }
 
+/**
+ * @brief 生成消息状态显示文本。
+ * @param status 状态值。
+ * @return 返回处理后的字符串结果。
+ */
 QString messageStatusText(SessionWindow::MessageStatus status) {
   switch (status) {
   case SessionWindow::MessageStatus::Pending:
@@ -163,6 +203,12 @@ QString messageStatusText(SessionWindow::MessageStatus status) {
   return QStringLiteral("未知状态");
 }
 
+/**
+ * @brief 生成消息错误显示文本。
+ * @param code 数值参数 `code`。
+ * @param fallback 字符串参数 `fallback`。
+ * @return 返回处理后的字符串结果。
+ */
 QString messageErrorText(int code, const QString &fallback) {
   switch (code) {
   case 2001:
@@ -188,6 +234,11 @@ QString messageErrorText(int code, const QString &fallback) {
   return QStringLiteral("发送失败：未知错误(%1)").arg(code);
 }
 
+/**
+ * @brief 执行humanReadableFileSize的核心逻辑。
+ * @param sizeBytes 数值参数 `sizeBytes`。
+ * @return 返回处理后的字符串结果。
+ */
 QString humanReadableFileSize(qint64 sizeBytes) {
   if (sizeBytes < 0) {
     return QStringLiteral("未知大小");
@@ -222,6 +273,12 @@ QString avatarInitial(const QString &displayName,
   return initial;
 }
 
+/**
+ * @brief 执行fallbackAvatarColor的核心逻辑。
+ * @param seed 字符串参数 `seed`。
+ * @param outgoing 布尔参数 `outgoing`。
+ * @return 返回颜色对象。
+ */
 QColor fallbackAvatarColor(const QString &seed, bool outgoing) {
   if (outgoing) {
     return QColor(QStringLiteral("#4a90e2"));
@@ -237,6 +294,12 @@ QColor fallbackAvatarColor(const QString &seed, bool outgoing) {
   return kPalette[hash % (sizeof(kPalette) / sizeof(kPalette[0]))];
 }
 
+/**
+ * @brief 执行circularAvatarPixmap的核心逻辑。
+ * @param pixmap 位图对象。
+ * @param side 数值参数 `side`。
+ * @return 返回处理后的位图对象。
+ */
 QPixmap circularAvatarPixmap(const QPixmap &pixmap, int side) {
   if (pixmap.isNull() || side <= 0) {
     return QPixmap();
@@ -257,6 +320,12 @@ QPixmap circularAvatarPixmap(const QPixmap &pixmap, int side) {
   return circular;
 }
 
+/**
+ * @brief 加载头像pixmap数据。
+ * @param avatarSource 头像地址或头像来源。
+ * @param side 数值参数 `side`。
+ * @return 返回处理后的位图对象。
+ */
 QPixmap loadAvatarPixmap(const QString &avatarSource, int side) {
   if (side <= 0) {
     return QPixmap();
@@ -284,6 +353,12 @@ QPixmap loadAvatarPixmap(const QString &avatarSource, int side) {
 }
 } // namespace
 
+/**
+ * @brief 构造并初始化SessionWindow实例。
+ * @param session 会话对象。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 SessionWindow::SessionWindow(const Session &session, QWidget *parent)
     : FramelessWindowBase(parent), m_session(session), m_chatScroll(nullptr),
       m_chatContainer(nullptr), m_chatLayout(nullptr), m_inputLine(nullptr),
@@ -343,12 +418,23 @@ SessionWindow::SessionWindow(const Session &session, QWidget *parent)
   initUI();
 }
 
+/**
+ * @brief 加载历史数据。
+ * @param messages 消息对象。
+ * @return 无返回值。
+ */
 void SessionWindow::loadHistory(const QVector<ChatMessage> &messages) {
   for (const ChatMessage &message : messages) {
     appendPersistedMessage(message);
   }
 }
 
+/**
+ * @brief 设置当前资料值。
+ * @param displayName 字符串参数 `displayName`。
+ * @param avatarSource 头像地址或头像来源。
+ * @return 无返回值。
+ */
 void SessionWindow::setCurrentProfile(const QString &displayName,
                                       const QString &avatarSource) {
   const QString nextDisplayName = displayName.trimmed();
@@ -366,6 +452,12 @@ void SessionWindow::setCurrentProfile(const QString &displayName,
   }
 }
 
+/**
+ * @brief 设置peer资料值。
+ * @param displayName 字符串参数 `displayName`。
+ * @param avatarSource 头像地址或头像来源。
+ * @return 无返回值。
+ */
 void SessionWindow::setPeerProfile(const QString &displayName,
                                    const QString &avatarSource) {
   const QString nextDisplayName = displayName.trimmed();
@@ -383,12 +475,24 @@ void SessionWindow::setPeerProfile(const QString &displayName,
   }
 }
 
+/**
+ * @brief 设置peeridentity值。
+ * @param userId 用户 ID。
+ * @param numericId 数字编号。
+ * @return 无返回值。
+ */
 void SessionWindow::setPeerIdentity(const QString &userId,
                                     const QString &numericId) {
   m_peerUserId = userId.trimmed();
   m_peerNumericId = numericId.trimmed();
 }
 
+/**
+ * @brief 更新peer在线状态状态。
+ * @param isOnline 在线状态标记。
+ * @param lastSeenAtUtc 最近在线时间字符串。
+ * @return 无返回值。
+ */
 void SessionWindow::updatePeerPresence(bool isOnline,
                                        const QString &lastSeenAtUtc) {
   m_peerIsOnline = isOnline;
@@ -400,6 +504,10 @@ void SessionWindow::updatePeerPresence(bool isOnline,
                     << m_peerLastSeenAtUtc;
 }
 
+/**
+ * @brief 初始化界面依赖与状态。
+ * @return 无返回值。
+ */
 void SessionWindow::initUI() {
   setWindowTitle(m_session.displayName());
   resize(kDefaultSessionWindowWidth, kDefaultSessionWindowHeight);
@@ -422,7 +530,11 @@ void SessionWindow::initUI() {
   containerLayout->setContentsMargins(0, 0, 0, 0);
   containerLayout->setSpacing(0);
 
-  // 3. 自定义顶部标题栏
+  /**
+   * @brief 3. 自定义顶部标题栏
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回处理得到的对象指针。
+   */
   QWidget *header = new QWidget(container);
   header->setFixedHeight(50);
   header->setStyleSheet(
@@ -432,7 +544,12 @@ void SessionWindow::initUI() {
   QHBoxLayout *headerLayout = new QHBoxLayout(header);
   headerLayout->setContentsMargins(15, 6, 10, 6);
 
-  // 标题文本 (居中)
+  /**
+   * @brief 标题文本 (居中)
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @return 返回处理得到的对象指针。
+   */
   QLabel *titleLabel = new QLabel(m_session.displayName(), header);
   titleLabel->setStyleSheet("font-size: 16px; font-weight: bold; color: #333;");
   titleLabel->setAlignment(Qt::AlignCenter);
@@ -446,7 +563,12 @@ void SessionWindow::initUI() {
   titleLayout->addWidget(titleLabel, 0, Qt::AlignCenter);
   titleLayout->addWidget(m_presenceLabel, 0, Qt::AlignCenter);
 
-  // 关闭按钮
+  /**
+   * @brief 关闭按钮
+   * @param arg1 输入参数 `arg1`。
+   * @param arg2 输入参数 `arg2`。
+   * @return 返回 QPushButton closeBtn = new 结果。
+   */
   QPushButton *closeBtn = new QPushButton("×", header);
   closeBtn->setFixedSize(30, 30);
   closeBtn->setStyleSheet(
@@ -470,7 +592,11 @@ void SessionWindow::initUI() {
   containerLayout->addWidget(header);
   addDragRegion(header);
 
-  // 内容区域
+  /**
+   * @brief 内容区域
+   * @param arg1 输入参数 `arg1`。
+   * @return 返回处理得到的对象指针。
+   */
   QWidget *contentArea = new QWidget(container);
   contentArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
@@ -586,6 +712,10 @@ void SessionWindow::initUI() {
   refreshPresenceLabel();
 }
 
+/**
+ * @brief 发送待处理消息数据。
+ * @return 无返回值。
+ */
 void SessionWindow::sendPendingMessage() {
   if (!m_inputLine || !m_chatLayout)
     return;
@@ -638,12 +768,21 @@ void SessionWindow::sendPendingMessage() {
   emit outgoingMessageSubmitted(conversationId, message);
 }
 
+/**
+ * @brief 响应发送点击事件。
+ * @return 无返回值。
+ */
 void SessionWindow::onSendClicked() {
   if (!m_inputLine)
     return;
   m_pendingMessage = m_inputLine->toPlainText().trimmed();
 }
 
+/**
+ * @brief 发起attachment请求。
+ * @param imageOnly 布尔参数 `imageOnly`。
+ * @return 无返回值。
+ */
 void SessionWindow::requestAttachment(bool imageOnly) {
   const QString conversationId = m_session.conversationId().trimmed();
   if (conversationId.isEmpty()) {
@@ -664,6 +803,11 @@ void SessionWindow::requestAttachment(bool imageOnly) {
   }
 }
 
+/**
+ * @brief 追加状态line内容。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void SessionWindow::appendStatusLine(const QString &message) {
   const QString line =
       QDateTime::currentDateTime().toString("HH:mm:ss ") + message;
@@ -671,6 +815,13 @@ void SessionWindow::appendStatusLine(const QString &message) {
   qInfo() << "Session status:" << message;
 }
 
+/**
+ * @brief 追加聊天bubble内容。
+ * @param message 消息文本或提示信息。
+ * @param outgoing 布尔参数 `outgoing`。
+ * @param status 状态值。
+ * @return 返回处理得到的对象指针。
+ */
 QLabel *SessionWindow::appendChatBubble(const QString &message, bool outgoing,
                                         bool status) {
   if (!m_chatLayout || !m_chatContainer || !m_chatScroll)
@@ -707,6 +858,10 @@ QLabel *SessionWindow::appendChatBubble(const QString &message, bool outgoing,
   return bubble;
 }
 
+/**
+ * @brief 刷新在线状态label显示或缓存。
+ * @return 无返回值。
+ */
 void SessionWindow::refreshPresenceLabel() {
   if (!m_presenceLabel) {
     return;
@@ -718,6 +873,12 @@ void SessionWindow::refreshPresenceLabel() {
   m_presenceLabel->setText(presenceText(m_peerIsOnline, m_peerLastSeenAtUtc));
 }
 
+/**
+ * @brief 处理incomingpayload流程。
+ * @param payload 原始载荷字符串。
+ * @param sourceTag 来源标识或来源数据。
+ * @return 无返回值。
+ */
 void SessionWindow::handleIncomingPayload(const QString &payload,
                                           const QString &sourceTag) {
   if (!m_chatLayout)
@@ -739,6 +900,11 @@ void SessionWindow::handleIncomingPayload(const QString &payload,
              << parseError << "payload:" << payload;
 }
 
+/**
+ * @brief 追加persisted消息内容。
+ * @param message 消息对象或消息内容。
+ * @return 无返回值。
+ */
 void SessionWindow::appendPersistedMessage(const ChatMessage &message) {
   if (!message.isValid()) {
     return;
@@ -756,6 +922,12 @@ void SessionWindow::appendPersistedMessage(const ChatMessage &message) {
                                                     : MessageStatus::Received);
 }
 
+/**
+ * @brief 追加消息内容。
+ * @param message 消息对象或消息内容。
+ * @param status 状态值。
+ * @return 返回计算得到的数值结果。
+ */
 int SessionWindow::appendMessage(const ChatMessage &message, MessageStatus status) {
   DisplayMessage displayMessage;
   displayMessage.message = message;
@@ -773,6 +945,11 @@ int SessionWindow::appendMessage(const ChatMessage &message, MessageStatus statu
   return index;
 }
 
+/**
+ * @brief 更新消息bubble状态。
+ * @param index 数值参数 `index`。
+ * @return 无返回值。
+ */
 void SessionWindow::updateMessageBubble(int index) {
   if (index < 0 || index >= m_messages.size()) {
     return;
@@ -814,6 +991,12 @@ void SessionWindow::updateMessageBubble(int index) {
   }
 }
 
+/**
+ * @brief 创建消息头像widget对象或数据。
+ * @param index 数值参数 `index`。
+ * @param outgoing 布尔参数 `outgoing`。
+ * @return 返回处理得到的对象指针。
+ */
 QWidget *SessionWindow::createMessageAvatarWidget(int index, bool outgoing) {
   if (index < 0 || index >= m_messages.size()) {
     return nullptr;
@@ -891,6 +1074,11 @@ QWidget *SessionWindow::createMessageAvatarWidget(int index, bool outgoing) {
   return avatarLabel;
 }
 
+/**
+ * @brief 创建消息contentwidget对象或数据。
+ * @param index 数值参数 `index`。
+ * @return 返回处理得到的对象指针。
+ */
 QWidget *SessionWindow::createMessageContentWidget(int index) {
   if (index < 0 || index >= m_messages.size()) {
     return nullptr;
@@ -943,6 +1131,12 @@ QWidget *SessionWindow::createMessageContentWidget(int index) {
   return bubble;
 }
 
+/**
+ * @brief 创建文件cardwidget对象或数据。
+ * @param index 数值参数 `index`。
+ * @param outgoing 布尔参数 `outgoing`。
+ * @return 返回处理得到的对象指针。
+ */
 QWidget *SessionWindow::createFileCardWidget(int index, bool outgoing) {
   if (index < 0 || index >= m_messages.size()) {
     return nullptr;
@@ -1072,6 +1266,11 @@ QWidget *SessionWindow::createFileCardWidget(int index, bool outgoing) {
   return card;
 }
 
+/**
+ * @brief 查找Existing消息Index。
+ * @param message 消息对象或消息内容。
+ * @return 返回计算得到的数值结果。
+ */
 int SessionWindow::findExistingMessageIndex(const ChatMessage &message) const {
   for (int index = 0; index < m_messages.size(); ++index) {
     const ChatMessage &existing = m_messages[index].message;
@@ -1093,6 +1292,11 @@ int SessionWindow::findExistingMessageIndex(const ChatMessage &message) const {
   return -1;
 }
 
+/**
+ * @brief 处理消息发送响应流程。
+ * @param envelope 协议封装数据。
+ * @return 无返回值。
+ */
 void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope) {
   const QString requestId = envelope.requestId.trimmed();
   if (requestId.isEmpty()) {
@@ -1165,6 +1369,11 @@ void SessionWindow::handleMessageSendResponse(const protocol::Envelope &envelope
           << "seq=" << message.message.seq << "sent_at=" << message.message.sentAt;
 }
 
+/**
+ * @brief 处理incoming消息push流程。
+ * @param envelope 协议封装数据。
+ * @return 无返回值。
+ */
 void SessionWindow::handleIncomingMessagePush(const protocol::Envelope &envelope) {
   const QString conversationId = jsonStringValue(envelope.data, "conversation_id");
   if (conversationId.isEmpty() ||
@@ -1197,6 +1406,12 @@ void SessionWindow::handleIncomingMessagePush(const protocol::Envelope &envelope
           << "from_user_id=" << incoming.senderUserId;
 }
 
+/**
+ * @brief 标记待处理消息失败状态。
+ * @param index 数值参数 `index`。
+ * @param reason 字符串参数 `reason`。
+ * @return 无返回值。
+ */
 void SessionWindow::markPendingMessageFailed(int index, const QString &reason) {
   if (index < 0 || index >= m_messages.size()) {
     return;
@@ -1209,6 +1424,11 @@ void SessionWindow::markPendingMessageFailed(int index, const QString &reason) {
              << message.message.requestId << "reason=" << reason;
 }
 
+/**
+ * @brief 判断outgoing消息条件是否满足。
+ * @param message 消息对象或消息内容。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool SessionWindow::isOutgoingMessage(const ChatMessage &message) const {
   const UserSession &session = UserSession::instance();
 
@@ -1230,6 +1450,11 @@ bool SessionWindow::isOutgoingMessage(const ChatMessage &message) const {
                                                   Qt::CaseInsensitive) == 0;
 }
 
+/**
+ * @brief 执行renderMessageBody的核心逻辑。
+ * @param message 消息对象或消息内容。
+ * @return 返回处理后的字符串结果。
+ */
 QString SessionWindow::renderMessageBody(const ChatMessage &message) const {
   if (message.kind == ChatMessageKind::File) {
     const QString fileName = message.file.originalName.trimmed();
@@ -1239,6 +1464,11 @@ QString SessionWindow::renderMessageBody(const ChatMessage &message) const {
   return message.text;
 }
 
+/**
+ * @brief 发起头像ifneeded请求。
+ * @param avatarSource 头像地址或头像来源。
+ * @return 无返回值。
+ */
 void SessionWindow::requestAvatarIfNeeded(const QString &avatarSource) {
   const QString trimmedSource = avatarSource.trimmed();
   if (trimmedSource.isEmpty() || !m_avatarNetworkManager ||
@@ -1274,6 +1504,11 @@ void SessionWindow::requestAvatarIfNeeded(const QString &avatarSource) {
   m_pendingAvatarSources.insert(trimmedSource);
 }
 
+/**
+ * @brief 刷新消息for头像source显示或缓存。
+ * @param avatarSource 头像地址或头像来源。
+ * @return 无返回值。
+ */
 void SessionWindow::refreshMessagesForAvatarSource(const QString &avatarSource) {
   const QString trimmedSource = avatarSource.trimmed();
   if (trimmedSource.isEmpty()) {
@@ -1302,6 +1537,10 @@ void SessionWindow::refreshMessagesForAvatarSource(const QString &avatarSource) 
   }
 }
 
+/**
+ * @brief 执行scrollChatToBottom的核心逻辑。
+ * @return 无返回值。
+ */
 void SessionWindow::scrollChatToBottom() {
   QTimer::singleShot(0, this, [this]() {
     if (m_chatScroll && m_chatScroll->verticalScrollBar()) {
@@ -1310,5 +1549,7 @@ void SessionWindow::scrollChatToBottom() {
     }
   });
 }
+
+
 
 

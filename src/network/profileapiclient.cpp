@@ -26,11 +26,21 @@ constexpr const char *kActionLeaveGroup = "LEAVE_GROUP";
 constexpr const char *kActionDismissGroup = "DISMISS_GROUP";
 constexpr const char *kActionListGroups = "LIST_GROUPS";
 
+/**
+ * @brief 执行normalizeTheme的核心逻辑。
+ * @param theme 主题标识。
+ * @return 返回处理后的字符串结果。
+ */
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
   return trimmed.isEmpty() ? QStringLiteral("default") : trimmed;
 }
 
+/**
+ * @brief 执行jsonValueToString的核心逻辑。
+ * @param value 待处理的值。
+ * @return 返回处理后的字符串结果。
+ */
 QString jsonValueToString(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString();
@@ -42,6 +52,11 @@ QString jsonValueToString(const QJsonValue &value) {
   return QString();
 }
 
+/**
+ * @brief 读取群组数字ID。
+ * @param obj 输入的对象数据。
+ * @return 返回处理后的字符串结果。
+ */
 QString readGroupNumericId(const QJsonObject &obj) {
   const QString groupNumericId = jsonValueToString(obj.value("group_numeric_id"));
   if (!groupNumericId.isEmpty()) {
@@ -78,6 +93,13 @@ bool readRequiredString(const QJsonObject &obj, const char *key, QString *out,
   return false;
 }
 
+/**
+ * @brief 读取RequiredInt。
+ * @param obj 输入的对象数据。
+ * @param key 对象参数 `key`。
+ * @param out 输出结果对象。
+ * @return 返回本次处理是否成功。
+ */
 bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   if (!obj.contains(QLatin1String(key))) {
     return false;
@@ -103,6 +125,13 @@ bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   return false;
 }
 
+/**
+ * @brief 读取Required布尔值。
+ * @param obj 输入的对象数据。
+ * @param key 对象参数 `key`。
+ * @param out 输出结果对象。
+ * @return 返回本次处理是否成功。
+ */
 bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
   if (!obj.contains(QLatin1String(key))) {
     return false;
@@ -151,6 +180,11 @@ bool readOptionalBool(const QJsonObject &obj, const char *key,
   return defaultValue;
 }
 
+/**
+ * @brief 解析utciso时间并生成内部结果。
+ * @param value 待处理的值。
+ * @return 返回 QDateTime 结果。
+ */
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -167,12 +201,23 @@ QDateTime parseUtcIsoTime(const QString &value) {
   return dt.toUTC();
 }
 
+/**
+ * @brief 判断unsignedintegerstring条件是否满足。
+ * @param value 待处理的值。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool isUnsignedIntegerString(const QString &value) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(value).hasMatch();
 }
 }
 
+/**
+ * @brief 构造并初始化ProfileApiClient实例。
+ * @param client 客户端或服务对象。
+ * @param parent 父级对象指针，用于管理当前对象的生命周期。
+ * @return 无返回值。
+ */
 ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<ProfileInfo>("ProfileInfo");
@@ -205,6 +250,11 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
           &ProfileApiClient::onDisconnected);
 }
 
+/**
+ * @brief 发起资料信息请求。
+ * @param userId 用户 ID。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::requestProfileInfo(const QString &userId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionGetInfo);
@@ -221,6 +271,16 @@ QString ProfileApiClient::requestProfileInfo(const QString &userId) {
   return requestId;
 }
 
+/**
+ * @brief 设置资料信息值。
+ * @param userId 用户 ID。
+ * @param avatarUrl 头像地址或头像来源。
+ * @param nickname 昵称内容。
+ * @param signature 个性签名内容。
+ * @param theme 主题标识。
+ * @param themeColor 主题颜色值。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::setProfileInfo(const QString &userId,
                                          const QString &avatarUrl,
                                          const QString &nickname,
@@ -248,6 +308,11 @@ QString ProfileApiClient::setProfileInfo(const QString &userId,
   return requestId;
 }
 
+/**
+ * @brief 执行queryUserProfile的核心逻辑。
+ * @param numericId 数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::queryUserProfile(const QString &numericId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionGet);
@@ -264,6 +329,13 @@ QString ProfileApiClient::queryUserProfile(const QString &numericId) {
   return requestId;
 }
 
+/**
+ * @brief 执行addFriend的核心逻辑。
+ * @param userNumericId 用户数字编号。
+ * @param friendNumericId 好友数字编号。
+ * @param remark 字符串参数 `remark`。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::addFriend(const QString &userNumericId,
                                     const QString &friendNumericId,
                                     const QString &remark) {
@@ -286,6 +358,12 @@ QString ProfileApiClient::addFriend(const QString &userNumericId,
   return requestId;
 }
 
+/**
+ * @brief 执行deleteFriend的核心逻辑。
+ * @param userNumericId 用户数字编号。
+ * @param friendNumericId 好友数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::deleteFriend(const QString &userNumericId,
                                        const QString &friendNumericId) {
   const QString requestId = generateRequestId();
@@ -304,6 +382,11 @@ QString ProfileApiClient::deleteFriend(const QString &userNumericId,
   return requestId;
 }
 
+/**
+ * @brief 执行fetchFriendList的核心逻辑。
+ * @param myNumericId 字符串参数 `myNumericId`。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::fetchFriendList(const QString &myNumericId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionListFriends);
@@ -320,6 +403,11 @@ QString ProfileApiClient::fetchFriendList(const QString &myNumericId) {
   return requestId;
 }
 
+/**
+ * @brief 执行fetchConversationList的核心逻辑。
+ * @param myNumericId 字符串参数 `myNumericId`。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::fetchConversationList(const QString &myNumericId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionListConversations);
@@ -336,6 +424,12 @@ QString ProfileApiClient::fetchConversationList(const QString &myNumericId) {
   return requestId;
 }
 
+/**
+ * @brief 创建群组对象或数据。
+ * @param name 字符串参数 `name`。
+ * @param memberNumericIds 字符串参数 `memberNumericIds`。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::createGroup(const QString &name,
                                       const QStringList &memberNumericIds) {
   const QString requestId = generateRequestId();
@@ -359,6 +453,12 @@ QString ProfileApiClient::createGroup(const QString &name,
   return requestId;
 }
 
+/**
+ * @brief 执行joinGroup的核心逻辑。
+ * @param groupNumericId 群组数字编号。
+ * @param conversationId 会话 ID。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::joinGroup(const QString &groupNumericId,
                                     const QString &conversationId) {
   const QString requestId = generateRequestId();
@@ -382,6 +482,12 @@ QString ProfileApiClient::joinGroup(const QString &groupNumericId,
   return requestId;
 }
 
+/**
+ * @brief 执行leaveGroup的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @param groupNumericId 群组数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::leaveGroup(const QString &conversationId,
                                      const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -406,16 +512,32 @@ QString ProfileApiClient::leaveGroup(const QString &conversationId,
   return requestId;
 }
 
+/**
+ * @brief 执行leaveGroupByConversationId的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::leaveGroupByConversationId(
     const QString &conversationId) {
   return leaveGroup(conversationId, QString());
 }
 
+/**
+ * @brief 执行leaveGroupByGroupNumericId的核心逻辑。
+ * @param groupNumericId 群组数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::leaveGroupByGroupNumericId(
     const QString &groupNumericId) {
   return leaveGroup(QString(), groupNumericId);
 }
 
+/**
+ * @brief 执行dismissGroup的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @param groupNumericId 群组数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::dismissGroup(const QString &conversationId,
                                        const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -440,16 +562,32 @@ QString ProfileApiClient::dismissGroup(const QString &conversationId,
   return requestId;
 }
 
+/**
+ * @brief 执行dismissGroupByConversationId的核心逻辑。
+ * @param conversationId 会话 ID。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::dismissGroupByConversationId(
     const QString &conversationId) {
   return dismissGroup(conversationId, QString());
 }
 
+/**
+ * @brief 执行dismissGroupByGroupNumericId的核心逻辑。
+ * @param groupNumericId 群组数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::dismissGroupByGroupNumericId(
     const QString &groupNumericId) {
   return dismissGroup(QString(), groupNumericId);
 }
 
+/**
+ * @brief 执行listGroups的核心逻辑。
+ * @param keyword 字符串参数 `keyword`。
+ * @param groupNumericId 群组数字编号。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::listGroups(const QString &keyword,
                                      const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -474,6 +612,11 @@ QString ProfileApiClient::listGroups(const QString &keyword,
   return requestId;
 }
 
+/**
+ * @brief 响应文本消息接收事件。
+ * @param message 消息文本或提示信息。
+ * @return 无返回值。
+ */
 void ProfileApiClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -671,6 +814,10 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
   failRequest(requestId, expectedAction, QStringLiteral("unsupported action"));
 }
 
+/**
+ * @brief 响应已断开事件。
+ * @return 无返回值。
+ */
 void ProfileApiClient::onDisconnected() {
   const auto requestIds = m_pendingRequests.keys();
   for (const QString &requestId : requestIds) {
@@ -682,10 +829,20 @@ void ProfileApiClient::onDisconnected() {
   }
 }
 
+/**
+ * @brief 执行generateRequestId的核心逻辑。
+ * @return 返回处理后的字符串结果。
+ */
 QString ProfileApiClient::generateRequestId() const {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+/**
+ * @brief 校验get信息的合法性。
+ * @param userId 用户 ID。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateGetInfo(const QString &userId, QString *error) const {
   if (userId.trimmed().isEmpty()) {
     if (error) {
@@ -696,6 +853,17 @@ bool ProfileApiClient::validateGetInfo(const QString &userId, QString *error) co
   return true;
 }
 
+/**
+ * @brief 校验set信息的合法性。
+ * @param userId 用户 ID。
+ * @param avatarUrl 头像地址或头像来源。
+ * @param nickname 昵称内容。
+ * @param signature 个性签名内容。
+ * @param theme 主题标识。
+ * @param themeColor 主题颜色值。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateSetInfo(const QString &userId,
                                        const QString &avatarUrl,
                                        const QString &nickname,
@@ -765,6 +933,12 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
   return true;
 }
 
+/**
+ * @brief 校验查询user资料的合法性。
+ * @param numericId 数字编号。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
                                                 QString *error) const {
   const QString id = numericId.trimmed();
@@ -783,6 +957,14 @@ bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
   return true;
 }
 
+/**
+ * @brief 校验添加好友的合法性。
+ * @param userNumericId 用户数字编号。
+ * @param friendNumericId 好友数字编号。
+ * @param remark 字符串参数 `remark`。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
                                          const QString &friendNumericId,
                                          const QString &remark,
@@ -829,6 +1011,13 @@ bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
   return true;
 }
 
+/**
+ * @brief 校验删除好友的合法性。
+ * @param userNumericId 用户数字编号。
+ * @param friendNumericId 好友数字编号。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateDeleteFriend(const QString &userNumericId,
                                             const QString &friendNumericId,
                                             QString *error) const {
@@ -867,6 +1056,12 @@ bool ProfileApiClient::validateDeleteFriend(const QString &userNumericId,
   return true;
 }
 
+/**
+ * @brief 校验fetch好友列表的合法性。
+ * @param myNumericId 字符串参数 `myNumericId`。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
                                                QString *error) const {
   const QString id = myNumericId.trimmed();
@@ -885,11 +1080,24 @@ bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
   return true;
 }
 
+/**
+ * @brief 校验fetch会话列表的合法性。
+ * @param myNumericId 字符串参数 `myNumericId`。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateFetchConversationList(const QString &myNumericId,
                                                      QString *error) const {
   return validateFetchFriendList(myNumericId, error);
 }
 
+/**
+ * @brief 校验创建群组的合法性。
+ * @param name 字符串参数 `name`。
+ * @param memberNumericIds 字符串参数 `memberNumericIds`。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateCreateGroup(const QString &name,
                                            const QStringList &memberNumericIds,
                                            QString *error) const {
@@ -928,6 +1136,13 @@ bool ProfileApiClient::validateCreateGroup(const QString &name,
   return true;
 }
 
+/**
+ * @brief 校验加入群组的合法性。
+ * @param groupNumericId 群组数字编号。
+ * @param conversationId 会话 ID。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateJoinGroup(const QString &groupNumericId,
                                          const QString &conversationId,
                                          QString *error) const {
@@ -947,6 +1162,13 @@ bool ProfileApiClient::validateJoinGroup(const QString &groupNumericId,
   return true;
 }
 
+/**
+ * @brief 校验退出群组的合法性。
+ * @param conversationId 会话 ID。
+ * @param groupNumericId 群组数字编号。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateLeaveGroup(const QString &conversationId,
                                           const QString &groupNumericId,
                                           QString *error) const {
@@ -966,6 +1188,13 @@ bool ProfileApiClient::validateLeaveGroup(const QString &conversationId,
   return true;
 }
 
+/**
+ * @brief 校验解散群组的合法性。
+ * @param conversationId 会话 ID。
+ * @param groupNumericId 群组数字编号。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateDismissGroup(const QString &conversationId,
                                             const QString &groupNumericId,
                                             QString *error) const {
@@ -985,6 +1214,13 @@ bool ProfileApiClient::validateDismissGroup(const QString &conversationId,
   return true;
 }
 
+/**
+ * @brief 校验列表群组的合法性。
+ * @param keyword 字符串参数 `keyword`。
+ * @param groupNumericId 群组数字编号。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::validateListGroups(const QString &keyword,
                                           const QString &groupNumericId,
                                           QString *error) const {
@@ -993,6 +1229,15 @@ bool ProfileApiClient::validateListGroups(const QString &keyword,
          groupNumericId.trimmed().size() <= 255;
 }
 
+/**
+ * @brief 发送资料请求数据。
+ * @param action 字符串参数 `action`。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param data 请求或响应数据对象。
+ * @param retries 数值参数 `retries`。
+ * @param retryOnTransient 布尔参数 `retryOnTransient`。
+ * @return 无返回值。
+ */
 void ProfileApiClient::sendProfileRequest(const QString &action,
                                           const QString &requestId,
                                           const QJsonObject &data, int retries,
@@ -1008,6 +1253,15 @@ void ProfileApiClient::sendProfileRequest(const QString &action,
   }
 }
 
+/**
+ * @brief 执行addPendingRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param data 请求或响应数据对象。
+ * @param retries 数值参数 `retries`。
+ * @param retryOnTransient 布尔参数 `retryOnTransient`。
+ * @return 无返回值。
+ */
 void ProfileApiClient::addPendingRequest(const QString &requestId,
                                          const QString &action,
                                          const QJsonObject &data, int retries,
@@ -1038,6 +1292,13 @@ void ProfileApiClient::addPendingRequest(const QString &requestId,
   m_pendingRequests.insert(requestId, pending);
 }
 
+/**
+ * @brief 发送资料payload数据。
+ * @param action 字符串参数 `action`。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param data 请求或响应数据对象。
+ * @return 返回布尔结果。
+ */
 bool ProfileApiClient::sendProfilePayload(const QString &action,
                                           const QString &requestId,
                                           const QJsonObject &data) {
@@ -1052,6 +1313,11 @@ bool ProfileApiClient::sendProfilePayload(const QString &action,
   return true;
 }
 
+/**
+ * @brief 清理待处理请求状态。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @return 无返回值。
+ */
 void ProfileApiClient::clearPendingRequest(const QString &requestId) {
   auto it = m_pendingRequests.find(requestId);
   if (it == m_pendingRequests.end()) {
@@ -1065,6 +1331,12 @@ void ProfileApiClient::clearPendingRequest(const QString &requestId) {
   m_pendingRequests.erase(it);
 }
 
+/**
+ * @brief 执行retryPendingRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param reason 字符串参数 `reason`。
+ * @return 返回布尔结果。
+ */
 bool ProfileApiClient::retryPendingRequest(const QString &requestId,
                                            const QString &reason) {
   auto it = m_pendingRequests.find(requestId);
@@ -1100,6 +1372,14 @@ bool ProfileApiClient::retryPendingRequest(const QString &requestId,
   return true;
 }
 
+/**
+ * @brief 执行failRequest的核心逻辑。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param action 字符串参数 `action`。
+ * @param errorMessage 错误信息输出参数。
+ * @param code 数值参数 `code`。
+ * @return 无返回值。
+ */
 void ProfileApiClient::failRequest(const QString &requestId, const QString &action,
                                    const QString &errorMessage, int code) {
   qWarning().noquote() << "[PROFILE] action=" << action
@@ -1132,6 +1412,14 @@ void ProfileApiClient::failRequest(const QString &requestId, const QString &acti
   emit requestFailed(requestId, action, errorMessage);
 }
 
+/**
+ * @brief 解析资料信息并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outInfo 输出参数 `outInfo`，用于承接函数处理结果。
+ * @param strict 布尔参数 `strict`。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *outInfo,
                                         bool strict, QString *error) const {
   if (!outInfo) {
@@ -1230,6 +1518,13 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
   return true;
 }
 
+/**
+ * @brief 解析添加好友结果并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseAddFriendResult(const QJsonObject &data,
                                             AddFriendResult *outResult,
                                             QString *error) const {
@@ -1264,6 +1559,15 @@ bool ProfileApiClient::parseAddFriendResult(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析删除好友结果并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param code 数值参数 `code`。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseDeleteFriendResult(const QJsonObject &data,
                                                const QString &requestId, int code,
                                                DeleteFriendResult *outResult,
@@ -1310,6 +1614,13 @@ bool ProfileApiClient::parseDeleteFriendResult(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析创建群组结果并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseCreateGroupResult(const QJsonObject &data,
                                               CreateGroupResult *outResult,
                                               QString *error) const {
@@ -1346,6 +1657,13 @@ bool ProfileApiClient::parseCreateGroupResult(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析加入群组结果并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseJoinGroupResult(const QJsonObject &data,
                                             JoinGroupResult *outResult,
                                             QString *error) const {
@@ -1384,6 +1702,13 @@ bool ProfileApiClient::parseJoinGroupResult(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析退出群组结果并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseLeaveGroupResult(const QJsonObject &data,
                                              LeaveGroupResult *outResult,
                                              QString *error) const {
@@ -1423,6 +1748,13 @@ bool ProfileApiClient::parseLeaveGroupResult(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析解散群组结果并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outResult 输出参数 `outResult`，用于承接函数处理结果。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseDismissGroupResult(const QJsonObject &data,
                                                DismissGroupResult *outResult,
                                                QString *error) const {
@@ -1467,6 +1799,13 @@ bool ProfileApiClient::parseDismissGroupResult(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析群组搜索列表并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outGroups 群组相关数据。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseGroupSearchList(const QJsonObject &data,
                                             QVector<GroupSearchItem> *outGroups,
                                             QString *error) const {
@@ -1526,6 +1865,13 @@ bool ProfileApiClient::parseGroupSearchList(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析好友列表并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outFriends 好友相关数据。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseFriendList(const QJsonObject &data,
                                        QVector<FriendItem> *outFriends,
                                        QString *error) const {
@@ -1581,6 +1927,13 @@ bool ProfileApiClient::parseFriendList(const QJsonObject &data,
   return true;
 }
 
+/**
+ * @brief 解析会话列表并生成内部结果。
+ * @param data 请求或响应数据对象。
+ * @param outConversations 会话相关标识或会话数据。
+ * @param error 错误信息相关参数。
+ * @return 返回本次处理是否成功。
+ */
 bool ProfileApiClient::parseConversationList(
     const QJsonObject &data, QVector<ConversationItem> *outConversations,
     QString *error) const {
@@ -1668,3 +2021,6 @@ bool ProfileApiClient::parseConversationList(
   }
   return true;
 }
+
+
+

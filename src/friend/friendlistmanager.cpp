@@ -10,6 +10,11 @@
 #include <QtGlobal>
 
 namespace {
+/**
+ * @brief 执行valueToString的核心逻辑。
+ * @param value 待处理的值。
+ * @return 返回处理后的字符串结果。
+ */
 QString valueToString(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString().trimmed();
@@ -39,6 +44,11 @@ bool valueToBool(const QJsonValue &value, bool defaultValue = false) {
   return defaultValue;
 }
 
+/**
+ * @brief 解析utciso时间并生成内部结果。
+ * @param value 待处理的值。
+ * @return 返回 QDateTime 结果。
+ */
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -58,6 +68,11 @@ QDateTime parseUtcIsoTime(const QString &value) {
 
 namespace friendlist {
 
+/**
+ * @brief 更新fromJSON状态。
+ * @param jsonBytes 对象参数 `jsonBytes`。
+ * @return 返回本次处理是否成功。
+ */
 bool FriendListManager::updateFromJson(const QByteArray &jsonBytes) {
   QJsonParseError parseError;
   const QJsonDocument doc = QJsonDocument::fromJson(jsonBytes, &parseError);
@@ -69,6 +84,11 @@ bool FriendListManager::updateFromJson(const QByteArray &jsonBytes) {
   return updateFromResponse(doc.object());
 }
 
+/**
+ * @brief 更新from响应状态。
+ * @param data 请求或响应数据对象。
+ * @return 返回本次处理是否成功。
+ */
 bool FriendListManager::updateFromResponse(const QJsonObject &data) {
   const QJsonValue friendsValue = data.value("friends");
   if (!friendsValue.isArray()) {
@@ -121,6 +141,15 @@ bool FriendListManager::updateFromResponse(const QJsonObject &data) {
   return true;
 }
 
+/**
+ * @brief 应用在线状态更新配置。
+ * @param userId 用户 ID。
+ * @param numericId 数字编号。
+ * @param isOnline 在线状态标记。
+ * @param lastSeenAtUtc 最近在线时间字符串。
+ * @param updatedFriend 好友相关数据。
+ * @return 返回布尔结果。
+ */
 bool FriendListManager::applyPresenceUpdate(const QString &userId,
                                             const QString &numericId,
                                             bool isOnline,
@@ -157,10 +186,24 @@ bool FriendListManager::applyPresenceUpdate(const QString &userId,
   return false;
 }
 
+/**
+ * @brief 实现 friends 的核心逻辑。
+ * @return 返回整理后的集合结果。
+ */
 const QList<FriendItem> &FriendListManager::friends() const { return m_friends; }
 
+/**
+ * @brief 清理clear状态。
+ * @return 无返回值。
+ */
 void FriendListManager::clear() { m_friends.clear(); }
 
+/**
+ * @brief 刷新列表widget显示或缓存。
+ * @param listWidget 列表控件对象。
+ * @param friends 好友相关数据。
+ * @return 无返回值。
+ */
 void FriendListManager::refreshListWidget(QListWidget *listWidget,
                                           const QList<FriendItem> &friends) {
   if (!listWidget) {
@@ -195,3 +238,7 @@ void FriendListManager::refreshListWidget(QListWidget *listWidget,
 }
 
 } // namespace friendlist
+
+
+
+

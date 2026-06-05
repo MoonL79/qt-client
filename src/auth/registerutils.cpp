@@ -8,6 +8,11 @@
 namespace auth {
 namespace {
 
+/**
+ * @brief 判断required密码complexity条件是否满足。
+ * @param password 密码内容。
+ * @return 返回条件判断结果，`true` 表示满足，`false` 表示不满足。
+ */
 bool hasRequiredPasswordComplexity(const QString &password) {
   bool hasUpper = false;
   bool hasLower = false;
@@ -27,6 +32,11 @@ bool hasRequiredPasswordComplexity(const QString &password) {
 
 } // namespace
 
+/**
+ * @brief 校验注册input的合法性。
+ * @param input 输入字符串或输入数据。
+ * @return 返回 RegisterValidationResult 结果。
+ */
 RegisterValidationResult validateRegisterInput(const RegisterInput &input) {
   RegisterValidationResult result;
   result.normalized.username = input.username.trimmed();
@@ -88,6 +98,11 @@ RegisterValidationResult validateRegisterInput(const RegisterInput &input) {
   return result;
 }
 
+/**
+ * @brief 构建注册数据内容。
+ * @param normalizedInput 对象参数 `normalizedInput`。
+ * @return 返回构建好的 JSON 对象。
+ */
 QJsonObject buildRegisterData(const RegisterInput &normalizedInput) {
   QJsonObject data;
   data.insert("username", normalizedInput.username);
@@ -100,6 +115,13 @@ QJsonObject buildRegisterData(const RegisterInput &normalizedInput) {
   return data;
 }
 
+/**
+ * @brief 创建注册请求payload对象或数据。
+ * @param normalizedInput 对象参数 `normalizedInput`。
+ * @param requestId 请求 ID，用于匹配异步请求与响应。
+ * @param outRequestId 请求 ID，用于关联本次业务操作。
+ * @return 返回处理后的字符串结果。
+ */
 QString createRegisterRequestPayload(const RegisterInput &normalizedInput,
                                      const QString &requestId,
                                      QString *outRequestId) {
@@ -115,3 +137,5 @@ QString createRegisterRequestPayload(const RegisterInput &normalizedInput,
 }
 
 } // namespace auth
+
+
