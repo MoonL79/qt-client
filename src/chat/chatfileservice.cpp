@@ -29,6 +29,7 @@ constexpr const char *kHttpPortEnv = "QT_SERVER_HTTP_PORT";
 constexpr const char *kStaticHostEnv = "QT_SERVER_STATIC_HOST";
 constexpr const char *kStaticPortEnv = "QT_SERVER_STATIC_PORT";
 
+// 实现 `jsonStringValue` 的核心逻辑。
 QString jsonStringValue(const QJsonObject &obj, const char *key) {
   const QJsonValue value = obj.value(QLatin1String(key));
   if (value.isString()) {
@@ -83,11 +84,13 @@ int extractCode(const QJsonObject &obj, int defaultValue = 0) {
   return defaultValue;
 }
 
+// 判断explicit编码条件是否满足。
 bool hasExplicitCode(const QJsonObject &obj) {
   const QJsonValue value = obj.value(QStringLiteral("code"));
   return value.isDouble() || value.isString();
 }
 
+// 解析并确定HTTPhost结果。
 QString resolveHttpHost(const websocketclient *client) {
   QString host = qEnvironmentVariable(kHttpHostEnv).trimmed();
   if (host.isEmpty()) {
@@ -105,6 +108,7 @@ QString resolveHttpHost(const websocketclient *client) {
   return host;
 }
 
+// 解析并确定HTTPport结果。
 int resolveHttpPort() {
   bool ok = false;
   int port = qEnvironmentVariableIntValue(kHttpPortEnv, &ok);
@@ -118,6 +122,7 @@ int resolveHttpPort() {
 }
 } // namespace
 
+// 实现 `m_client` 的核心逻辑。
 ChatFileService::ChatFileService(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<LocalChatFileDescriptor>("LocalChatFileDescriptor");
@@ -141,6 +146,7 @@ ChatFileService::ChatFileService(websocketclient *client, QObject *parent)
           &ChatFileService::onDisconnected);
 }
 
+// 实现 `uploadFile` 的核心逻辑。
 QString ChatFileService::uploadFile(const QString &conversationId,
                                     const QString &localFilePath,
                                     const QString &currentUserId,
@@ -286,6 +292,7 @@ QString ChatFileService::uploadFile(const QString &conversationId,
   return requestId;
 }
 
+// 发送文件消息数据。
 QString ChatFileService::sendFileMessage(const QString &conversationId,
                                          const ChatFileUploadResult &uploadResult) {
   const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -327,6 +334,7 @@ QString ChatFileService::sendFileMessage(const QString &conversationId,
   return requestId;
 }
 
+// 实现 `downloadFile` 的核心逻辑。
 QString ChatFileService::downloadFile(const QString &fileId, const QString &savePath,
                                       const QString &token,
                                       const QString &tokenType) {
@@ -430,6 +438,7 @@ QString ChatFileService::downloadFile(const QString &fileId, const QString &save
   return requestId;
 }
 
+// 处理incoming消息流程。
 bool ChatFileService::handleIncomingMessage(const QString &payload,
                                             ChatMessage *outMessage,
                                             QString *error) {
@@ -445,6 +454,7 @@ bool ChatFileService::handleIncomingMessage(const QString &payload,
   return handleIncomingMessage(envelope, outMessage, error);
 }
 
+// 处理incoming消息流程。
 bool ChatFileService::handleIncomingMessage(const protocol::Envelope &envelope,
                                             ChatMessage *outMessage,
                                             QString *error) {
@@ -460,11 +470,13 @@ bool ChatFileService::handleIncomingMessage(const protocol::Envelope &envelope,
   return true;
 }
 
+// 判断handle消息条件是否满足。
 bool ChatFileService::canHandleMessage(const QString &payload) const {
   protocol::Envelope envelope;
   return protocol::parseEnvelope(payload, &envelope) && canHandleMessage(envelope);
 }
 
+// 判断handle消息条件是否满足。
 bool ChatFileService::canHandleMessage(const protocol::Envelope &envelope) const {
   if (envelope.type != QLatin1String(kTypeMessage) ||
       envelope.action != QLatin1String(kActionSend)) {
@@ -474,6 +486,7 @@ bool ChatFileService::canHandleMessage(const protocol::Envelope &envelope) const
          QLatin1String(kMessageKindFile);
 }
 
+// 解析文件消息并生成内部结果。
 bool ChatFileService::parseFileMessage(const QString &payload, ChatMessage *outMessage,
                                        QString *error) const {
   protocol::Envelope envelope;
@@ -487,6 +500,7 @@ bool ChatFileService::parseFileMessage(const QString &payload, ChatMessage *outM
   return parseFileMessage(envelope, outMessage, error);
 }
 
+// 解析文件消息并生成内部结果。
 bool ChatFileService::parseFileMessage(const protocol::Envelope &envelope,
                                        ChatMessage *outMessage,
                                        QString *error) const {
@@ -540,10 +554,12 @@ bool ChatFileService::parseFileMessage(const protocol::Envelope &envelope,
 }
 
 QVector<ChatMessage>
+// 实现 `messagesForConversation` 的核心逻辑。
 ChatFileService::messagesForConversation(const QString &conversationId) const {
   return m_messagesByConversation.value(conversationId.trimmed());
 }
 
+// 响应文本消息接收事件。
 void ChatFileService::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -612,6 +628,7 @@ void ChatFileService::onTextMessageReceived(const QString &message) {
 
 }
 
+// 响应已断开事件。
 void ChatFileService::onDisconnected() {
   const auto sendIds = m_pendingSends.keys();
   for (const QString &requestId : sendIds) {
@@ -620,11 +637,13 @@ void ChatFileService::onDisconnected() {
   }
 }
 
+// 实现 `normalizeTokenType` 的核心逻辑。
 QString ChatFileService::normalizeTokenType(const QString &tokenType) const {
   const QString trimmed = tokenType.trimmed();
   return trimmed.isEmpty() ? QStringLiteral("Bearer") : trimmed;
 }
 
+// 解析并确定authorization头部结果。
 QString ChatFileService::resolveAuthorizationHeader(const QString &token,
                                                     const QString &tokenType) const {
   const QString trimmedToken = token.trimmed();
@@ -639,6 +658,7 @@ QString ChatFileService::resolveAuthorizationHeader(const QString &token,
   return UserSession::instance().authorizationHeaderValue();
 }
 
+// 构建上传url内容。
 QUrl ChatFileService::buildUploadUrl() const {
   const QString explicitUrl = qEnvironmentVariable(kHttpUrlEnv).trimmed();
   if (!explicitUrl.isEmpty()) {
@@ -655,6 +675,7 @@ QUrl ChatFileService::buildUploadUrl() const {
   return url;
 }
 
+// 构建下载url内容。
 QUrl ChatFileService::buildDownloadUrl(const QString &fileId) const {
   const QString explicitUrl = qEnvironmentVariable(kHttpUrlEnv).trimmed();
   if (!explicitUrl.isEmpty()) {
@@ -671,6 +692,7 @@ QUrl ChatFileService::buildDownloadUrl(const QString &fileId) const {
   return url;
 }
 
+// 校验会话令牌的合法性。
 bool ChatFileService::validateSessionToken(QString *error) const {
   const UserSession &session = UserSession::instance();
   if (!session.isLoggedIn()) {
@@ -700,6 +722,7 @@ bool ChatFileService::validateSessionToken(QString *error) const {
   return true;
 }
 
+// 实现 `failRequest` 的核心逻辑。
 void ChatFileService::failRequest(const QString &requestId, const QString &action,
                                   int code, const QString &error) {
   qWarning().noquote() << "[ChatFileService] action=" << action
@@ -708,6 +731,7 @@ void ChatFileService::failRequest(const QString &requestId, const QString &actio
   emit requestFailed(requestId, action, code, error);
 }
 
+// 实现 `cacheMessage` 的核心逻辑。
 void ChatFileService::cacheMessage(const ChatMessage &message) {
   if (!message.isValid()) {
     return;
@@ -718,6 +742,7 @@ void ChatFileService::cacheMessage(const ChatMessage &message) {
 }
 
 ChatFileUploadResult
+// 解析上传响应并生成内部结果。
 ChatFileService::parseUploadResponse(const QString &requestId, int httpCode,
                                      const QByteArray &body, QString *error) const {
   ChatFileUploadResult result;
@@ -763,6 +788,7 @@ ChatFileService::parseUploadResponse(const QString &requestId, int httpCode,
   return result;
 }
 
+// 解析下载响应并生成内部结果。
 bool ChatFileService::parseDownloadResponse(const QString &requestId,
                                             const QString &fileId,
                                             const QString &savePath,
@@ -807,4 +833,5 @@ bool ChatFileService::parseDownloadResponse(const QString &requestId,
   }
   return true;
 }
+
 

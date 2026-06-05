@@ -16,6 +16,7 @@ constexpr const char *kActionSend = "SEND";
 constexpr int kDefaultPullLimit = 100;
 constexpr int kMaxPullLimit = 200;
 
+// 实现 `jsonStringValue` 的核心逻辑。
 QString jsonStringValue(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString().trimmed();
@@ -50,6 +51,7 @@ int jsonIntValue(const QJsonValue &value, int defaultValue = 0) {
   return defaultValue;
 }
 
+// 实现 `messageEnvelopeOk` 的核心逻辑。
 bool messageEnvelopeOk(const protocol::Envelope &envelope) {
   if (envelope.hasCode && envelope.code != 0) {
     return false;
@@ -64,6 +66,7 @@ bool messageEnvelopeOk(const protocol::Envelope &envelope) {
   return true;
 }
 
+// 实现 `envelopeErrorText` 的核心逻辑。
 QString envelopeErrorText(const protocol::Envelope &envelope) {
   const QString envelopeMessage = envelope.message.trimmed();
   if (!envelopeMessage.isEmpty()) {
@@ -88,6 +91,7 @@ QString envelopeErrorText(const protocol::Envelope &envelope) {
   return QStringLiteral("request failed, code=%1").arg(code);
 }
 
+// 解析消息object并生成内部结果。
 bool parseMessageObject(const QJsonObject &messageObject,
                         const QString &requestId, ChatMessage *outMessage,
                         QString *error) {
@@ -152,6 +156,7 @@ bool parseMessageObject(const QJsonObject &messageObject,
 }
 } // namespace
 
+// 实现 `m_client` 的核心逻辑。
 MessageSyncClient::MessageSyncClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<MessagePullResult>("MessagePullResult");
@@ -173,6 +178,7 @@ MessageSyncClient::MessageSyncClient(websocketclient *client, QObject *parent)
           &MessageSyncClient::onDisconnected);
 }
 
+// 实现 `pullMessages` 的核心逻辑。
 QString MessageSyncClient::pullMessages(const QString &conversationId,
                                         qint64 afterSeq, int limit) {
   const QString requestId = generateRequestId();
@@ -205,6 +211,7 @@ QString MessageSyncClient::pullMessages(const QString &conversationId,
   return requestId;
 }
 
+// 实现 `acknowledgeUpToSeq` 的核心逻辑。
 QString MessageSyncClient::acknowledgeUpToSeq(const QString &conversationId,
                                               qint64 upToSeq, bool delivered) {
   const QString requestId = generateRequestId();
@@ -239,6 +246,7 @@ QString MessageSyncClient::acknowledgeUpToSeq(const QString &conversationId,
   return requestId;
 }
 
+// 解析incoming发送envelope并生成内部结果。
 bool MessageSyncClient::parseIncomingSendEnvelope(
     const protocol::Envelope &envelope, ChatMessage *outMessage,
     QString *error) {
@@ -252,12 +260,14 @@ bool MessageSyncClient::parseIncomingSendEnvelope(
   return parseMessageObject(envelope.data, envelope.requestId, outMessage, error);
 }
 
+// 解析pulled消息object并生成内部结果。
 bool MessageSyncClient::parsePulledMessageObject(const QJsonObject &messageObject,
                                                  ChatMessage *outMessage,
                                                  QString *error) {
   return parseMessageObject(messageObject, QString(), outMessage, error);
 }
 
+// 响应文本消息接收事件。
 void MessageSyncClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -314,6 +324,7 @@ void MessageSyncClient::onTextMessageReceived(const QString &message) {
   failRequest(requestId, action, 500, QStringLiteral("unsupported action"));
 }
 
+// 响应已断开事件。
 void MessageSyncClient::onDisconnected() {
   const auto requestIds = m_pendingRequests.keys();
   for (const QString &requestId : requestIds) {
@@ -324,10 +335,12 @@ void MessageSyncClient::onDisconnected() {
   }
 }
 
+// 实现 `generateRequestId` 的核心逻辑。
 QString MessageSyncClient::generateRequestId() const {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+// 发送消息payload数据。
 bool MessageSyncClient::sendMessagePayload(const QString &action,
                                            const QString &requestId,
                                            const QJsonObject &data) {
@@ -342,6 +355,7 @@ bool MessageSyncClient::sendMessagePayload(const QString &action,
   return true;
 }
 
+// 实现 `addPendingRequest` 的核心逻辑。
 void MessageSyncClient::addPendingRequest(const QString &requestId,
                                           const QString &action) {
   clearPendingRequest(requestId);
@@ -363,6 +377,7 @@ void MessageSyncClient::addPendingRequest(const QString &requestId,
   m_pendingRequests.insert(requestId, pending);
 }
 
+// 清理待处理请求状态。
 void MessageSyncClient::clearPendingRequest(const QString &requestId) {
   auto it = m_pendingRequests.find(requestId);
   if (it == m_pendingRequests.end()) {
@@ -375,6 +390,7 @@ void MessageSyncClient::clearPendingRequest(const QString &requestId) {
   m_pendingRequests.erase(it);
 }
 
+// 实现 `failRequest` 的核心逻辑。
 void MessageSyncClient::failRequest(const QString &requestId,
                                     const QString &action, int code,
                                     const QString &errorMessage) {
@@ -384,6 +400,7 @@ void MessageSyncClient::failRequest(const QString &requestId,
   emit requestFailed(requestId, action, code, errorMessage);
 }
 
+// 解析拉取结果并生成内部结果。
 bool MessageSyncClient::parsePullResult(const protocol::Envelope &envelope,
                                         MessagePullResult *outResult,
                                         QString *error) const {
@@ -452,6 +469,7 @@ bool MessageSyncClient::parsePullResult(const protocol::Envelope &envelope,
   return true;
 }
 
+// 解析确认结果并生成内部结果。
 bool MessageSyncClient::parseAckResult(const protocol::Envelope &envelope,
                                        MessageAckResult *outResult,
                                        QString *error) const {

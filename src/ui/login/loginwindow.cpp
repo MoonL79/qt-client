@@ -21,6 +21,7 @@ constexpr const char *kWebSocketPortEnv = "QT_SERVER_WS_PORT";
 constexpr const char *kDefaultWebSocketHost = "192.168.14.133";
 constexpr int kDefaultWebSocketPort = 12345;
 
+// 解析并确定WebSocketurl结果。
 QUrl resolveWebSocketUrl() {
   const QString urlFromEnv = qEnvironmentVariable(kWebSocketUrlEnv).trimmed();
   if (!urlFromEnv.isEmpty()) {
@@ -49,6 +50,7 @@ QUrl resolveWebSocketUrl() {
   return url;
 }
 
+// 提取登录错误消息信息。
 QString extractLoginErrorMessage(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
 
@@ -92,6 +94,7 @@ QString extractLoginErrorMessage(const protocol::Envelope &envelope) {
   return QStringLiteral("登录失败，未返回错误详情");
 }
 
+// 判断当前登录响应条件是否满足。
 bool isCurrentLoginResponse(const protocol::Envelope &envelope,
                             const QString &pendingRequestId) {
   if (pendingRequestId.isEmpty()) {
@@ -122,6 +125,7 @@ bool isCurrentLoginResponse(const protocol::Envelope &envelope,
          originalRequest.type == "AUTH" && originalRequest.action == "LOGIN";
 }
 
+// 判断登录成功条件是否满足。
 bool isLoginSuccess(const protocol::Envelope &envelope) {
   if (envelope.hasCode) {
     return envelope.code == 0;
@@ -130,6 +134,7 @@ bool isLoginSuccess(const protocol::Envelope &envelope) {
   return envelope.data.value("ok").toBool(false);
 }
 
+// 实现 `toUnsignedString` 的核心逻辑。
 QString toUnsignedString(const QJsonValue &value) {
   if (value.isString()) {
     const QString s = value.toString().trimmed();
@@ -147,6 +152,7 @@ QString toUnsignedString(const QJsonValue &value) {
   return QString();
 }
 
+// 提取登录user编号信息。
 QString extractLoginUserId(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
 
@@ -182,6 +188,7 @@ QString extractLoginUserId(const protocol::Envelope &envelope) {
   return QString();
 }
 
+// 提取登录数字编号信息。
 QString extractLoginNumericId(const protocol::Envelope &envelope) {
   const QJsonObject &data = envelope.data;
 
@@ -199,6 +206,7 @@ QString extractLoginNumericId(const protocol::Envelope &envelope) {
   return QString();
 }
 
+// 提取登录username信息。
 QString extractLoginUsername(const protocol::Envelope &envelope,
                              const QString &fallback) {
   const QJsonObject &data = envelope.data;
@@ -226,19 +234,23 @@ QString extractLoginUsername(const protocol::Envelope &envelope,
   return fallback;
 }
 
+// 提取上传令牌信息。
 QString extractUploadToken(const protocol::Envelope &envelope) {
   return envelope.data.value("upload_token").toString().trimmed();
 }
 
+// 提取上传令牌类型信息。
 QString extractUploadTokenType(const protocol::Envelope &envelope) {
   return envelope.data.value("upload_token_type").toString().trimmed();
 }
 
+// 提取上传令牌expiresat信息。
 QString extractUploadTokenExpiresAt(const protocol::Envelope &envelope) {
   return envelope.data.value("upload_token_expires_at").toString().trimmed();
 }
 }
 
+// 实现 `m_isDragging` 的核心逻辑。
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent), ui(new Ui::LoginWindow), m_isDragging(false) {
   ui->setupUi(this);
@@ -275,8 +287,10 @@ LoginWindow::LoginWindow(QWidget *parent)
   ui->passwordEdit->setEchoMode(QLineEdit::Password);
 }
 
+// 析构 LoginWindow 实例并释放相关资源。
 LoginWindow::~LoginWindow() { delete ui; }
 
+// 实现 `resetLoginForm` 的核心逻辑。
 void LoginWindow::resetLoginForm() {
   m_isLoginPending = false;
   m_pendingUsername.clear();
@@ -290,6 +304,7 @@ void LoginWindow::resetLoginForm() {
   ui->usernameEdit->setFocus();
 }
 
+// 实现 `paintEvent` 的核心逻辑。
 void LoginWindow::paintEvent(QPaintEvent *event) {
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing);
@@ -305,6 +320,7 @@ void LoginWindow::paintEvent(QPaintEvent *event) {
   painter.drawPath(path);
 }
 
+// 响应登录点击事件。
 void LoginWindow::onLoginClicked() {
   QString username = ui->usernameEdit->text().trimmed();
   const QString password = ui->passwordEdit->text();
@@ -340,6 +356,7 @@ void LoginWindow::onLoginClicked() {
   }
 }
 
+// 响应注册点击事件。
 void LoginWindow::onRegisterClicked() {
   if (!m_registerWindow) {
     m_registerWindow = new RegisterWindow(nullptr);
@@ -365,8 +382,10 @@ void LoginWindow::onRegisterClicked() {
   m_registerWindow->activateWindow();
 }
 
+// 关闭`close`资源或连接。
 void LoginWindow::onCloseClicked() { close(); }
 
+// 响应WebSocket已连接事件。
 void LoginWindow::onWebSocketConnected() {
   if (!m_isLoginPending)
     return;
@@ -383,6 +402,7 @@ void LoginWindow::onWebSocketConnected() {
   ui->loginButton->setText("登录中...");
 }
 
+// 响应WebSocket文本消息事件。
 void LoginWindow::onWebSocketTextMessage(const QString &message) {
   if (!m_isLoginPending || m_pendingLoginRequestId.isEmpty())
     return;
@@ -481,6 +501,7 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
   QMessageBox::warning(this, "登录失败", responseMessage);
 }
 
+// 响应WebSocket错误事件。
 void LoginWindow::onWebSocketError(QAbstractSocket::SocketError,
                                    const QString &message) {
   qWarning() << "WebSocket error during login:" << message;
@@ -492,6 +513,7 @@ void LoginWindow::onWebSocketError(QAbstractSocket::SocketError,
   QMessageBox::warning(this, "连接失败", message);
 }
 
+// 实现 `mousePressEvent` 的核心逻辑。
 void LoginWindow::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = true;
@@ -501,6 +523,7 @@ void LoginWindow::mousePressEvent(QMouseEvent *event) {
   }
 }
 
+// 实现 `mouseMoveEvent` 的核心逻辑。
 void LoginWindow::mouseMoveEvent(QMouseEvent *event) {
   if (m_isDragging && (event->buttons() & Qt::LeftButton)) {
     move(event->globalPosition().toPoint() - m_dragPosition);
@@ -508,6 +531,7 @@ void LoginWindow::mouseMoveEvent(QMouseEvent *event) {
   }
 }
 
+// 实现 `mouseReleaseEvent` 的核心逻辑。
 void LoginWindow::mouseReleaseEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     m_isDragging = false;

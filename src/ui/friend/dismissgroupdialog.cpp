@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QVBoxLayout>
 
+// 实现 `m_conversations` 的核心逻辑。
 DismissGroupDialog::DismissGroupDialog(
     const QString &currentUserId,
     const QList<conversationlist::ConversationItem> &conversations,
@@ -36,6 +37,7 @@ DismissGroupDialog::DismissGroupDialog(
   refreshList();
 }
 
+// 设置会话值。
 void DismissGroupDialog::setConversations(
     const QList<conversationlist::ConversationItem> &conversations) {
   m_conversations = conversations;
@@ -43,6 +45,7 @@ void DismissGroupDialog::setConversations(
   refreshList();
 }
 
+// 构建界面内容。
 void DismissGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -66,6 +69,7 @@ void DismissGroupDialog::buildUi() {
           &DismissGroupDialog::onItemDoubleClicked);
 }
 
+// 发起拥有者信息for群组请求。
 void DismissGroupDialog::requestOwnerInfoForGroups() {
   if (!m_profileApiClient) {
     return;
@@ -88,6 +92,7 @@ void DismissGroupDialog::requestOwnerInfoForGroups() {
   }
 }
 
+// 刷新列表显示或缓存。
 void DismissGroupDialog::refreshList() {
   if (!m_groupListWidget) {
     return;
@@ -162,6 +167,7 @@ void DismissGroupDialog::refreshList() {
   m_tipLabel->setText(QStringLiteral("双击群聊项即可解散"));
 }
 
+// 解析并确定解散错误消息结果。
 QString DismissGroupDialog::resolveDismissErrorMessage(int code,
                                                        const QString &error) const {
   if (code == 2001) {
@@ -174,6 +180,7 @@ QString DismissGroupDialog::resolveDismissErrorMessage(int code,
                                    : error.trimmed();
 }
 
+// 响应itemdouble点击事件。
 void DismissGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
   if (!item || !m_profileApiClient || !m_pendingDismissRequestId.isEmpty()) {
     return;
@@ -201,6 +208,7 @@ void DismissGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
       m_profileApiClient->dismissGroupByConversationId(conversationId);
 }
 
+// 响应群组listed事件。
 void DismissGroupDialog::onGroupsListed(const QString &requestId,
                                         const QVector<GroupSearchItem> &groups) {
   const auto it = m_ownerLookupRequestIdToGroupNumericId.find(requestId);
@@ -222,6 +230,7 @@ void DismissGroupDialog::onGroupsListed(const QString &requestId,
   refreshList();
 }
 
+// 响应解散群组完成事件。
 void DismissGroupDialog::onDismissGroupFinished(
     const QString &requestId, const DismissGroupResult &result) {
   if (requestId != m_pendingDismissRequestId) {
@@ -251,6 +260,7 @@ void DismissGroupDialog::onDismissGroupFinished(
                           : result.message.trimmed());
 }
 
+// 响应请求失败detailed事件。
 void DismissGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                  const QString &action, int code,
                                                  const QString &error) {
@@ -270,3 +280,4 @@ void DismissGroupDialog::onRequestFailedDetailed(const QString &requestId,
   m_groupListWidget->setEnabled(true);
   m_tipLabel->setText(resolveDismissErrorMessage(code, error));
 }
+

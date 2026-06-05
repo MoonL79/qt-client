@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QVBoxLayout>
 
+// 实现 `m_friends` 的核心逻辑。
 CreateGroupDialog::CreateGroupDialog(
     const QList<friendlist::FriendItem> &friends,
     ProfileApiClient *profileApiClient, QWidget *parent)
@@ -35,11 +36,13 @@ CreateGroupDialog::CreateGroupDialog(
           &CreateGroupDialog::onRequestFailedDetailed);
 }
 
+// 设置好友值。
 void CreateGroupDialog::setFriends(const QList<friendlist::FriendItem> &friends) {
   m_friends = friends;
   refreshFriendList();
 }
 
+// 构建界面内容。
 void CreateGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -84,6 +87,7 @@ void CreateGroupDialog::buildUi() {
           &CreateGroupDialog::onCreateClicked);
 }
 
+// 刷新好友列表显示或缓存。
 void CreateGroupDialog::refreshFriendList() {
   if (!m_friendListWidget) {
     return;
@@ -115,11 +119,13 @@ void CreateGroupDialog::refreshFriendList() {
   }
 }
 
+// 判断valid数字编号条件是否满足。
 bool CreateGroupDialog::isValidNumericId(const QString &numericId) const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(numericId.trimmed()).hasMatch();
 }
 
+// 实现 `selectedMemberNumericIds` 的核心逻辑。
 QStringList CreateGroupDialog::selectedMemberNumericIds() const {
   QStringList memberNumericIds;
   if (!m_friendListWidget) {
@@ -143,6 +149,7 @@ QStringList CreateGroupDialog::selectedMemberNumericIds() const {
   return memberNumericIds;
 }
 
+// 响应创建点击事件。
 void CreateGroupDialog::onCreateClicked() {
   if (!m_profileApiClient || !m_pendingCreateRequestId.isEmpty()) {
     return;
@@ -167,6 +174,7 @@ void CreateGroupDialog::onCreateClicked() {
       m_profileApiClient->createGroup(groupName, memberNumericIds);
 }
 
+// 响应创建群组succeeded事件。
 void CreateGroupDialog::onCreateGroupSucceeded(
     const QString &requestId, const CreateGroupResult &result) {
   if (requestId != m_pendingCreateRequestId) {
@@ -180,6 +188,7 @@ void CreateGroupDialog::onCreateGroupSucceeded(
   accept();
 }
 
+// 响应请求失败detailed事件。
 void CreateGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                 const QString &action, int,
                                                 const QString &error) {

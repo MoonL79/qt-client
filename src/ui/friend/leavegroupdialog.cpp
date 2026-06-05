@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QVBoxLayout>
 
+// 实现 `m_conversations` 的核心逻辑。
 LeaveGroupDialog::LeaveGroupDialog(
     const QString &currentUserId,
     const QList<conversationlist::ConversationItem> &conversations,
@@ -36,6 +37,7 @@ LeaveGroupDialog::LeaveGroupDialog(
   refreshList();
 }
 
+// 设置会话值。
 void LeaveGroupDialog::setConversations(
     const QList<conversationlist::ConversationItem> &conversations) {
   m_conversations = conversations;
@@ -43,6 +45,7 @@ void LeaveGroupDialog::setConversations(
   refreshList();
 }
 
+// 构建界面内容。
 void LeaveGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -66,6 +69,7 @@ void LeaveGroupDialog::buildUi() {
           &LeaveGroupDialog::onItemDoubleClicked);
 }
 
+// 发起拥有者信息for群组请求。
 void LeaveGroupDialog::requestOwnerInfoForGroups() {
   if (!m_profileApiClient) {
     return;
@@ -88,6 +92,7 @@ void LeaveGroupDialog::requestOwnerInfoForGroups() {
   }
 }
 
+// 刷新列表显示或缓存。
 void LeaveGroupDialog::refreshList() {
   if (!m_groupListWidget) {
     return;
@@ -166,6 +171,7 @@ void LeaveGroupDialog::refreshList() {
   m_tipLabel->setText(QStringLiteral("双击群聊项即可退出"));
 }
 
+// 解析并确定退出错误消息结果。
 QString LeaveGroupDialog::resolveLeaveErrorMessage(int code,
                                                    const QString &error) const {
   if (code == 2001) {
@@ -178,6 +184,7 @@ QString LeaveGroupDialog::resolveLeaveErrorMessage(int code,
                                    : error.trimmed();
 }
 
+// 响应itemdouble点击事件。
 void LeaveGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
   if (!item || !m_profileApiClient || !m_pendingLeaveRequestId.isEmpty()) {
     return;
@@ -205,6 +212,7 @@ void LeaveGroupDialog::onItemDoubleClicked(QListWidgetItem *item) {
       m_profileApiClient->leaveGroupByConversationId(conversationId);
 }
 
+// 响应群组listed事件。
 void LeaveGroupDialog::onGroupsListed(const QString &requestId,
                                       const QVector<GroupSearchItem> &groups) {
   const auto it = m_ownerLookupRequestIdToGroupNumericId.find(requestId);
@@ -226,6 +234,7 @@ void LeaveGroupDialog::onGroupsListed(const QString &requestId,
   refreshList();
 }
 
+// 响应退出群组完成事件。
 void LeaveGroupDialog::onLeaveGroupFinished(const QString &requestId,
                                             const LeaveGroupResult &result) {
   if (requestId != m_pendingLeaveRequestId) {
@@ -256,6 +265,7 @@ void LeaveGroupDialog::onLeaveGroupFinished(const QString &requestId,
   emit groupLeft(result);
 }
 
+// 响应请求失败detailed事件。
 void LeaveGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                const QString &action, int code,
                                                const QString &error) {
@@ -275,3 +285,4 @@ void LeaveGroupDialog::onRequestFailedDetailed(const QString &requestId,
   m_groupListWidget->setEnabled(true);
   m_tipLabel->setText(resolveLeaveErrorMessage(code, error));
 }
+

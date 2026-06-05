@@ -7,6 +7,7 @@
 #include <QTimeZone>
 
 namespace {
+// 实现 `valueToString` 的核心逻辑。
 QString valueToString(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString().trimmed();
@@ -48,6 +49,7 @@ bool valueToBool(const QJsonValue &value, bool defaultValue = false) {
   return defaultValue;
 }
 
+// 解析utciso时间并生成内部结果。
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -64,6 +66,7 @@ QDateTime parseUtcIsoTime(const QString &value) {
   return dt.toUTC();
 }
 
+// 解析并确定display名称结果。
 QString resolveDisplayName(const conversationlist::ConversationItem &item) {
   if (!item.name.trimmed().isEmpty()) {
     return item.name.trimmed();
@@ -85,6 +88,7 @@ namespace conversationlist {
 
 namespace {
 
+// 实现 `readGroupNumericId` 的核心逻辑。
 QString readGroupNumericId(const QJsonObject &obj) {
   const QString groupNumericId = valueToString(obj.value("group_numeric_id"));
   if (!groupNumericId.isEmpty()) {
@@ -101,6 +105,7 @@ QString readGroupNumericId(const QJsonObject &obj) {
 
 } // namespace
 
+// 更新fromJSON状态。
 bool ConversationListManager::updateFromJson(const QByteArray &jsonBytes) {
   QJsonParseError parseError;
   const QJsonDocument doc = QJsonDocument::fromJson(jsonBytes, &parseError);
@@ -112,6 +117,7 @@ bool ConversationListManager::updateFromJson(const QByteArray &jsonBytes) {
   return updateFromResponse(doc.object());
 }
 
+// 更新from响应状态。
 bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
   const QJsonValue conversationsValue = data.value("conversations");
   if (!conversationsValue.isArray()) {
@@ -179,6 +185,7 @@ bool ConversationListManager::updateFromResponse(const QJsonObject &data) {
   return true;
 }
 
+// 应用peer在线状态更新配置。
 bool ConversationListManager::applyPeerPresenceUpdate(
     const QString &userId, const QString &numericId, bool isOnline,
     const QString &lastSeenAtUtc, ConversationItem *updatedConversation) {
@@ -212,6 +219,7 @@ bool ConversationListManager::applyPeerPresenceUpdate(
   return false;
 }
 
+// 移除会话数据或状态。
 bool ConversationListManager::removeConversation(
     const QString &conversationId, const QString &groupNumericId,
     ConversationItem *removedConversation) {
@@ -241,10 +249,12 @@ bool ConversationListManager::removeConversation(
   return false;
 }
 
+// 实现 `conversations` 的核心逻辑。
 const QList<ConversationItem> &ConversationListManager::conversations() const {
   return m_conversations;
 }
 
+// 清理`clear`状态。
 void ConversationListManager::clear() { m_conversations.clear(); }
 
 } // namespace conversationlist

@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 
 namespace {
+// 实现 `cursorShapeForRegion` 的核心逻辑。
 Qt::CursorShape cursorShapeForRegion(FramelessWindowBase::ResizeRegion region) {
   switch (region) {
   case FramelessWindowBase::ResizeRegion::Left:
@@ -33,6 +34,7 @@ Qt::CursorShape cursorShapeForRegion(FramelessWindowBase::ResizeRegion region) {
 }
 } // namespace
 
+// 实现 `QWidget` 的核心逻辑。
 FramelessWindowBase::FramelessWindowBase(QWidget *parent) : QWidget(parent) {
   setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
   setMouseTracking(true);
@@ -51,10 +53,13 @@ FramelessWindowBase::FramelessWindowBase(QWidget *parent) : QWidget(parent) {
   layout->addWidget(m_contentWidget, 1);
 }
 
+// 设置dragenabled值。
 void FramelessWindowBase::setDragEnabled(bool enabled) { m_dragEnabled = enabled; }
 
+// 实现 `dragEnabled` 的核心逻辑。
 bool FramelessWindowBase::dragEnabled() const { return m_dragEnabled; }
 
+// 设置resizeenabled值。
 void FramelessWindowBase::setResizeEnabled(bool enabled) {
   m_resizeEnabled = enabled;
   if (!enabled) {
@@ -63,14 +68,18 @@ void FramelessWindowBase::setResizeEnabled(bool enabled) {
   }
 }
 
+// 实现 `resizeEnabled` 的核心逻辑。
 bool FramelessWindowBase::resizeEnabled() const { return m_resizeEnabled; }
 
+// 设置resizeborderwidth值。
 void FramelessWindowBase::setResizeBorderWidth(int width) {
   m_resizeBorderWidth = qMax(2, width);
 }
 
+// 实现 `resizeBorderWidth` 的核心逻辑。
 int FramelessWindowBase::resizeBorderWidth() const { return m_resizeBorderWidth; }
 
+// 设置titlebarwidget值。
 void FramelessWindowBase::setTitleBarWidget(QWidget *widget) {
   if (m_titleBarWidget == widget) {
     return;
@@ -88,8 +97,10 @@ void FramelessWindowBase::setTitleBarWidget(QWidget *widget) {
   }
 }
 
+// 实现 `titleBarWidget` 的核心逻辑。
 QWidget *FramelessWindowBase::titleBarWidget() const { return m_titleBarWidget; }
 
+// 实现 `addDragRegion` 的核心逻辑。
 void FramelessWindowBase::addDragRegion(QWidget *widget) {
   if (!widget || m_dragRegions.contains(widget)) {
     return;
@@ -99,6 +110,7 @@ void FramelessWindowBase::addDragRegion(QWidget *widget) {
   widget->setMouseTracking(true);
 }
 
+// 移除dragregion数据或状态。
 void FramelessWindowBase::removeDragRegion(QWidget *widget) {
   if (!widget || !m_dragRegions.contains(widget)) {
     return;
@@ -107,6 +119,7 @@ void FramelessWindowBase::removeDragRegion(QWidget *widget) {
   widget->removeEventFilter(this);
 }
 
+// 设置standardtitlebarvisible值。
 void FramelessWindowBase::setStandardTitleBarVisible(bool visible) {
   ensureStandardTitleBar();
   if (m_standardTitleBar) {
@@ -117,10 +130,12 @@ void FramelessWindowBase::setStandardTitleBarVisible(bool visible) {
   }
 }
 
+// 判断standardtitlebarvisible条件是否满足。
 bool FramelessWindowBase::isStandardTitleBarVisible() const {
   return m_standardTitleBar && m_standardTitleBar->isVisible();
 }
 
+// 设置minimizebuttonvisible值。
 void FramelessWindowBase::setMinimizeButtonVisible(bool visible) {
   ensureStandardTitleBar();
   if (m_minimizeButton) {
@@ -128,10 +143,12 @@ void FramelessWindowBase::setMinimizeButtonVisible(bool visible) {
   }
 }
 
+// 判断minimizebuttonvisible条件是否满足。
 bool FramelessWindowBase::isMinimizeButtonVisible() const {
   return m_minimizeButton && m_minimizeButton->isVisible();
 }
 
+// 设置关闭buttonvisible值。
 void FramelessWindowBase::setCloseButtonVisible(bool visible) {
   ensureStandardTitleBar();
   if (m_closeButton) {
@@ -139,16 +156,20 @@ void FramelessWindowBase::setCloseButtonVisible(bool visible) {
   }
 }
 
+// 判断关闭buttonvisible条件是否满足。
 bool FramelessWindowBase::isCloseButtonVisible() const {
   return m_closeButton && m_closeButton->isVisible();
 }
 
+// 实现 `standardTitleBarHeight` 的核心逻辑。
 int FramelessWindowBase::standardTitleBarHeight() const {
   return isStandardTitleBarVisible() ? 40 : 0;
 }
 
+// 实现 `contentWidget` 的核心逻辑。
 QWidget *FramelessWindowBase::contentWidget() const { return m_contentWidget; }
 
+// 实现 `eventFilter` 的核心逻辑。
 bool FramelessWindowBase::eventFilter(QObject *watched, QEvent *event) {
   QWidget *widget = qobject_cast<QWidget *>(watched);
   if (!widget || !m_dragRegions.contains(widget)) {
@@ -188,6 +209,7 @@ bool FramelessWindowBase::eventFilter(QObject *watched, QEvent *event) {
   return QWidget::eventFilter(watched, event);
 }
 
+// 实现 `mousePressEvent` 的核心逻辑。
 void FramelessWindowBase::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::LeftButton) {
     const ResizeRegion region = hitTestResizeRegion(event->position().toPoint());
@@ -205,6 +227,7 @@ void FramelessWindowBase::mousePressEvent(QMouseEvent *event) {
   QWidget::mousePressEvent(event);
 }
 
+// 实现 `mouseMoveEvent` 的核心逻辑。
 void FramelessWindowBase::mouseMoveEvent(QMouseEvent *event) {
   const QPoint globalPos = event->globalPosition().toPoint();
   if (m_resizing && (event->buttons() & Qt::LeftButton)) {
@@ -221,6 +244,7 @@ void FramelessWindowBase::mouseMoveEvent(QMouseEvent *event) {
   QWidget::mouseMoveEvent(event);
 }
 
+// 实现 `mouseReleaseEvent` 的核心逻辑。
 void FramelessWindowBase::mouseReleaseEvent(QMouseEvent *event) {
   if ((m_dragging || m_resizing) && event->button() == Qt::LeftButton) {
     endWindowInteraction();
@@ -230,6 +254,7 @@ void FramelessWindowBase::mouseReleaseEvent(QMouseEvent *event) {
   QWidget::mouseReleaseEvent(event);
 }
 
+// 实现 `leaveEvent` 的核心逻辑。
 void FramelessWindowBase::leaveEvent(QEvent *event) {
   if (!m_dragging && !m_resizing) {
     unsetCursor();
@@ -237,8 +262,10 @@ void FramelessWindowBase::leaveEvent(QEvent *event) {
   QWidget::leaveEvent(event);
 }
 
+// 实现 `resizeEvent` 的核心逻辑。
 void FramelessWindowBase::resizeEvent(QResizeEvent *event) { QWidget::resizeEvent(event); }
 
+// 实现 `changeEvent` 的核心逻辑。
 void FramelessWindowBase::changeEvent(QEvent *event) {
   if (event->type() == QEvent::WindowTitleChange && m_titleLabel) {
     m_titleLabel->setText(windowTitle());
@@ -246,6 +273,7 @@ void FramelessWindowBase::changeEvent(QEvent *event) {
   QWidget::changeEvent(event);
 }
 
+// 实现 `ensureStandardTitleBar` 的核心逻辑。
 void FramelessWindowBase::ensureStandardTitleBar() {
   if (m_standardTitleBar) {
     return;
@@ -290,8 +318,10 @@ void FramelessWindowBase::ensureStandardTitleBar() {
   m_standardTitleBar->show();
 }
 
+// 更新standardtitlebargeometry状态。
 void FramelessWindowBase::updateStandardTitleBarGeometry() {}
 
+// 实现 `shouldStartWindowDrag` 的核心逻辑。
 bool FramelessWindowBase::shouldStartWindowDrag(QObject *source,
                                                 const QPointF &localPos) const {
   if (!m_dragEnabled) {
@@ -315,6 +345,7 @@ bool FramelessWindowBase::shouldStartWindowDrag(QObject *source,
 }
 
 FramelessWindowBase::ResizeRegion
+// 实现 `hitTestResizeRegion` 的核心逻辑。
 FramelessWindowBase::hitTestResizeRegion(const QPoint &localPos) const {
   if (!m_resizeEnabled || isMaximized()) {
     return ResizeRegion::None;
@@ -353,6 +384,7 @@ FramelessWindowBase::hitTestResizeRegion(const QPoint &localPos) const {
   return ResizeRegion::None;
 }
 
+// 更新cursorforposition状态。
 void FramelessWindowBase::updateCursorForPosition(const QPoint &globalPos) {
   if (m_dragging || m_resizing) {
     return;
@@ -361,6 +393,7 @@ void FramelessWindowBase::updateCursorForPosition(const QPoint &globalPos) {
   setCursor(cursorShapeForRegion(region));
 }
 
+// 实现 `beginDrag` 的核心逻辑。
 void FramelessWindowBase::beginDrag(const QPoint &globalPos) {
   if (!m_dragEnabled) {
     return;
@@ -370,6 +403,7 @@ void FramelessWindowBase::beginDrag(const QPoint &globalPos) {
   m_dragOffset = globalPos - frameGeometry().topLeft();
 }
 
+// 实现 `beginResize` 的核心逻辑。
 void FramelessWindowBase::beginResize(const QPoint &globalPos,
                                       ResizeRegion region) {
   m_resizing = true;
@@ -379,10 +413,12 @@ void FramelessWindowBase::beginResize(const QPoint &globalPos,
   m_resizeStartGeometry = geometry();
 }
 
+// 更新drag状态。
 void FramelessWindowBase::updateDrag(const QPoint &globalPos) {
   move(globalPos - m_dragOffset);
 }
 
+// 更新resize状态。
 void FramelessWindowBase::updateResize(const QPoint &globalPos) {
   QRect nextGeometry = m_resizeStartGeometry;
   const QPoint delta = globalPos - m_resizeStartGlobalPos;
@@ -443,9 +479,11 @@ void FramelessWindowBase::updateResize(const QPoint &globalPos) {
   setGeometry(nextGeometry.normalized());
 }
 
+// 实现 `endWindowInteraction` 的核心逻辑。
 void FramelessWindowBase::endWindowInteraction() {
   m_dragging = false;
   m_resizing = false;
   m_activeResizeRegion = ResizeRegion::None;
   unsetCursor();
 }
+

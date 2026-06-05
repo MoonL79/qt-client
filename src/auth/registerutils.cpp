@@ -8,6 +8,7 @@
 namespace auth {
 namespace {
 
+// 判断required密码complexity条件是否满足。
 bool hasRequiredPasswordComplexity(const QString &password) {
   bool hasUpper = false;
   bool hasLower = false;
@@ -27,6 +28,7 @@ bool hasRequiredPasswordComplexity(const QString &password) {
 
 } // namespace
 
+// 校验注册input的合法性。
 RegisterValidationResult validateRegisterInput(const RegisterInput &input) {
   RegisterValidationResult result;
   result.normalized.username = input.username.trimmed();
@@ -88,6 +90,7 @@ RegisterValidationResult validateRegisterInput(const RegisterInput &input) {
   return result;
 }
 
+// 构建注册数据内容。
 QJsonObject buildRegisterData(const RegisterInput &normalizedInput) {
   QJsonObject data;
   data.insert("username", normalizedInput.username);
@@ -100,6 +103,7 @@ QJsonObject buildRegisterData(const RegisterInput &normalizedInput) {
   return data;
 }
 
+// 创建注册请求payload对象或数据。
 QString createRegisterRequestPayload(const RegisterInput &normalizedInput,
                                      const QString &requestId,
                                      QString *outRequestId) {

@@ -8,6 +8,7 @@
 #include <QVBoxLayout>
 
 namespace {
+// 实现 `friendStatusText` 的核心逻辑。
 QString friendStatusText(int status) {
   switch (status) {
   case 1:
@@ -20,6 +21,7 @@ QString friendStatusText(int status) {
 }
 }
 
+// 实现 `m_friends` 的核心逻辑。
 DeleteFriendDialog::DeleteFriendDialog(
     const QString &currentUserNumericId,
     const QList<friendlist::FriendItem> &friends,
@@ -46,11 +48,13 @@ DeleteFriendDialog::DeleteFriendDialog(
           &DeleteFriendDialog::onRequestFailedDetailed);
 }
 
+// 设置好友值。
 void DeleteFriendDialog::setFriends(const QList<friendlist::FriendItem> &friends) {
   m_friends = friends;
   refreshList();
 }
 
+// 构建界面内容。
 void DeleteFriendDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -75,6 +79,7 @@ void DeleteFriendDialog::buildUi() {
           &DeleteFriendDialog::onItemDoubleClicked);
 }
 
+// 刷新列表显示或缓存。
 void DeleteFriendDialog::refreshList() {
   if (!m_friendListWidget) {
     return;
@@ -108,11 +113,13 @@ void DeleteFriendDialog::refreshList() {
   }
 }
 
+// 判断valid数字编号条件是否满足。
 bool DeleteFriendDialog::isValidNumericId(const QString &numericId) const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(numericId.trimmed()).hasMatch();
 }
 
+// 解析并确定删除错误消息结果。
 QString DeleteFriendDialog::resolveDeleteErrorMessage(int code,
                                                       const QString &error) const {
   if (code == 3001) {
@@ -128,6 +135,7 @@ QString DeleteFriendDialog::resolveDeleteErrorMessage(int code,
                                    : error.trimmed();
 }
 
+// 响应itemdouble点击事件。
 void DeleteFriendDialog::onItemDoubleClicked(QListWidgetItem *item) {
   if (!item || !m_profileApiClient || !m_pendingDeleteRequestId.isEmpty()) {
     return;
@@ -155,6 +163,7 @@ void DeleteFriendDialog::onItemDoubleClicked(QListWidgetItem *item) {
       m_profileApiClient->deleteFriend(m_currentUserNumericId, friendNumericId);
 }
 
+// 响应删除好友完成事件。
 void DeleteFriendDialog::onDeleteFriendFinished(const QString &requestId,
                                                 const DeleteFriendResult &result) {
   if (requestId != m_pendingDeleteRequestId) {
@@ -179,6 +188,7 @@ void DeleteFriendDialog::onDeleteFriendFinished(const QString &requestId,
   emit friendDeleted(result);
 }
 
+// 响应请求失败detailed事件。
 void DeleteFriendDialog::onRequestFailedDetailed(const QString &requestId,
                                                  const QString &action, int code,
                                                  const QString &error) {
@@ -191,3 +201,4 @@ void DeleteFriendDialog::onRequestFailedDetailed(const QString &requestId,
   m_friendListWidget->setEnabled(true);
   m_tipLabel->setText(resolveDeleteErrorMessage(code, error));
 }
+

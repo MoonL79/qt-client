@@ -6,6 +6,7 @@
 
 namespace protocol {
 
+// 创建请求对象或数据。
 QString createRequest(const QString &type, const QString &action,
                       const QJsonObject &data, const QString &requestId) {
   QJsonObject envelope;
@@ -19,6 +20,7 @@ QString createRequest(const QString &type, const QString &action,
   return QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
 }
 
+// 解析envelope并生成内部结果。
 bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
                    QString *errorMessage) {
   if (!outEnvelope) {
@@ -84,3 +86,4 @@ bool parseEnvelope(const QString &payload, Envelope *outEnvelope,
 }
 
 } // namespace protocol
+

@@ -50,6 +50,7 @@ public:
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   }
 
+  // 设置hue值。
   void setHue(int hue) {
     hue = qBound(0, hue, 359);
     if (m_hue == hue) {
@@ -59,6 +60,7 @@ public:
     update();
   }
 
+  // 设置颜色值。
   void setColor(const QColor &color) {
     const QColor hsv = color.toHsv();
     const int hue = hsv.hue() < 0 ? m_hue : hsv.hue();
@@ -74,6 +76,7 @@ public:
     }
   }
 
+  // 实现 `color` 的核心逻辑。
   QColor color() const {
     return QColor::fromHsvF(m_hue / 359.0, m_saturation, m_value);
   }
@@ -81,6 +84,7 @@ public:
   std::function<void(const QColor &)> onColorChanged;
 
 protected:
+  // 实现 `paintEvent` 的核心逻辑。
   void paintEvent(QPaintEvent *event) override {
     Q_UNUSED(event);
 
@@ -117,8 +121,10 @@ protected:
     painter.drawEllipse(handle, 11, 11);
   }
 
+  // 实现 `pos` 的核心逻辑。
   void mousePressEvent(QMouseEvent *event) override { updateFromPosition(event->pos()); }
 
+  // 实现 `mouseMoveEvent` 的核心逻辑。
   void mouseMoveEvent(QMouseEvent *event) override {
     if (event->buttons() & Qt::LeftButton) {
       updateFromPosition(event->pos());
@@ -126,14 +132,17 @@ protected:
   }
 
 private:
+  // 实现 `adjusted` 的核心逻辑。
   QRect contentRect() const { return rect().adjusted(4, 4, -4, -4); }
 
+  // 处理center流程。
   QPointF handleCenter(const QRect &content) const {
     const qreal x = content.left() + m_saturation * content.width();
     const qreal y = content.top() + (1.0 - m_value) * content.height();
     return QPointF(x, y);
   }
 
+  // 更新fromposition状态。
   void updateFromPosition(const QPoint &pos) {
     const QRect content = contentRect();
     const qreal x =
@@ -163,6 +172,7 @@ public:
     setMinimumHeight(220);
   }
 
+  // 设置hue值。
   void setHue(int hue) {
     hue = qBound(0, hue, 359);
     if (m_hue == hue) {
@@ -172,11 +182,13 @@ public:
     update();
   }
 
+  // 实现 `hue` 的核心逻辑。
   int hue() const { return m_hue; }
 
   std::function<void(int)> onHueChanged;
 
 protected:
+  // 实现 `paintEvent` 的核心逻辑。
   void paintEvent(QPaintEvent *event) override {
     Q_UNUSED(event);
 
@@ -208,8 +220,10 @@ protected:
     painter.drawRoundedRect(handleRect, 5, 5);
   }
 
+  // 实现 `pos` 的核心逻辑。
   void mousePressEvent(QMouseEvent *event) override { updateFromPosition(event->pos()); }
 
+  // 实现 `mouseMoveEvent` 的核心逻辑。
   void mouseMoveEvent(QMouseEvent *event) override {
     if (event->buttons() & Qt::LeftButton) {
       updateFromPosition(event->pos());
@@ -217,8 +231,10 @@ protected:
   }
 
 private:
+  // 实现 `adjusted` 的核心逻辑。
   QRect contentRect() const { return rect().adjusted(6, 6, -6, -6); }
 
+  // 更新fromposition状态。
   void updateFromPosition(const QPoint &pos) {
     const QRect content = contentRect();
     const qreal y =
@@ -238,11 +254,14 @@ class CurrentTabSizeHintWidget : public QTabWidget {
 public:
   explicit CurrentTabSizeHintWidget(QWidget *parent = nullptr) : QTabWidget(parent) {}
 
+  // 实现 `currentTabSize` 的核心逻辑。
   QSize sizeHint() const override { return currentTabSize(); }
 
+  // 实现 `currentTabSize` 的核心逻辑。
   QSize minimumSizeHint() const override { return currentTabSize(); }
 
 private:
+  // 实现 `currentTabSize` 的核心逻辑。
   QSize currentTabSize() const {
     QSize size = QTabWidget::sizeHint();
     QWidget *page = currentWidget();
@@ -263,11 +282,13 @@ private:
   }
 };
 
+// 判断loopbackhost条件是否满足。
 bool isLoopbackHost(const QString &host) {
   const QString lower = host.trimmed().toLower();
   return lower == "127.0.0.1" || lower == "localhost" || lower == "::1";
 }
 
+// 解析并确定serverhost结果。
 QString resolveServerHost(const QString &currentAvatarUrl) {
   QString host = qEnvironmentVariable(kStaticHostEnv).trimmed();
   if (host.isEmpty()) {
@@ -292,6 +313,7 @@ QString resolveServerHost(const QString &currentAvatarUrl) {
   return host;
 }
 
+// 解析并确定staticport结果。
 int resolveStaticPort() {
   bool ok = false;
   int staticPort = qEnvironmentVariableIntValue(kStaticPortEnv, &ok);
@@ -301,6 +323,7 @@ int resolveStaticPort() {
   return staticPort;
 }
 
+// 实现 `settingsTabsStyleSheetForColor` 的核心逻辑。
 QString settingsTabsStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   return QStringLiteral(
@@ -313,6 +336,7 @@ QString settingsTabsStyleSheetForColor(const QColor &color) {
            accent.lighter(180).name(QColor::HexRgb));
 }
 
+// 实现 `primaryButtonStyleSheetForColor` 的核心逻辑。
 QString primaryButtonStyleSheetForColor(const QColor &color) {
   const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   return QStringLiteral(
@@ -325,6 +349,7 @@ QString primaryButtonStyleSheetForColor(const QColor &color) {
            accent.darker(110).name(QColor::HexRgb));
 }
 
+// 实现 `secondaryButtonStyleSheet` 的核心逻辑。
 QString secondaryButtonStyleSheet() {
   return QStringLiteral(
       "QPushButton { background: #f8fafc; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; "
@@ -334,6 +359,7 @@ QString secondaryButtonStyleSheet() {
       "QPushButton:disabled { background: #f8fafc; color: #9ca3af; border-color: #e5e7eb; }");
 }
 
+// 实现 `contentTypeFromSuffix` 的核心逻辑。
 QString contentTypeFromSuffix(const QString &suffixLower) {
   if (suffixLower == "jpg" || suffixLower == "jpeg") {
     return "image/jpeg";
@@ -351,6 +377,7 @@ QString contentTypeFromSuffix(const QString &suffixLower) {
 }
 }
 
+// 实现 `instance` 的核心逻辑。
 SettingsWindow::SettingsWindow(const QString &userId,
                                ProfileApiClient *profileApiClient,
                                QWidget *parent)
@@ -402,6 +429,7 @@ SettingsWindow::SettingsWindow(const QString &userId,
   onRefreshClicked();
 }
 
+// 析构 SettingsWindow 实例并释放相关资源。
 SettingsWindow::~SettingsWindow() {
   if (m_avatarPreviewReply) {
     m_avatarPreviewReply->abort();
@@ -418,6 +446,7 @@ SettingsWindow::~SettingsWindow() {
   }
 }
 
+// 实现 `eventFilter` 的核心逻辑。
 bool SettingsWindow::eventFilter(QObject *watched, QEvent *event) {
   if (watched == m_titleBar) {
     switch (event->type()) {
@@ -459,6 +488,7 @@ bool SettingsWindow::eventFilter(QObject *watched, QEvent *event) {
   return QWidget::eventFilter(watched, event);
 }
 
+// 构建界面内容。
 void SettingsWindow::buildUi() {
   auto *rootLayout = new QVBoxLayout(this);
   rootLayout->setContentsMargins(6, 6, 6, 6);
@@ -810,6 +840,7 @@ void SettingsWindow::buildUi() {
   updateActionButtons();
 }
 
+// 实现 `targetWindowHeightForTab` 的核心逻辑。
 int SettingsWindow::targetWindowHeightForTab(int tabIndex) const {
   if (!m_tabWidget || tabIndex < 0 || tabIndex >= m_tabWidget->count()) {
     return height();
@@ -836,6 +867,7 @@ int SettingsWindow::targetWindowHeightForTab(int tabIndex) const {
   return qMax(totalHeight, minHeightFloor);
 }
 
+// 实现 `adjustWindowSizeForCurrentTab` 的核心逻辑。
 void SettingsWindow::adjustWindowSizeForCurrentTab(bool animated) {
   if (!m_tabWidget) {
     return;
@@ -885,6 +917,7 @@ void SettingsWindow::adjustWindowSizeForCurrentTab(bool animated) {
   m_resizeAnimation->start();
 }
 
+// 应用主题颜色配置。
 void SettingsWindow::applyThemeColor(const QColor &color) {
   m_themeColor = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   if (m_tabWidget) {
@@ -907,11 +940,13 @@ void SettingsWindow::applyThemeColor(const QColor &color) {
   }
 }
 
+// 判断validuser编号条件是否满足。
 bool SettingsWindow::hasValidUserId() const {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(m_userId.trimmed()).hasMatch();
 }
 
+// 更新actionbuttons状态。
 void SettingsWindow::updateActionButtons() {
   const bool busy = m_loading || m_saving || m_uploading || m_loggingOut;
   m_refreshButton->setEnabled(!busy);
@@ -923,6 +958,7 @@ void SettingsWindow::updateActionButtons() {
   m_signatureEdit->setReadOnly(m_saving || m_uploading || m_loggingOut);
 }
 
+// 设置loading值。
 void SettingsWindow::setLoading(bool loading, const QString &statusText) {
   m_loading = loading;
   updateActionButtons();
@@ -931,6 +967,7 @@ void SettingsWindow::setLoading(bool loading, const QString &statusText) {
   }
 }
 
+// 设置saving值。
 void SettingsWindow::setSaving(bool saving, const QString &statusText) {
   m_saving = saving;
   updateActionButtons();
@@ -939,6 +976,7 @@ void SettingsWindow::setSaving(bool saving, const QString &statusText) {
   }
 }
 
+// 设置uploading值。
 void SettingsWindow::setUploading(bool uploading, const QString &statusText) {
   m_uploading = uploading;
   m_uploadAvatarButton->setText(uploading ? "上传中..." : "上传头像");
@@ -948,6 +986,7 @@ void SettingsWindow::setUploading(bool uploading, const QString &statusText) {
   }
 }
 
+// 响应刷新点击事件。
 void SettingsWindow::onRefreshClicked() {
   if (!m_profileApiClient || !hasValidUserId() || m_loading || m_saving ||
       m_uploading) {
@@ -958,6 +997,7 @@ void SettingsWindow::onRefreshClicked() {
   m_pendingGetRequestId = m_profileApiClient->requestProfileInfo(m_userId.trimmed());
 }
 
+// 校验input的合法性。
 bool SettingsWindow::validateInput(QString *error) const {
   const QString avatarUrl = m_avatarUrl.trimmed();
   const QString nickname = m_nicknameEdit->text().trimmed();
@@ -997,6 +1037,7 @@ bool SettingsWindow::validateInput(QString *error) const {
   return true;
 }
 
+// 校验资料文本input的合法性。
 bool SettingsWindow::validateProfileTextInput(QString *error) const {
   const QString nickname = m_nicknameEdit->text().trimmed();
   const QString signature = m_signatureEdit->toPlainText().trimmed();
@@ -1021,6 +1062,7 @@ bool SettingsWindow::validateProfileTextInput(QString *error) const {
   return true;
 }
 
+// 校验selected头像文件的合法性。
 bool SettingsWindow::validateSelectedAvatarFile(QString *error) const {
   if (m_selectedAvatarFilePath.trimmed().isEmpty()) {
     if (error) {
@@ -1061,6 +1103,7 @@ bool SettingsWindow::validateSelectedAvatarFile(QString *error) const {
   return true;
 }
 
+// 响应保存点击事件。
 void SettingsWindow::onSaveClicked() {
   if (!m_profileApiClient || !hasValidUserId() || m_loading || m_saving ||
       m_uploading) {
@@ -1085,6 +1128,7 @@ void SettingsWindow::onSaveClicked() {
       themeColor);
 }
 
+// 响应choose头像点击事件。
 void SettingsWindow::onChooseAvatarClicked() {
   if (m_loading || m_saving || m_uploading) {
     return;
@@ -1113,6 +1157,7 @@ void SettingsWindow::onChooseAvatarClicked() {
   m_statusLabel->setText("头像已选择，点击“上传头像”提交。");
 }
 
+// 构建上传endpoint内容。
 QUrl SettingsWindow::buildUploadEndpoint() const {
   const int staticPort = resolveStaticPort();
   const QString host = resolveServerHost(m_avatarUrl);
@@ -1124,6 +1169,7 @@ QUrl SettingsWindow::buildUploadEndpoint() const {
   return uploadUrl;
 }
 
+// 解析并确定头像urlforpreview结果。
 QUrl SettingsWindow::resolveAvatarUrlForPreview(const QString &avatarUrl) const {
   const QString trimmed = avatarUrl.trimmed();
   if (trimmed.isEmpty()) {
@@ -1158,6 +1204,7 @@ QUrl SettingsWindow::resolveAvatarUrlForPreview(const QString &avatarUrl) const 
   return url;
 }
 
+// 响应上传头像点击事件。
 void SettingsWindow::onUploadAvatarClicked() {
   if (!hasValidUserId() || m_loading || m_saving || m_uploading) {
     return;
@@ -1252,6 +1299,7 @@ void SettingsWindow::onUploadAvatarClicked() {
   setUploading(true, "头像上传中...");
 }
 
+// 应用资料to界面配置。
 void SettingsWindow::applyProfileToUi(const ProfileInfo &info) {
   m_avatarUrl = info.avatarUrl.trimmed();
   m_nicknameEdit->setText(info.nickname);
@@ -1265,6 +1313,7 @@ void SettingsWindow::applyProfileToUi(const ProfileInfo &info) {
   updateAvatarPreviewFromUrl(info.avatarUrl);
 }
 
+// 更新头像previewfrom本地状态。
 void SettingsWindow::updateAvatarPreviewFromLocal(const QString &filePath) {
   QPixmap pixmap(filePath);
   if (pixmap.isNull()) {
@@ -1277,6 +1326,7 @@ void SettingsWindow::updateAvatarPreviewFromLocal(const QString &filePath) {
   m_avatarPreviewLabel->setPixmap(scaled);
 }
 
+// 更新头像previewfromurl状态。
 void SettingsWindow::updateAvatarPreviewFromUrl(const QString &avatarUrl) {
   if (!m_selectedAvatarFilePath.isEmpty()) {
     updateAvatarPreviewFromLocal(m_selectedAvatarFilePath);
@@ -1302,6 +1352,7 @@ void SettingsWindow::updateAvatarPreviewFromUrl(const QString &avatarUrl) {
           &SettingsWindow::onAvatarPreviewReplyFinished);
 }
 
+// 响应头像preview回复完成事件。
 void SettingsWindow::onAvatarPreviewReplyFinished() {
   QNetworkReply *reply = m_avatarPreviewReply.data();
   m_avatarPreviewReply = nullptr;
@@ -1333,6 +1384,7 @@ void SettingsWindow::onAvatarPreviewReplyFinished() {
   reply->deleteLater();
 }
 
+// 应用默认头像preview配置。
 void SettingsWindow::applyDefaultAvatarPreview() {
   if (!m_avatarPreviewLabel) {
     return;
@@ -1341,11 +1393,13 @@ void SettingsWindow::applyDefaultAvatarPreview() {
   m_avatarPreviewLabel->setText("头像");
 }
 
+// 提取消息fromJSON信息。
 QString SettingsWindow::extractMessageFromJson(const QJsonObject &obj) const {
   const QString message = obj.value("message").toString().trimmed();
   return message.isEmpty() ? QStringLiteral("请求失败") : message;
 }
 
+// 响应上传回复完成事件。
 void SettingsWindow::onUploadReplyFinished() {
   QNetworkReply *reply = m_uploadReply.data();
   m_uploadReply = nullptr;
@@ -1449,6 +1503,7 @@ void SettingsWindow::onUploadReplyFinished() {
   reply->deleteLater();
 }
 
+// 响应资料信息接收事件。
 void SettingsWindow::onProfileInfoReceived(const QString &requestId,
                                            const ProfileInfo &info) {
   if (requestId != m_pendingGetRequestId) {
@@ -1459,6 +1514,7 @@ void SettingsWindow::onProfileInfoReceived(const QString &requestId,
   applyProfileToUi(info);
 }
 
+// 响应资料set成功事件。
 void SettingsWindow::onProfileSetSuccess(const QString &requestId,
                                          const ProfileInfo &info) {
   if (requestId != m_pendingSetRequestId) {
@@ -1473,6 +1529,7 @@ void SettingsWindow::onProfileSetSuccess(const QString &requestId,
   QMessageBox::information(this, "成功", "个人资料保存成功");
 }
 
+// 响应资料请求失败事件。
 void SettingsWindow::onProfileRequestFailed(const QString &requestId,
                                             const QString &action,
                                             const QString &error) {
@@ -1490,6 +1547,7 @@ void SettingsWindow::onProfileRequestFailed(const QString &requestId,
   }
 }
 
+// 响应登出点击事件。
 void SettingsWindow::onLogoutClicked() {
   if (m_loading || m_saving || m_uploading || m_loggingOut) {
     return;
@@ -1519,6 +1577,7 @@ void SettingsWindow::onLogoutClicked() {
   }
 }
 
+// 响应登出succeeded事件。
 void SettingsWindow::onLogoutSucceeded(const QString &requestId,
                                        const LogoutResult &result) {
   if (requestId != m_pendingLogoutRequestId) {
@@ -1537,6 +1596,7 @@ void SettingsWindow::onLogoutSucceeded(const QString &requestId,
   close();
 }
 
+// 响应认证请求失败事件。
 void SettingsWindow::onAuthRequestFailed(const QString &requestId,
                                          const QString &action,
                                          const QString &error) {
@@ -1550,3 +1610,4 @@ void SettingsWindow::onAuthRequestFailed(const QString &requestId,
   m_statusLabel->setText("退出登录失败: " + error);
   QMessageBox::warning(this, "退出登录失败", error);
 }
+

@@ -26,11 +26,13 @@ constexpr const char *kActionLeaveGroup = "LEAVE_GROUP";
 constexpr const char *kActionDismissGroup = "DISMISS_GROUP";
 constexpr const char *kActionListGroups = "LIST_GROUPS";
 
+// 实现 `normalizeTheme` 的核心逻辑。
 QString normalizeTheme(const QString &theme) {
   const QString trimmed = theme.trimmed();
   return trimmed.isEmpty() ? QStringLiteral("default") : trimmed;
 }
 
+// 实现 `jsonValueToString` 的核心逻辑。
 QString jsonValueToString(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString();
@@ -42,6 +44,7 @@ QString jsonValueToString(const QJsonValue &value) {
   return QString();
 }
 
+// 实现 `readGroupNumericId` 的核心逻辑。
 QString readGroupNumericId(const QJsonObject &obj) {
   const QString groupNumericId = jsonValueToString(obj.value("group_numeric_id"));
   if (!groupNumericId.isEmpty()) {
@@ -78,6 +81,7 @@ bool readRequiredString(const QJsonObject &obj, const char *key, QString *out,
   return false;
 }
 
+// 实现 `readRequiredInt` 的核心逻辑。
 bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   if (!obj.contains(QLatin1String(key))) {
     return false;
@@ -103,6 +107,7 @@ bool readRequiredInt(const QJsonObject &obj, const char *key, int *out) {
   return false;
 }
 
+// 实现 `readRequiredBool` 的核心逻辑。
 bool readRequiredBool(const QJsonObject &obj, const char *key, bool *out) {
   if (!obj.contains(QLatin1String(key))) {
     return false;
@@ -151,6 +156,7 @@ bool readOptionalBool(const QJsonObject &obj, const char *key,
   return defaultValue;
 }
 
+// 解析utciso时间并生成内部结果。
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -167,12 +173,14 @@ QDateTime parseUtcIsoTime(const QString &value) {
   return dt.toUTC();
 }
 
+// 判断unsignedintegerstring条件是否满足。
 bool isUnsignedIntegerString(const QString &value) {
   static const QRegularExpression kUnsignedIntRe(QStringLiteral("^\\d+$"));
   return kUnsignedIntRe.match(value).hasMatch();
 }
 }
 
+// 实现 `m_client` 的核心逻辑。
 ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
     : QObject(parent), m_client(client) {
   qRegisterMetaType<ProfileInfo>("ProfileInfo");
@@ -205,6 +213,7 @@ ProfileApiClient::ProfileApiClient(websocketclient *client, QObject *parent)
           &ProfileApiClient::onDisconnected);
 }
 
+// 发起资料信息请求。
 QString ProfileApiClient::requestProfileInfo(const QString &userId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionGetInfo);
@@ -221,6 +230,7 @@ QString ProfileApiClient::requestProfileInfo(const QString &userId) {
   return requestId;
 }
 
+// 设置资料信息值。
 QString ProfileApiClient::setProfileInfo(const QString &userId,
                                          const QString &avatarUrl,
                                          const QString &nickname,
@@ -248,6 +258,7 @@ QString ProfileApiClient::setProfileInfo(const QString &userId,
   return requestId;
 }
 
+// 实现 `queryUserProfile` 的核心逻辑。
 QString ProfileApiClient::queryUserProfile(const QString &numericId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionGet);
@@ -264,6 +275,7 @@ QString ProfileApiClient::queryUserProfile(const QString &numericId) {
   return requestId;
 }
 
+// 实现 `addFriend` 的核心逻辑。
 QString ProfileApiClient::addFriend(const QString &userNumericId,
                                     const QString &friendNumericId,
                                     const QString &remark) {
@@ -286,6 +298,7 @@ QString ProfileApiClient::addFriend(const QString &userNumericId,
   return requestId;
 }
 
+// 实现 `deleteFriend` 的核心逻辑。
 QString ProfileApiClient::deleteFriend(const QString &userNumericId,
                                        const QString &friendNumericId) {
   const QString requestId = generateRequestId();
@@ -304,6 +317,7 @@ QString ProfileApiClient::deleteFriend(const QString &userNumericId,
   return requestId;
 }
 
+// 实现 `fetchFriendList` 的核心逻辑。
 QString ProfileApiClient::fetchFriendList(const QString &myNumericId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionListFriends);
@@ -320,6 +334,7 @@ QString ProfileApiClient::fetchFriendList(const QString &myNumericId) {
   return requestId;
 }
 
+// 实现 `fetchConversationList` 的核心逻辑。
 QString ProfileApiClient::fetchConversationList(const QString &myNumericId) {
   const QString requestId = generateRequestId();
   const QString action = QString::fromLatin1(kActionListConversations);
@@ -336,6 +351,7 @@ QString ProfileApiClient::fetchConversationList(const QString &myNumericId) {
   return requestId;
 }
 
+// 创建群组对象或数据。
 QString ProfileApiClient::createGroup(const QString &name,
                                       const QStringList &memberNumericIds) {
   const QString requestId = generateRequestId();
@@ -359,6 +375,7 @@ QString ProfileApiClient::createGroup(const QString &name,
   return requestId;
 }
 
+// 实现 `joinGroup` 的核心逻辑。
 QString ProfileApiClient::joinGroup(const QString &groupNumericId,
                                     const QString &conversationId) {
   const QString requestId = generateRequestId();
@@ -382,6 +399,7 @@ QString ProfileApiClient::joinGroup(const QString &groupNumericId,
   return requestId;
 }
 
+// 实现 `leaveGroup` 的核心逻辑。
 QString ProfileApiClient::leaveGroup(const QString &conversationId,
                                      const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -406,16 +424,19 @@ QString ProfileApiClient::leaveGroup(const QString &conversationId,
   return requestId;
 }
 
+// 实现 `leaveGroupByConversationId` 的核心逻辑。
 QString ProfileApiClient::leaveGroupByConversationId(
     const QString &conversationId) {
   return leaveGroup(conversationId, QString());
 }
 
+// 实现 `leaveGroupByGroupNumericId` 的核心逻辑。
 QString ProfileApiClient::leaveGroupByGroupNumericId(
     const QString &groupNumericId) {
   return leaveGroup(QString(), groupNumericId);
 }
 
+// 实现 `dismissGroup` 的核心逻辑。
 QString ProfileApiClient::dismissGroup(const QString &conversationId,
                                        const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -440,16 +461,19 @@ QString ProfileApiClient::dismissGroup(const QString &conversationId,
   return requestId;
 }
 
+// 实现 `dismissGroupByConversationId` 的核心逻辑。
 QString ProfileApiClient::dismissGroupByConversationId(
     const QString &conversationId) {
   return dismissGroup(conversationId, QString());
 }
 
+// 实现 `dismissGroupByGroupNumericId` 的核心逻辑。
 QString ProfileApiClient::dismissGroupByGroupNumericId(
     const QString &groupNumericId) {
   return dismissGroup(QString(), groupNumericId);
 }
 
+// 实现 `listGroups` 的核心逻辑。
 QString ProfileApiClient::listGroups(const QString &keyword,
                                      const QString &groupNumericId) {
   const QString requestId = generateRequestId();
@@ -474,6 +498,7 @@ QString ProfileApiClient::listGroups(const QString &keyword,
   return requestId;
 }
 
+// 响应文本消息接收事件。
 void ProfileApiClient::onTextMessageReceived(const QString &message) {
   protocol::Envelope envelope;
   QString parseError;
@@ -671,6 +696,7 @@ void ProfileApiClient::onTextMessageReceived(const QString &message) {
   failRequest(requestId, expectedAction, QStringLiteral("unsupported action"));
 }
 
+// 响应已断开事件。
 void ProfileApiClient::onDisconnected() {
   const auto requestIds = m_pendingRequests.keys();
   for (const QString &requestId : requestIds) {
@@ -682,10 +708,12 @@ void ProfileApiClient::onDisconnected() {
   }
 }
 
+// 实现 `generateRequestId` 的核心逻辑。
 QString ProfileApiClient::generateRequestId() const {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+// 校验get信息的合法性。
 bool ProfileApiClient::validateGetInfo(const QString &userId, QString *error) const {
   if (userId.trimmed().isEmpty()) {
     if (error) {
@@ -696,6 +724,7 @@ bool ProfileApiClient::validateGetInfo(const QString &userId, QString *error) co
   return true;
 }
 
+// 校验set信息的合法性。
 bool ProfileApiClient::validateSetInfo(const QString &userId,
                                        const QString &avatarUrl,
                                        const QString &nickname,
@@ -765,6 +794,7 @@ bool ProfileApiClient::validateSetInfo(const QString &userId,
   return true;
 }
 
+// 校验查询user资料的合法性。
 bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
                                                 QString *error) const {
   const QString id = numericId.trimmed();
@@ -783,6 +813,7 @@ bool ProfileApiClient::validateQueryUserProfile(const QString &numericId,
   return true;
 }
 
+// 校验添加好友的合法性。
 bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
                                          const QString &friendNumericId,
                                          const QString &remark,
@@ -829,6 +860,7 @@ bool ProfileApiClient::validateAddFriend(const QString &userNumericId,
   return true;
 }
 
+// 校验删除好友的合法性。
 bool ProfileApiClient::validateDeleteFriend(const QString &userNumericId,
                                             const QString &friendNumericId,
                                             QString *error) const {
@@ -867,6 +899,7 @@ bool ProfileApiClient::validateDeleteFriend(const QString &userNumericId,
   return true;
 }
 
+// 校验fetch好友列表的合法性。
 bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
                                                QString *error) const {
   const QString id = myNumericId.trimmed();
@@ -885,11 +918,13 @@ bool ProfileApiClient::validateFetchFriendList(const QString &myNumericId,
   return true;
 }
 
+// 校验fetch会话列表的合法性。
 bool ProfileApiClient::validateFetchConversationList(const QString &myNumericId,
                                                      QString *error) const {
   return validateFetchFriendList(myNumericId, error);
 }
 
+// 校验创建群组的合法性。
 bool ProfileApiClient::validateCreateGroup(const QString &name,
                                            const QStringList &memberNumericIds,
                                            QString *error) const {
@@ -928,6 +963,7 @@ bool ProfileApiClient::validateCreateGroup(const QString &name,
   return true;
 }
 
+// 校验加入群组的合法性。
 bool ProfileApiClient::validateJoinGroup(const QString &groupNumericId,
                                          const QString &conversationId,
                                          QString *error) const {
@@ -947,6 +983,7 @@ bool ProfileApiClient::validateJoinGroup(const QString &groupNumericId,
   return true;
 }
 
+// 校验退出群组的合法性。
 bool ProfileApiClient::validateLeaveGroup(const QString &conversationId,
                                           const QString &groupNumericId,
                                           QString *error) const {
@@ -966,6 +1003,7 @@ bool ProfileApiClient::validateLeaveGroup(const QString &conversationId,
   return true;
 }
 
+// 校验解散群组的合法性。
 bool ProfileApiClient::validateDismissGroup(const QString &conversationId,
                                             const QString &groupNumericId,
                                             QString *error) const {
@@ -985,6 +1023,7 @@ bool ProfileApiClient::validateDismissGroup(const QString &conversationId,
   return true;
 }
 
+// 校验列表群组的合法性。
 bool ProfileApiClient::validateListGroups(const QString &keyword,
                                           const QString &groupNumericId,
                                           QString *error) const {
@@ -993,6 +1032,7 @@ bool ProfileApiClient::validateListGroups(const QString &keyword,
          groupNumericId.trimmed().size() <= 255;
 }
 
+// 发送资料请求数据。
 void ProfileApiClient::sendProfileRequest(const QString &action,
                                           const QString &requestId,
                                           const QJsonObject &data, int retries,
@@ -1008,6 +1048,7 @@ void ProfileApiClient::sendProfileRequest(const QString &action,
   }
 }
 
+// 实现 `addPendingRequest` 的核心逻辑。
 void ProfileApiClient::addPendingRequest(const QString &requestId,
                                          const QString &action,
                                          const QJsonObject &data, int retries,
@@ -1038,6 +1079,7 @@ void ProfileApiClient::addPendingRequest(const QString &requestId,
   m_pendingRequests.insert(requestId, pending);
 }
 
+// 发送资料payload数据。
 bool ProfileApiClient::sendProfilePayload(const QString &action,
                                           const QString &requestId,
                                           const QJsonObject &data) {
@@ -1052,6 +1094,7 @@ bool ProfileApiClient::sendProfilePayload(const QString &action,
   return true;
 }
 
+// 清理待处理请求状态。
 void ProfileApiClient::clearPendingRequest(const QString &requestId) {
   auto it = m_pendingRequests.find(requestId);
   if (it == m_pendingRequests.end()) {
@@ -1065,6 +1108,7 @@ void ProfileApiClient::clearPendingRequest(const QString &requestId) {
   m_pendingRequests.erase(it);
 }
 
+// 实现 `retryPendingRequest` 的核心逻辑。
 bool ProfileApiClient::retryPendingRequest(const QString &requestId,
                                            const QString &reason) {
   auto it = m_pendingRequests.find(requestId);
@@ -1100,6 +1144,7 @@ bool ProfileApiClient::retryPendingRequest(const QString &requestId,
   return true;
 }
 
+// 实现 `failRequest` 的核心逻辑。
 void ProfileApiClient::failRequest(const QString &requestId, const QString &action,
                                    const QString &errorMessage, int code) {
   qWarning().noquote() << "[PROFILE] action=" << action
@@ -1132,6 +1177,7 @@ void ProfileApiClient::failRequest(const QString &requestId, const QString &acti
   emit requestFailed(requestId, action, errorMessage);
 }
 
+// 解析资料信息并生成内部结果。
 bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *outInfo,
                                         bool strict, QString *error) const {
   if (!outInfo) {
@@ -1230,6 +1276,7 @@ bool ProfileApiClient::parseProfileInfo(const QJsonObject &data, ProfileInfo *ou
   return true;
 }
 
+// 解析添加好友结果并生成内部结果。
 bool ProfileApiClient::parseAddFriendResult(const QJsonObject &data,
                                             AddFriendResult *outResult,
                                             QString *error) const {
@@ -1264,6 +1311,7 @@ bool ProfileApiClient::parseAddFriendResult(const QJsonObject &data,
   return true;
 }
 
+// 解析删除好友结果并生成内部结果。
 bool ProfileApiClient::parseDeleteFriendResult(const QJsonObject &data,
                                                const QString &requestId, int code,
                                                DeleteFriendResult *outResult,
@@ -1310,6 +1358,7 @@ bool ProfileApiClient::parseDeleteFriendResult(const QJsonObject &data,
   return true;
 }
 
+// 解析创建群组结果并生成内部结果。
 bool ProfileApiClient::parseCreateGroupResult(const QJsonObject &data,
                                               CreateGroupResult *outResult,
                                               QString *error) const {
@@ -1346,6 +1395,7 @@ bool ProfileApiClient::parseCreateGroupResult(const QJsonObject &data,
   return true;
 }
 
+// 解析加入群组结果并生成内部结果。
 bool ProfileApiClient::parseJoinGroupResult(const QJsonObject &data,
                                             JoinGroupResult *outResult,
                                             QString *error) const {
@@ -1384,6 +1434,7 @@ bool ProfileApiClient::parseJoinGroupResult(const QJsonObject &data,
   return true;
 }
 
+// 解析退出群组结果并生成内部结果。
 bool ProfileApiClient::parseLeaveGroupResult(const QJsonObject &data,
                                              LeaveGroupResult *outResult,
                                              QString *error) const {
@@ -1423,6 +1474,7 @@ bool ProfileApiClient::parseLeaveGroupResult(const QJsonObject &data,
   return true;
 }
 
+// 解析解散群组结果并生成内部结果。
 bool ProfileApiClient::parseDismissGroupResult(const QJsonObject &data,
                                                DismissGroupResult *outResult,
                                                QString *error) const {
@@ -1467,6 +1519,7 @@ bool ProfileApiClient::parseDismissGroupResult(const QJsonObject &data,
   return true;
 }
 
+// 解析群组搜索列表并生成内部结果。
 bool ProfileApiClient::parseGroupSearchList(const QJsonObject &data,
                                             QVector<GroupSearchItem> *outGroups,
                                             QString *error) const {
@@ -1526,6 +1579,7 @@ bool ProfileApiClient::parseGroupSearchList(const QJsonObject &data,
   return true;
 }
 
+// 解析好友列表并生成内部结果。
 bool ProfileApiClient::parseFriendList(const QJsonObject &data,
                                        QVector<FriendItem> *outFriends,
                                        QString *error) const {
@@ -1581,6 +1635,7 @@ bool ProfileApiClient::parseFriendList(const QJsonObject &data,
   return true;
 }
 
+// 解析会话列表并生成内部结果。
 bool ProfileApiClient::parseConversationList(
     const QJsonObject &data, QVector<ConversationItem> *outConversations,
     QString *error) const {
@@ -1668,3 +1723,4 @@ bool ProfileApiClient::parseConversationList(
   }
   return true;
 }
+

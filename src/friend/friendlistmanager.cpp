@@ -10,6 +10,7 @@
 #include <QtGlobal>
 
 namespace {
+// 实现 `valueToString` 的核心逻辑。
 QString valueToString(const QJsonValue &value) {
   if (value.isString()) {
     return value.toString().trimmed();
@@ -39,6 +40,7 @@ bool valueToBool(const QJsonValue &value, bool defaultValue = false) {
   return defaultValue;
 }
 
+// 解析utciso时间并生成内部结果。
 QDateTime parseUtcIsoTime(const QString &value) {
   const QString trimmed = value.trimmed();
   if (trimmed.isEmpty()) {
@@ -58,6 +60,7 @@ QDateTime parseUtcIsoTime(const QString &value) {
 
 namespace friendlist {
 
+// 更新fromJSON状态。
 bool FriendListManager::updateFromJson(const QByteArray &jsonBytes) {
   QJsonParseError parseError;
   const QJsonDocument doc = QJsonDocument::fromJson(jsonBytes, &parseError);
@@ -69,6 +72,7 @@ bool FriendListManager::updateFromJson(const QByteArray &jsonBytes) {
   return updateFromResponse(doc.object());
 }
 
+// 更新from响应状态。
 bool FriendListManager::updateFromResponse(const QJsonObject &data) {
   const QJsonValue friendsValue = data.value("friends");
   if (!friendsValue.isArray()) {
@@ -121,6 +125,7 @@ bool FriendListManager::updateFromResponse(const QJsonObject &data) {
   return true;
 }
 
+// 应用在线状态更新配置。
 bool FriendListManager::applyPresenceUpdate(const QString &userId,
                                             const QString &numericId,
                                             bool isOnline,
@@ -157,10 +162,13 @@ bool FriendListManager::applyPresenceUpdate(const QString &userId,
   return false;
 }
 
+// 实现 `friends` 的核心逻辑。
 const QList<FriendItem> &FriendListManager::friends() const { return m_friends; }
 
+// 清理`clear`状态。
 void FriendListManager::clear() { m_friends.clear(); }
 
+// 刷新列表widget显示或缓存。
 void FriendListManager::refreshListWidget(QListWidget *listWidget,
                                           const QList<FriendItem> &friends) {
   if (!listWidget) {
@@ -195,3 +203,4 @@ void FriendListManager::refreshListWidget(QListWidget *listWidget,
 }
 
 } // namespace friendlist
+

@@ -14,6 +14,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
+// 实现 `m_profileApiClient` 的核心逻辑。
 SearchGroupDialog::SearchGroupDialog(ProfileApiClient *profileApiClient,
                                      QWidget *parent)
     : QDialog(parent), m_profileApiClient(profileApiClient) {
@@ -40,6 +41,7 @@ SearchGroupDialog::SearchGroupDialog(ProfileApiClient *profileApiClient,
           &SearchGroupDialog::onRequestFailedDetailed);
 }
 
+// 构建界面内容。
 void SearchGroupDialog::buildUi() {
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(16, 16, 16, 16);
@@ -83,6 +85,7 @@ void SearchGroupDialog::buildUi() {
           &SearchGroupDialog::onItemActivated);
 }
 
+// 响应搜索点击事件。
 void SearchGroupDialog::onSearchClicked() {
   if (!m_profileApiClient || !m_keywordEdit || !m_pendingJoinRequestId.isEmpty()) {
     return;
@@ -104,6 +107,7 @@ void SearchGroupDialog::onSearchClicked() {
       m_profileApiClient->listGroups(keyword, keyword);
 }
 
+// 响应群组listed事件。
 void SearchGroupDialog::onGroupsListed(const QString &requestId,
                                        const QVector<GroupSearchItem> &groups) {
   if (requestId != m_pendingSearchRequestId) {
@@ -118,6 +122,7 @@ void SearchGroupDialog::onGroupsListed(const QString &requestId,
   renderGroups(groups);
 }
 
+// 响应加入群组succeeded事件。
 void SearchGroupDialog::onJoinGroupSucceeded(const QString &requestId,
                                              const JoinGroupResult &result) {
   if (requestId != m_pendingJoinRequestId) {
@@ -161,6 +166,7 @@ void SearchGroupDialog::onJoinGroupSucceeded(const QString &requestId,
   accept();
 }
 
+// 响应请求失败detailed事件。
 void SearchGroupDialog::onRequestFailedDetailed(const QString &requestId,
                                                 const QString &action, int,
                                                 const QString &error) {
@@ -197,6 +203,7 @@ void SearchGroupDialog::onRequestFailedDetailed(const QString &requestId,
   QMessageBox::warning(this, QStringLiteral("搜索群聊失败"), m_statusLabel->text());
 }
 
+// 响应itemactivated事件。
 void SearchGroupDialog::onItemActivated(QListWidgetItem *item) {
   if (!item) {
     return;
@@ -210,6 +217,7 @@ void SearchGroupDialog::onItemActivated(QListWidgetItem *item) {
   triggerGroupAction(index);
 }
 
+// 响应actionbutton点击事件。
 void SearchGroupDialog::onActionButtonClicked() {
   const QObject *senderObject = sender();
   if (!senderObject) {
@@ -219,6 +227,7 @@ void SearchGroupDialog::onActionButtonClicked() {
   triggerGroupAction(index);
 }
 
+// 实现 `triggerGroupAction` 的核心逻辑。
 void SearchGroupDialog::triggerGroupAction(int index) {
   if (!m_profileApiClient || index < 0 || index >= m_groups.size()) {
     return;
@@ -252,6 +261,7 @@ void SearchGroupDialog::triggerGroupAction(int index) {
       group.groupNumericId.trimmed(), group.conversationId.trimmed());
 }
 
+// 实现 `renderGroups` 的核心逻辑。
 void SearchGroupDialog::renderGroups(const QVector<GroupSearchItem> &groups) {
   m_groups = groups;
   m_resultListWidget->clear();
@@ -356,6 +366,7 @@ void SearchGroupDialog::renderGroups(const QVector<GroupSearchItem> &groups) {
   m_statusLabel->setText(QStringLiteral("搜索到 %1 个群聊结果").arg(groups.size()));
 }
 
+// 清理results状态。
 void SearchGroupDialog::clearResults(const QString &statusText) {
   m_groups.clear();
   if (m_resultListWidget) {
@@ -366,6 +377,7 @@ void SearchGroupDialog::clearResults(const QString &statusText) {
   }
 }
 
+// 设置加入loading值。
 void SearchGroupDialog::setJoinLoading(bool loading, int index) {
   if (!m_resultListWidget) {
     return;
@@ -398,6 +410,7 @@ void SearchGroupDialog::setJoinLoading(bool loading, int index) {
   }
 }
 
+// 实现 `defaultGroupIcon` 的核心逻辑。
 QIcon SearchGroupDialog::defaultGroupIcon() const {
   return style() ? style()->standardIcon(QStyle::SP_DirIcon) : QIcon();
 }

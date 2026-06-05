@@ -3,6 +3,7 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 
+// 实现 `m_logBox` 的核心逻辑。
 LogWindow::LogWindow(QWidget *parent) : QWidget(parent), m_logBox(nullptr) {
   setWindowTitle("测试日志窗口");
   resize(900, 500);
@@ -17,6 +18,7 @@ LogWindow::LogWindow(QWidget *parent) : QWidget(parent), m_logBox(nullptr) {
   layout->addWidget(m_logBox);
 }
 
+// 追加log内容。
 void LogWindow::appendLog(const QString &line) {
   if (!m_logBox)
     return;

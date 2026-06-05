@@ -9,20 +9,24 @@
 #include <QUuid>
 
 namespace {
+// 实现 `normalizedText` 的核心逻辑。
 QString normalizedText(const QString &value) {
   return value.isNull() ? QString("") : value;
 }
 
+// 实现 `sqlErrorText` 的核心逻辑。
 QString sqlErrorText(const QSqlQuery &query) {
   const QString text = query.lastError().text().trimmed();
   return text.isEmpty() ? QStringLiteral("unknown sqlite error") : text;
 }
 
+// 实现 `sqlErrorText` 的核心逻辑。
 QString sqlErrorText(const QSqlDatabase &database) {
   const QString text = database.lastError().text().trimmed();
   return text.isEmpty() ? QStringLiteral("unknown sqlite error") : text;
 }
 
+// 实现 `bindMessageValues` 的核心逻辑。
 void bindMessageValues(QSqlQuery *query, const ChatMessage &message,
                        const QString &ownerUserId, const QString &dedupeKey) {
   query->bindValue(QStringLiteral(":dedupe_key"), normalizedText(dedupeKey));
@@ -61,13 +65,16 @@ void bindMessageValues(QSqlQuery *query, const ChatMessage &message,
 }
 } // namespace
 
+// 实现 `toString` 的核心逻辑。
 LocalChatStore::LocalChatStore()
     : m_connectionName(
           QStringLiteral("local-chat-store-%1")
               .arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {}
 
+// 清理当前user状态。
 LocalChatStore::~LocalChatStore() { clearCurrentUser(); }
 
+// 设置当前user值。
 bool LocalChatStore::setCurrentUser(const QString &currentUserId, QString *error) {
   const QString trimmedUserId = currentUserId.trimmed();
   if (trimmedUserId.isEmpty()) {
@@ -95,6 +102,7 @@ bool LocalChatStore::setCurrentUser(const QString &currentUserId, QString *error
   return true;
 }
 
+// 清理当前user状态。
 void LocalChatStore::clearCurrentUser() {
   if (m_database.isValid()) {
     m_database.close();
@@ -106,6 +114,7 @@ void LocalChatStore::clearCurrentUser() {
   m_currentUserId.clear();
 }
 
+// 保存消息数据。
 bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
   if (!message.isValid()) {
     if (error) {
@@ -201,6 +210,7 @@ bool LocalChatStore::saveMessage(const ChatMessage &message, QString *error) {
   return true;
 }
 
+// 更新existing消息状态。
 bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
                                            QString *error) {
   const QString dedupeKey = dedupeKeyForMessage(message);
@@ -333,6 +343,7 @@ bool LocalChatStore::updateExistingMessage(const ChatMessage &message,
   return false;
 }
 
+// 实现 `cleanupDuplicateRequestRows` 的核心逻辑。
 bool LocalChatStore::cleanupDuplicateRequestRows(const ChatMessage &message,
                                                  QString *error) {
   const QString requestId = message.requestId.trimmed();
@@ -368,6 +379,7 @@ bool LocalChatStore::cleanupDuplicateRequestRows(const ChatMessage &message,
   return true;
 }
 
+// 加载消息数据。
 QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId, int limit,
                                                   QString *error) const {
   QVector<ChatMessage> messages;
@@ -458,6 +470,7 @@ QVector<ChatMessage> LocalChatStore::loadMessages(const QString &conversationId,
   return messages;
 }
 
+// 实现 `lastSeqForConversation` 的核心逻辑。
 qint64 LocalChatStore::lastSeqForConversation(const QString &conversationId,
                                               QString *error) const {
   if (!isReady(error)) {
@@ -503,6 +516,7 @@ qint64 LocalChatStore::lastSeqForConversation(const QString &conversationId,
   return query.value(0).toLongLong();
 }
 
+// 打开database资源或连接。
 bool LocalChatStore::openDatabase(const QString &currentUserId, QString *error) {
   const QString databasePath = databasePathForUser(currentUserId);
   QFileInfo info(databasePath);
@@ -529,6 +543,7 @@ bool LocalChatStore::openDatabase(const QString &currentUserId, QString *error) 
   return true;
 }
 
+// 实现 `ensureSchema` 的核心逻辑。
 bool LocalChatStore::ensureSchema(QString *error) {
   QSqlQuery query(m_database);
   if (!query.exec(QStringLiteral(
@@ -590,6 +605,7 @@ bool LocalChatStore::ensureSchema(QString *error) {
   return true;
 }
 
+// 实现 `databasePathForUser` 的核心逻辑。
 QString LocalChatStore::databasePathForUser(const QString &currentUserId) const {
   QString basePath =
       QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).trimmed();
@@ -601,6 +617,7 @@ QString LocalChatStore::databasePathForUser(const QString &currentUserId) const 
                     .arg(currentUserId.trimmed()));
 }
 
+// 实现 `dedupeKeyForMessage` 的核心逻辑。
 QString LocalChatStore::dedupeKeyForMessage(const ChatMessage &message) const {
   const QString conversationId = message.conversationId.trimmed();
   if (message.seq > 0) {
@@ -629,6 +646,7 @@ QString LocalChatStore::dedupeKeyForMessage(const ChatMessage &message) const {
            message.sentAt.trimmed(), message.text.trimmed());
 }
 
+// 判断ready条件是否满足。
 bool LocalChatStore::isReady(QString *error) const {
   if (m_currentUserId.isEmpty() || !m_database.isValid() || !m_database.isOpen()) {
     if (error) {

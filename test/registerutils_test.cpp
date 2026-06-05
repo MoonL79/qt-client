@@ -16,6 +16,7 @@ private slots:
   void buildRegisterPayloadShouldMatchProtocol();
 };
 
+// 实现 `invalidUsernameShouldFail` 的核心逻辑。
 void RegisterUtilsTest::invalidUsernameShouldFail() {
   auth::RegisterInput input;
   input.username = "ab";
@@ -28,6 +29,7 @@ void RegisterUtilsTest::invalidUsernameShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("用户名")));
 }
 
+// 实现 `invalidEmailShouldFail` 的核心逻辑。
 void RegisterUtilsTest::invalidEmailShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -40,6 +42,7 @@ void RegisterUtilsTest::invalidEmailShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("邮箱")));
 }
 
+// 实现 `weakPasswordShouldFail` 的核心逻辑。
 void RegisterUtilsTest::weakPasswordShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -52,6 +55,7 @@ void RegisterUtilsTest::weakPasswordShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("密码")));
 }
 
+// 实现 `emptyNicknameShouldFail` 的核心逻辑。
 void RegisterUtilsTest::emptyNicknameShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -64,6 +68,7 @@ void RegisterUtilsTest::emptyNicknameShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("昵称")));
 }
 
+// 实现 `optionalFieldTooLongShouldFail` 的核心逻辑。
 void RegisterUtilsTest::optionalFieldTooLongShouldFail() {
   auth::RegisterInput input;
   input.username = "alice_01";
@@ -77,6 +82,7 @@ void RegisterUtilsTest::optionalFieldTooLongShouldFail() {
   QVERIFY(result.errorMessage.contains(QStringLiteral("简介")));
 }
 
+// 构建注册payloadshouldmatchprotocol内容。
 void RegisterUtilsTest::buildRegisterPayloadShouldMatchProtocol() {
   auth::RegisterInput input;
   input.username = " alice_01 ";
