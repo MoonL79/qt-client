@@ -4,12 +4,16 @@
 #include "registerwindow.h"
 #include "usersession.h"
 #include "ui_loginwindow.h"
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
 #include <QRegularExpression>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QUuid>
 #include <QDebug>
 #include <QtGlobal>
@@ -20,6 +24,26 @@ constexpr const char *kWebSocketHostEnv = "QT_SERVER_WS_HOST";
 constexpr const char *kWebSocketPortEnv = "QT_SERVER_WS_PORT";
 constexpr const char *kDefaultWebSocketHost = "192.168.14.133";
 constexpr int kDefaultWebSocketPort = 12345;
+constexpr auto kLoginSettingsRelativePath = "login/login.ini";
+constexpr auto kLoginUsernameKey = "login/username";
+constexpr auto kLoginPasswordKey = "login/password";
+constexpr auto kLoginRememberPasswordKey = "login/remember_password";
+
+QString loginSettingsPath() {
+  QString basePath =
+      QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+          .trimmed();
+  if (basePath.isEmpty()) {
+    basePath = QDir::homePath() + QStringLiteral("/.qt-client");
+  }
+  return QDir(basePath).filePath(QString::fromUtf8(kLoginSettingsRelativePath));
+}
+
+bool ensureLoginSettingsDirectory() {
+  const QFileInfo info(loginSettingsPath());
+  QDir directory = info.dir();
+  return directory.exists() || directory.mkpath(QStringLiteral("."));
+}
 
 /**
  * @brief 解析并确定WebSocketurl结果。
@@ -361,6 +385,7 @@ LoginWindow::LoginWindow(QWidget *parent)
    * @return 返回 ui->passwordEdit-> 结果。
    */
   ui->passwordEdit->setEchoMode(QLineEdit::Password);
+  restoreSavedCredentials();
 }
 
 /**
@@ -378,12 +403,9 @@ void LoginWindow::resetLoginForm() {
   m_pendingUsername.clear();
   m_pendingPassword.clear();
   m_pendingLoginRequestId.clear();
-  ui->usernameEdit->clear();
-  ui->passwordEdit->clear();
-  ui->rememberCheckBox->setChecked(false);
   ui->loginButton->setEnabled(true);
   ui->loginButton->setText("登录");
-  ui->usernameEdit->setFocus();
+  restoreSavedCredentials();
 }
 
 /**
@@ -603,6 +625,8 @@ void LoginWindow::onWebSocketTextMessage(const QString &message) {
     qInfo() << "Presence cached for user_id:" << userId
             << "is_online:" << UserSession::instance().isOnline()
             << "last_seen_at:" << UserSession::instance().lastSeenAtUtc();
+    persistSavedCredentials(m_pendingUsername, m_pendingPassword,
+                            ui->rememberCheckBox->isChecked());
     m_pendingPassword.clear();
     emit loginSuccess(loginUsername, userId);
     return;
@@ -668,5 +692,64 @@ void LoginWindow::mouseReleaseEvent(QMouseEvent *event) {
   }
 }
 
+void LoginWindow::restoreSavedCredentials() {
+  ui->usernameEdit->clear();
+  ui->passwordEdit->clear();
+  ui->rememberCheckBox->setChecked(false);
+
+  const QString settingsPath = loginSettingsPath();
+  if (!QFileInfo::exists(settingsPath)) {
+    ui->usernameEdit->setFocus();
+    return;
+  }
+
+  QSettings settings(settingsPath, QSettings::IniFormat);
+  const QString savedUsername =
+      settings.value(QString::fromUtf8(kLoginUsernameKey)).toString().trimmed();
+  const bool rememberPassword =
+      settings.value(QString::fromUtf8(kLoginRememberPasswordKey), false)
+          .toBool();
+  const QString savedPassword =
+      rememberPassword
+          ? settings.value(QString::fromUtf8(kLoginPasswordKey)).toString()
+          : QString();
+
+  ui->usernameEdit->setText(savedUsername);
+  ui->passwordEdit->setText(savedPassword);
+  ui->rememberCheckBox->setChecked(rememberPassword && !savedPassword.isEmpty());
+
+  if (savedUsername.isEmpty()) {
+    ui->usernameEdit->setFocus();
+  } else if (savedPassword.isEmpty()) {
+    ui->passwordEdit->setFocus();
+  } else {
+    ui->loginButton->setFocus();
+  }
+}
+
+void LoginWindow::persistSavedCredentials(const QString &username,
+                                          const QString &password,
+                                          bool rememberPassword) {
+  if (!ensureLoginSettingsDirectory()) {
+    qWarning() << "Failed to create login settings directory:"
+               << QFileInfo(loginSettingsPath()).dir().absolutePath();
+    return;
+  }
+
+  QSettings settings(loginSettingsPath(), QSettings::IniFormat);
+  settings.setValue(QString::fromUtf8(kLoginUsernameKey), username.trimmed());
+  settings.setValue(QString::fromUtf8(kLoginRememberPasswordKey),
+                    rememberPassword);
+  if (rememberPassword) {
+    settings.setValue(QString::fromUtf8(kLoginPasswordKey), password);
+  } else {
+    settings.remove(QString::fromUtf8(kLoginPasswordKey));
+  }
+  settings.sync();
+  if (settings.status() != QSettings::NoError) {
+    qWarning() << "Failed to persist login credentials, settings_path="
+               << loginSettingsPath() << "status=" << settings.status();
+  }
+}
 
 

@@ -43,7 +43,11 @@ protected:
   void mouseReleaseEvent(QMouseEvent *event) override;
   void paintEvent(QPaintEvent *event) override;
 
- private:
+private:
+  void restoreSavedCredentials();
+  void persistSavedCredentials(const QString &username, const QString &password,
+                               bool rememberPassword);
+
   Ui::LoginWindow *ui;
   QPointer<RegisterWindow> m_registerWindow;
   QPoint m_dragPosition;
