@@ -2,11 +2,13 @@
 #include "usersession.h"
 #include "websocketclient.h"
 
+#include <QDebug>
+#include <QEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QEvent>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHttpMultiPart>
@@ -14,24 +16,22 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
-#include <QNetworkRequest>
-#include <QPixmap>
-#include <QDebug>
-#include <QFrame>
-#include <QRegularExpression>
 #include <QMouseEvent>
+#include <QNetworkRequest>
+#include <QPaintEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPaintEvent>
+#include <QPixmap>
 #include <QPropertyAnimation>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QStyle>
 #include <QTabBar>
 #include <QTimer>
 #include <QUuid>
-#include <QtGlobal>
 #include <QVBoxLayout>
+#include <QtGlobal>
 #include <functional>
 #include <memory>
 
@@ -72,9 +72,11 @@ public:
   void setColor(const QColor &color) {
     const QColor hsv = color.toHsv();
     const int hue = hsv.hue() < 0 ? m_hue : hsv.hue();
-    const qreal saturation = hsv.hsvSaturationF() < 0.0 ? 0.0 : hsv.hsvSaturationF();
+    const qreal saturation =
+        hsv.hsvSaturationF() < 0.0 ? 0.0 : hsv.hsvSaturationF();
     const qreal value = hsv.valueF() < 0.0 ? 0.0 : hsv.valueF();
-    const bool changed = m_hue != hue || !qFuzzyCompare(m_saturation, saturation) ||
+    const bool changed = m_hue != hue ||
+                         !qFuzzyCompare(m_saturation, saturation) ||
                          !qFuzzyCompare(m_value, value);
     m_hue = hue;
     m_saturation = saturation;
@@ -109,12 +111,12 @@ protected:
     const QRect content = rect().adjusted(4, 4, -4, -4);
     QImage gradient(content.size(), QImage::Format_ARGB32_Premultiplied);
     for (int y = 0; y < gradient.height(); ++y) {
-      const qreal value = 1.0 - static_cast<qreal>(y) /
-                                    qMax(1, gradient.height() - 1);
+      const qreal value =
+          1.0 - static_cast<qreal>(y) / qMax(1, gradient.height() - 1);
       QRgb *scanLine = reinterpret_cast<QRgb *>(gradient.scanLine(y));
       for (int x = 0; x < gradient.width(); ++x) {
-        const qreal saturation = static_cast<qreal>(x) /
-                                 qMax(1, gradient.width() - 1);
+        const qreal saturation =
+            static_cast<qreal>(x) / qMax(1, gradient.width() - 1);
         scanLine[x] = QColor::fromHsvF(m_hue / 359.0, saturation, value).rgba();
       }
     }
@@ -141,7 +143,9 @@ protected:
    * @param event 对象参数 `event`。
    * @return 无返回值。
    */
-  void mousePressEvent(QMouseEvent *event) override { updateFromPosition(event->pos()); }
+  void mousePressEvent(QMouseEvent *event) override {
+    updateFromPosition(event->pos());
+  }
 
   /**
    * @brief 执行mouseMoveEvent的核心逻辑。
@@ -270,7 +274,9 @@ protected:
    * @param event 对象参数 `event`。
    * @return 无返回值。
    */
-  void mousePressEvent(QMouseEvent *event) override { updateFromPosition(event->pos()); }
+  void mousePressEvent(QMouseEvent *event) override {
+    updateFromPosition(event->pos());
+  }
 
   /**
    * @brief 执行mouseMoveEvent的核心逻辑。
@@ -312,7 +318,8 @@ private:
 
 class CurrentTabSizeHintWidget : public QTabWidget {
 public:
-  explicit CurrentTabSizeHintWidget(QWidget *parent = nullptr) : QTabWidget(parent) {}
+  explicit CurrentTabSizeHintWidget(QWidget *parent = nullptr)
+      : QTabWidget(parent) {}
 
   /**
    * @brief   // 实现 currentTabSize 的核心逻辑。
@@ -340,11 +347,11 @@ private:
 
     const QSize pageSize = page->sizeHint();
     const int tabBarHeight = tabBar() ? tabBar()->sizeHint().height() : 0;
-    const int frameWidth = style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this);
+    const int frameWidth =
+        style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this);
     const QMargins margins = contentsMargins();
-    const int width = qMax(size.width(),
-                           pageSize.width() + margins.left() + margins.right() +
-                               frameWidth * 2);
+    const int width = qMax(size.width(), pageSize.width() + margins.left() +
+                                             margins.right() + frameWidth * 2);
     const int height = pageSize.height() + tabBarHeight + margins.top() +
                        margins.bottom() + frameWidth * 2 + 8;
     return QSize(width, height);
@@ -409,14 +416,19 @@ int resolveStaticPort() {
  * @return 返回处理后的字符串结果。
  */
 QString settingsTabsStyleSheetForColor(const QColor &color) {
-  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
+  const QColor accent =
+      color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   return QStringLiteral(
              "QTabWidget::pane { border: none; background: #ffffff; }"
-             "QTabBar::tab { background: #f8fafc; color: #374151; padding: 8px 18px; "
-             "margin-right: 6px; border: 1px solid #e5e7eb; border-radius: 8px; }"
-             "QTabBar::tab:selected { background: %1; color: #111827; font-weight: 600; border-color: %2; }"
+             "QTabBar::tab { background: #f8fafc; color: #374151; padding: 8px "
+             "18px; "
+             "margin-right: 6px; border: 1px solid #e5e7eb; border-radius: "
+             "8px; }"
+             "QTabBar::tab:selected { background: %1; color: #111827; "
+             "font-weight: 600; border-color: %2; }"
              "QTabBar::tab:hover { background: %3; }")
-      .arg(accent.lighter(150).name(QColor::HexRgb), accent.lighter(135).name(QColor::HexRgb),
+      .arg(accent.lighter(150).name(QColor::HexRgb),
+           accent.lighter(135).name(QColor::HexRgb),
            accent.lighter(180).name(QColor::HexRgb));
 }
 
@@ -426,14 +438,17 @@ QString settingsTabsStyleSheetForColor(const QColor &color) {
  * @return 返回处理后的字符串结果。
  */
 QString primaryButtonStyleSheetForColor(const QColor &color) {
-  const QColor accent = color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
+  const QColor accent =
+      color.isValid() ? color : QColor(QStringLiteral("#3B82F6"));
   return QStringLiteral(
-             "QPushButton { background: %1; color: #ffffff; border: none; border-radius: 8px; "
+             "QPushButton { background: %1; color: #ffffff; border: none; "
+             "border-radius: 8px; "
              "padding: 8px 16px; font-weight: 600; }"
              "QPushButton:hover { background: %2; }"
              "QPushButton:pressed { background: %3; }"
              "QPushButton:disabled { background: #cbd5e1; color: #f8fafc; }")
-      .arg(accent.name(QColor::HexRgb), accent.lighter(110).name(QColor::HexRgb),
+      .arg(accent.name(QColor::HexRgb),
+           accent.lighter(110).name(QColor::HexRgb),
            accent.darker(110).name(QColor::HexRgb));
 }
 
@@ -442,12 +457,14 @@ QString primaryButtonStyleSheetForColor(const QColor &color) {
  * @return 返回处理后的字符串结果。
  */
 QString secondaryButtonStyleSheet() {
-  return QStringLiteral(
-      "QPushButton { background: #f8fafc; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; "
-      "padding: 8px 16px; font-weight: 600; }"
-      "QPushButton:hover { background: #eef2f7; color: #111827; border-color: #cbd5e1; }"
-      "QPushButton:pressed { background: #e5e7eb; }"
-      "QPushButton:disabled { background: #f8fafc; color: #9ca3af; border-color: #e5e7eb; }");
+  return QStringLiteral("QPushButton { background: #f8fafc; color: #374151; "
+                        "border: 1px solid #d1d5db; border-radius: 8px; "
+                        "padding: 8px 16px; font-weight: 600; }"
+                        "QPushButton:hover { background: #eef2f7; color: "
+                        "#111827; border-color: #cbd5e1; }"
+                        "QPushButton:pressed { background: #e5e7eb; }"
+                        "QPushButton:disabled { background: #f8fafc; color: "
+                        "#9ca3af; border-color: #e5e7eb; }");
 }
 
 /**
@@ -470,7 +487,7 @@ QString contentTypeFromSuffix(const QString &suffixLower) {
   }
   return "application/octet-stream";
 }
-}
+} // namespace
 
 /**
  * @brief 构造并初始化SettingsWindow实例。
@@ -496,10 +513,11 @@ SettingsWindow::SettingsWindow(const QString &userId,
   buildUi();
   m_defaultMinimumHeight = minimumHeight();
   m_defaultMaximumHeight = maximumHeight();
-  QTimer::singleShot(0, this, [this]() { adjustWindowSizeForCurrentTab(false); });
+  QTimer::singleShot(0, this,
+                     [this]() { adjustWindowSizeForCurrentTab(false); });
 
   if (!m_profileApiClient) {
-    m_statusLabel->setText("Profile 服务未初始化");
+    m_statusLabel->setText("Profile 未初始化");
     m_refreshButton->setEnabled(false);
     m_saveButton->setEnabled(false);
     m_chooseAvatarButton->setEnabled(false);
@@ -565,7 +583,8 @@ bool SettingsWindow::eventFilter(QObject *watched, QEvent *event) {
         QWidget *child = m_titleBar->childAt(mouseEvent->position().toPoint());
         if (child != m_titleCloseButton) {
           m_dragging = true;
-          m_dragOffset = mouseEvent->globalPosition().toPoint() - frameGeometry().topLeft();
+          m_dragOffset = mouseEvent->globalPosition().toPoint() -
+                         frameGeometry().topLeft();
           m_titleBar->setCursor(Qt::ClosedHandCursor);
           return true;
         }
@@ -608,8 +627,9 @@ void SettingsWindow::buildUi() {
 
   auto *panel = new QWidget(this);
   panel->setObjectName(QStringLiteral("settingsPanel"));
-  panel->setStyleSheet(QStringLiteral(
-      "#settingsPanel { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; }"));
+  panel->setStyleSheet(
+      QStringLiteral("#settingsPanel { background: #ffffff; border: 1px solid "
+                     "#e5e7eb; border-radius: 8px; }"));
   rootLayout->addWidget(panel);
 
   auto *panelLayout = new QVBoxLayout(panel);
@@ -635,7 +655,8 @@ void SettingsWindow::buildUi() {
   m_titleCloseButton->setCursor(Qt::ArrowCursor);
   m_titleCloseButton->setFixedSize(30, 30);
   m_titleCloseButton->setStyleSheet(
-      "QPushButton { border: none; color: #4b5563; font-size: 18px; background: transparent; border-radius: 6px; }"
+      "QPushButton { border: none; color: #4b5563; font-size: 18px; "
+      "background: transparent; border-radius: 6px; }"
       "QPushButton:hover { background: #ef4444; color: #ffffff; }");
   connect(m_titleCloseButton, &QPushButton::clicked, this, &QWidget::close);
   titleBarLayout->addWidget(m_titleCloseButton);
@@ -666,7 +687,8 @@ void SettingsWindow::buildUi() {
     auto *titleLabel = new QLabel(title, rowWidget);
     titleLabel->setFixedWidth(72);
     titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    titleLabel->setStyleSheet("color: #111827; font-weight: 500; padding-top: 8px;");
+    titleLabel->setStyleSheet(
+        "color: #111827; font-weight: 500; padding-top: 8px;");
 
     rowLayout->addWidget(titleLabel, 0, Qt::AlignTop);
     rowLayout->addWidget(fieldWidget, 1);
@@ -701,17 +723,21 @@ void SettingsWindow::buildUi() {
   m_nicknameEdit = new QLineEdit(userTab);
   m_nicknameEdit->setPlaceholderText("请输入昵称");
   m_nicknameEdit->setStyleSheet(
-      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; "
+      "border-radius: 8px; padding: 8px 10px; color: #111827; }"
       "QLineEdit:focus { border-color: #93c5fd; }");
-  formLayout->addWidget(createUserFormRow(QStringLiteral("昵称"), m_nicknameEdit));
+  formLayout->addWidget(
+      createUserFormRow(QStringLiteral("昵称"), m_nicknameEdit));
 
   m_signatureEdit = new QTextEdit(userTab);
   m_signatureEdit->setPlaceholderText("请输入个人签名");
   m_signatureEdit->setFixedHeight(120);
   m_signatureEdit->setStyleSheet(
-      "QTextEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QTextEdit { background: #ffffff; border: 1px solid #d1d5db; "
+      "border-radius: 8px; padding: 8px 10px; color: #111827; }"
       "QTextEdit:focus { border-color: #93c5fd; }");
-  formLayout->addWidget(createUserFormRow(QStringLiteral("个签"), m_signatureEdit));
+  formLayout->addWidget(
+      createUserFormRow(QStringLiteral("个签"), m_signatureEdit));
 
   userLayout->addLayout(formLayout);
   userLayout->addStretch();
@@ -748,9 +774,8 @@ void SettingsWindow::buildUi() {
   pickerLayout->addWidget(hueSlider, 0, Qt::AlignTop);
 
   auto *controlPanel = new QFrame(paletteCard);
-  controlPanel->setStyleSheet(
-      "background: #ffffff; border: 1px solid #e5e7eb; "
-      "border-radius: 12px;");
+  controlPanel->setStyleSheet("background: #ffffff; border: 1px solid #e5e7eb; "
+                              "border-radius: 12px;");
   controlPanel->setMinimumWidth(220);
   auto *controlLayout = new QVBoxLayout(controlPanel);
   controlLayout->setContentsMargins(16, 16, 16, 16);
@@ -758,12 +783,13 @@ void SettingsWindow::buildUi() {
 
   auto *previewSwatch = new QFrame(controlPanel);
   previewSwatch->setFixedHeight(84);
-  previewSwatch->setStyleSheet(
-      "background: #3b82f6; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10);");
+  previewSwatch->setStyleSheet("background: #3b82f6; border-radius: 12px; "
+                               "border: 1px solid rgba(255,255,255,0.10);");
   controlLayout->addWidget(previewSwatch);
 
   auto *previewName = new QLabel(QStringLiteral("当前颜色"), controlPanel);
-  previewName->setStyleSheet("color: #111827; font-size: 14px; font-weight: 600;");
+  previewName->setStyleSheet(
+      "color: #111827; font-size: 14px; font-weight: 600;");
   controlLayout->addWidget(previewName);
 
   auto *hexLabel = new QLabel(QStringLiteral("Hex"), controlPanel);
@@ -773,7 +799,8 @@ void SettingsWindow::buildUi() {
   auto *hexEdit = new QLineEdit(controlPanel);
   hexEdit->setPlaceholderText(QStringLiteral("#3B82F6"));
   hexEdit->setStyleSheet(
-      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; "
+      "border-radius: 8px; padding: 8px 10px; color: #111827; }"
       "QLineEdit:focus { border-color: #93c5fd; }");
   controlLayout->addWidget(hexEdit);
 
@@ -789,9 +816,10 @@ void SettingsWindow::buildUi() {
   rEdit->setPlaceholderText(QStringLiteral("R"));
   gEdit->setPlaceholderText(QStringLiteral("G"));
   bEdit->setPlaceholderText(QStringLiteral("B"));
-  const QString channelEditStyle =
-      QStringLiteral("QLineEdit { background: #ffffff; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; color: #111827; }"
-                     "QLineEdit:focus { border-color: #93c5fd; }");
+  const QString channelEditStyle = QStringLiteral(
+      "QLineEdit { background: #ffffff; border: 1px solid #d1d5db; "
+      "border-radius: 8px; padding: 8px 10px; color: #111827; }"
+      "QLineEdit:focus { border-color: #93c5fd; }");
   rEdit->setStyleSheet(channelEditStyle);
   gEdit->setStyleSheet(channelEditStyle);
   bEdit->setStyleSheet(channelEditStyle);
@@ -807,9 +835,11 @@ void SettingsWindow::buildUi() {
   appearanceLayout->addWidget(paletteCard);
   appearanceLayout->addStretch();
 
-  const auto currentColor = std::make_shared<QColor>(QColor(QStringLiteral("#3B82F6")));
+  const auto currentColor =
+      std::make_shared<QColor>(QColor(QStringLiteral("#3B82F6")));
   const auto isUpdating = std::make_shared<bool>(false);
-  const auto syncInputs = std::make_shared<std::function<void(const QColor &)>>();
+  const auto syncInputs =
+      std::make_shared<std::function<void(const QColor &)>>();
   *syncInputs = [=](const QColor &color) {
     if (!color.isValid()) {
       return;
@@ -825,10 +855,11 @@ void SettingsWindow::buildUi() {
     hueSlider->setHue(hue);
 
     previewSwatch->setStyleSheet(
-        QStringLiteral(
-            "background: %1; border-radius: 12px; border: 1px solid rgba(255,255,255,0.10);")
+        QStringLiteral("background: %1; border-radius: 12px; border: 1px solid "
+                       "rgba(255,255,255,0.10);")
             .arg(color.name(QColor::HexRgb)));
-    previewName->setText(QStringLiteral("当前颜色 %1").arg(color.name(QColor::HexRgb).toUpper()));
+    previewName->setText(QStringLiteral("当前颜色 %1")
+                             .arg(color.name(QColor::HexRgb).toUpper()));
 
     {
       const QSignalBlocker blocker(hexEdit);
@@ -905,14 +936,8 @@ void SettingsWindow::buildUi() {
   connect(bEdit, &QLineEdit::editingFinished, this, applyRgbInput);
   (*syncInputs)(*currentColor);
 
-  auto *downloadTab = new QWidget(m_tabWidget);
-  auto *downloadLayout = new QVBoxLayout(downloadTab);
-  downloadLayout->setContentsMargins(0, 8, 0, 0);
-  downloadLayout->addStretch();
-
   m_tabWidget->addTab(userTab, QStringLiteral("用户"));
   m_tabWidget->addTab(appearanceTab, QStringLiteral("界面"));
-  m_tabWidget->addTab(downloadTab, QStringLiteral("下载"));
 
   m_statusLabel = new QLabel("就绪", panel);
   m_statusLabel->setStyleSheet("color: #666;");
@@ -933,7 +958,8 @@ void SettingsWindow::buildUi() {
 
   connect(m_refreshButton, &QPushButton::clicked, this,
           &SettingsWindow::onRefreshClicked);
-  connect(m_saveButton, &QPushButton::clicked, this, &SettingsWindow::onSaveClicked);
+  connect(m_saveButton, &QPushButton::clicked, this,
+          &SettingsWindow::onSaveClicked);
   connect(m_chooseAvatarButton, &QPushButton::clicked, this,
           &SettingsWindow::onChooseAvatarClicked);
   connect(m_uploadAvatarButton, &QPushButton::clicked, this,
@@ -941,14 +967,13 @@ void SettingsWindow::buildUi() {
   connect(m_logoutButton, &QPushButton::clicked, this,
           &SettingsWindow::onLogoutClicked);
   applyThemeColor(m_themeColor);
-  connect(m_tabWidget, &QTabWidget::currentChanged, this,
-          [this](int) {
-            m_tabWidget->updateGeometry();
-            if (layout()) {
-              layout()->activate();
-            }
-            adjustWindowSizeForCurrentTab(true);
-          });
+  connect(m_tabWidget, &QTabWidget::currentChanged, this, [this](int) {
+    m_tabWidget->updateGeometry();
+    if (layout()) {
+      layout()->activate();
+    }
+    adjustWindowSizeForCurrentTab(true);
+  });
   updateActionButtons();
 }
 
@@ -968,12 +993,13 @@ int SettingsWindow::targetWindowHeightForTab(int tabIndex) const {
   }
 
   const QMargins tabMargins = m_tabWidget->contentsMargins();
-  const int tabBarHeight = m_tabWidget->tabBar() ? m_tabWidget->tabBar()->sizeHint().height() : 0;
+  const int tabBarHeight =
+      m_tabWidget->tabBar() ? m_tabWidget->tabBar()->sizeHint().height() : 0;
   const int pageHeight = page ? page->sizeHint().height() : 0;
-  const int frameExtra =
-      m_tabWidget->frameGeometry().height() - m_tabWidget->contentsRect().height();
-  const int targetTabHeight = tabMargins.top() + tabMargins.bottom() + frameExtra +
-                              tabBarHeight + pageHeight;
+  const int frameExtra = m_tabWidget->frameGeometry().height() -
+                         m_tabWidget->contentsRect().height();
+  const int targetTabHeight = tabMargins.top() + tabMargins.bottom() +
+                              frameExtra + tabBarHeight + pageHeight;
 
   // Preserve the current non-tab chrome height so size animation stays correct
   /**
@@ -984,7 +1010,8 @@ int SettingsWindow::targetWindowHeightForTab(int tabIndex) const {
    */
   const int chromeHeight = qMax(0, height() - m_tabWidget->height());
   const int totalHeight = chromeHeight + targetTabHeight;
-  const int minHeightFloor = m_defaultMinimumHeight > 0 ? m_defaultMinimumHeight : 0;
+  const int minHeightFloor =
+      m_defaultMinimumHeight > 0 ? m_defaultMinimumHeight : 0;
   return qMax(totalHeight, minHeightFloor);
 }
 
@@ -998,7 +1025,8 @@ void SettingsWindow::adjustWindowSizeForCurrentTab(bool animated) {
     return;
   }
 
-  const int targetHeight = targetWindowHeightForTab(m_tabWidget->currentIndex());
+  const int targetHeight =
+      targetWindowHeightForTab(m_tabWidget->currentIndex());
   const QSize startSize = size();
   const QSize endSize(startSize.width(), targetHeight);
   if (startSize == endSize) {
@@ -1065,7 +1093,8 @@ void SettingsWindow::applyThemeColor(const QColor &color) {
     m_saveButton->setStyleSheet(primaryButtonStyleSheetForColor(m_themeColor));
   }
   if (m_uploadAvatarButton) {
-    m_uploadAvatarButton->setStyleSheet(primaryButtonStyleSheetForColor(m_themeColor));
+    m_uploadAvatarButton->setStyleSheet(
+        primaryButtonStyleSheetForColor(m_themeColor));
   }
 }
 
@@ -1087,7 +1116,8 @@ void SettingsWindow::updateActionButtons() {
   m_refreshButton->setEnabled(!busy);
   m_saveButton->setEnabled(!busy);
   m_chooseAvatarButton->setEnabled(!busy);
-  m_uploadAvatarButton->setEnabled(!busy && !m_selectedAvatarFilePath.isEmpty());
+  m_uploadAvatarButton->setEnabled(!busy &&
+                                   !m_selectedAvatarFilePath.isEmpty());
   m_logoutButton->setEnabled(!busy);
   m_nicknameEdit->setReadOnly(m_saving || m_uploading || m_loggingOut);
   m_signatureEdit->setReadOnly(m_saving || m_uploading || m_loggingOut);
@@ -1147,7 +1177,8 @@ void SettingsWindow::onRefreshClicked() {
   }
 
   setLoading(true, "资料加载中...");
-  m_pendingGetRequestId = m_profileApiClient->requestProfileInfo(m_userId.trimmed());
+  m_pendingGetRequestId =
+      m_profileApiClient->requestProfileInfo(m_userId.trimmed());
 }
 
 /**
@@ -1306,8 +1337,7 @@ void SettingsWindow::onChooseAvatarClicked() {
   }
 
   const QString filePath = QFileDialog::getOpenFileName(
-      this, "选择头像", QString(),
-      "Images (*.jpg *.jpeg *.png *.webp *.gif)");
+      this, "选择头像", QString(), "Images (*.jpg *.jpeg *.png *.webp *.gif)");
   if (filePath.isEmpty()) {
     return;
   }
@@ -1348,7 +1378,8 @@ QUrl SettingsWindow::buildUploadEndpoint() const {
  * @param avatarUrl 头像地址或头像来源。
  * @return 返回解析得到的 URL 对象。
  */
-QUrl SettingsWindow::resolveAvatarUrlForPreview(const QString &avatarUrl) const {
+QUrl SettingsWindow::resolveAvatarUrlForPreview(
+    const QString &avatarUrl) const {
   const QString trimmed = avatarUrl.trimmed();
   if (trimmed.isEmpty()) {
     return QUrl();
@@ -1421,8 +1452,7 @@ void SettingsWindow::onUploadAvatarClicked() {
     return;
   }
   if (!session.hasValidUploadToken()) {
-    const QString message =
-        "上传凭证失效，请重新登录。";
+    const QString message = "上传凭证失效，请重新登录。";
     m_statusLabel->setText("上传失败: " + message);
     QMessageBox::warning(this, "上传失败", message);
     return;
@@ -1469,8 +1499,7 @@ void SettingsWindow::onUploadAvatarClicked() {
   }
 
   QNetworkRequest request(uploadUrl);
-  m_pendingUploadRequestId =
-      QUuid::createUuid().toString(QUuid::WithoutBraces);
+  m_pendingUploadRequestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   request.setRawHeader("Authorization",
                        session.authorizationHeaderValue().toUtf8());
   request.setTransferTimeout(20000);
@@ -1514,8 +1543,8 @@ void SettingsWindow::updateAvatarPreviewFromLocal(const QString &filePath) {
     return;
   }
   const QPixmap scaled =
-      pixmap.scaled(m_avatarPreviewLabel->size(), Qt::KeepAspectRatioByExpanding,
-                    Qt::SmoothTransformation);
+      pixmap.scaled(m_avatarPreviewLabel->size(),
+                    Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
   m_avatarPreviewLabel->setPixmap(scaled);
 }
 
@@ -1577,8 +1606,8 @@ void SettingsWindow::onAvatarPreviewReplyFinished() {
     return;
   }
   const QPixmap scaled =
-      pixmap.scaled(m_avatarPreviewLabel->size(), Qt::KeepAspectRatioByExpanding,
-                    Qt::SmoothTransformation);
+      pixmap.scaled(m_avatarPreviewLabel->size(),
+                    Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
   m_avatarPreviewLabel->setPixmap(scaled);
   m_avatarPreviewLabel->setText(QString());
   reply->deleteLater();
@@ -1743,9 +1772,10 @@ void SettingsWindow::onProfileSetSuccess(const QString &requestId,
   m_pendingSetRequestId.clear();
   setSaving(false, "保存成功");
   applyProfileToUi(info);
-  emit profileApplied(info.nickname.trimmed().isEmpty() ? m_userId.trimmed()
-                                                        : info.nickname.trimmed(),
-                    info.avatarUrl, info.signature);
+  emit profileApplied(info.nickname.trimmed().isEmpty()
+                          ? m_userId.trimmed()
+                          : info.nickname.trimmed(),
+                      info.avatarUrl, info.signature);
   QMessageBox::information(this, "成功", "个人资料保存成功");
 }
 
@@ -1782,8 +1812,8 @@ void SettingsWindow::onLogoutClicked() {
     return;
   }
   const QMessageBox::StandardButton confirm = QMessageBox::question(
-      this, "确认登出", "确定要退出当前账号吗？", QMessageBox::Yes | QMessageBox::No,
-      QMessageBox::No);
+      this, "确认登出", "确定要退出当前账号吗？",
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
   if (confirm != QMessageBox::Yes) {
     return;
   }
@@ -1823,8 +1853,9 @@ void SettingsWindow::onLogoutSucceeded(const QString &requestId,
   m_pendingGetRequestId.clear();
   m_pendingSetRequestId.clear();
   m_pendingUploadRequestId.clear();
-  m_statusLabel->setText(result.message.trimmed().isEmpty() ? "已退出登录"
-                                                            : result.message.trimmed());
+  m_statusLabel->setText(result.message.trimmed().isEmpty()
+                             ? "已退出登录"
+                             : result.message.trimmed());
   updateActionButtons();
   emit logoutRequested();
   close();
@@ -1840,7 +1871,8 @@ void SettingsWindow::onLogoutSucceeded(const QString &requestId,
 void SettingsWindow::onAuthRequestFailed(const QString &requestId,
                                          const QString &action,
                                          const QString &error) {
-  if (action != QStringLiteral("LOGOUT") || requestId != m_pendingLogoutRequestId) {
+  if (action != QStringLiteral("LOGOUT") ||
+      requestId != m_pendingLogoutRequestId) {
     return;
   }
 
@@ -1850,5 +1882,3 @@ void SettingsWindow::onAuthRequestFailed(const QString &requestId,
   m_statusLabel->setText("退出登录失败: " + error);
   QMessageBox::warning(this, "退出登录失败", error);
 }
-
-
